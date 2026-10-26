@@ -17,6 +17,15 @@
         "com.flapgame.gamelib.core": "0.2.0"
       }
     },
+    "com.flapgame.gamelib.ads.admob": {
+      "version": "file:com.flapgame.gamelib.ads.admob",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.2.0",
+        "com.flapgame.gamelib.ads": "0.2.0"
+      }
+    },
     "com.flapgame.gamelib.ads.max": {
       "version": "file:com.flapgame.gamelib.ads.max",
       "depth": 0,

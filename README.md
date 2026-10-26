@@ -15,7 +15,7 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.haptics` | Vibration / haptic feedback | 0.1.0 |
 | `com.flapgame.gamelib.ads` | Placement-based ads (interstitial, rewarded, banner, app open), ad policy | 0.2.0 |
 | `com.flapgame.gamelib.ads.max` | AppLovin MAX adapter | 0.2.0 |
-| `com.flapgame.gamelib.ads.admob` | AdMob adapter | later |
+| `com.flapgame.gamelib.ads.admob` | AdMob adapter and Google UMP consent | 0.3.0 |
 | `com.flapgame.gamelib.iap` | Unity IAP 5: consumable / non-consumable / subscription, localized price, restore | 0.3.0 |
 | `com.flapgame.gamelib.firebase` | Shared Firebase start and config checks (comes with the Firebase modules) | 0.3.0 |
 | `com.flapgame.gamelib.analytics.firebase` | Firebase Analytics (`ad_impression`, consent mode, optional `purchase`) | 0.3.0 |
@@ -29,13 +29,13 @@ Modules never reference each other directly; they talk through contracts in `cor
 
 Third-party SDK calls live in separate `*.Sdk` assemblies that compile only when the SDK package is present
 (`versionDefines`). A module's asset therefore never turns into a missing script, and its logic is unit tested without
-the SDK. Compile-checked against: AppLovin MAX 8.6.6, Firebase 14.1.0, AppsFlyer 6.17.900 and 7.0.3, Unity IAP 5.4.4.
+the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, Firebase 14.1.0, AppsFlyer 6.17.900 and 7.0.3, Unity IAP 5.4.4.
 
 ## How the pieces connect
 
 | Flow | Path |
 |---|---|
-| Ad revenue | Ads (MAX) → `IAnalytics.TrackAdRevenue` → Firebase `ad_impression`, AppsFlyer `logAdRevenue`, Crashlytics breadcrumb |
+| Ad revenue | Ads (MAX / AdMob) → `IAnalytics.TrackAdRevenue` → Firebase `ad_impression`, AppsFlyer `logAdRevenue`, Crashlytics breadcrumb |
 | Purchase | IAP → `IAnalytics.TrackPurchase` → AppsFlyer `af_purchase` (or Purchase Connector), Firebase `purchase` (opt-in) |
 | Remove ads | IAP grants `no_ads` in `IEntitlements` → Ads suppresses interstitial, banner, app open |
 | Consent | Ads runs the CMP → `IConsentState` → ad SDKs, Firebase consent mode, AppsFlyer DMA consent |
@@ -53,6 +53,14 @@ Add `core` to `Packages/manifest.json`, then open **GameLib > Setup** to add fur
 
 Unity does not resolve git dependencies between packages, so when installing by hand add every package
 a module depends on (listed in its `package.json`) with the same tag. An OpenUPM registry is planned from 1.0.
+
+## External Dependency Manager
+
+MAX, Firebase and AppsFlyer use Google's `com.google.external-dependency-manager` (OpenUPM); Google Mobile Ads 11.x
+pulls in Unity's `com.unity.external-dependency-manager`. With both installed the project still compiles: Unity's EDM
+turns itself off (`UNITY_EDM_DISABLED` on Android, `ProjectSettings/ExternalDependencyManagerSettings.json`) and the
+console logs a *Duplicate assembly 'Google.VersionHandler.dll'* warning. Check **Assets > External Dependency Manager**
+resolves Android and iOS once after adding AdMob; if it does not, keep a single resolver.
 
 ## Developing
 

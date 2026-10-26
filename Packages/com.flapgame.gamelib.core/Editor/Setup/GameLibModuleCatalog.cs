@@ -121,6 +121,27 @@ namespace FlapGame.GameLib.Editor
             },
             new GameLibModuleInfo
             {
+                Id = "ads.admob",
+                DisplayName = "Ads - AdMob",
+                Description = "Google AdMob adapter and Google UMP consent for the Ads module.",
+                DependsOn = new[] { "ads" },
+                ModuleTypeName = null,
+                Sdks = new[]
+                {
+                    new SdkRequirement
+                    {
+                        DisplayName = "Google Mobile Ads",
+                        PackageName = "com.google.ads.mobile",
+                        Source = SdkSource.ScopedRegistry,
+                        Location = "11.6.0",
+                        RegistryName = "package.openupm.com",
+                        RegistryUrl = "https://package.openupm.com",
+                        RegistryScopes = new[] { "com.google.ads.mobile" },
+                    },
+                },
+            },
+            new GameLibModuleInfo
+            {
                 Id = "iap",
                 DisplayName = "In-App Purchases",
                 Description = "Unity IAP 5: consumables, non-consumables and subscriptions, localized prices, restore.",
