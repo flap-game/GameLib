@@ -14,7 +14,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.1.0"
+        "com.flapgame.gamelib.core": "0.2.0"
       }
     },
     "com.flapgame.gamelib.ads.max": {
@@ -22,8 +22,17 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.1.0",
-        "com.flapgame.gamelib.ads": "0.1.0"
+        "com.flapgame.gamelib.core": "0.2.0",
+        "com.flapgame.gamelib.ads": "0.2.0"
+      }
+    },
+    "com.flapgame.gamelib.analytics.firebase": {
+      "version": "file:com.flapgame.gamelib.analytics.firebase",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.2.0",
+        "com.flapgame.gamelib.firebase": "0.2.0"
       }
     },
     "com.flapgame.gamelib.core": {
@@ -34,12 +43,38 @@
         "com.unity.nuget.newtonsoft-json": "3.2.1"
       }
     },
+    "com.flapgame.gamelib.crashlytics": {
+      "version": "file:com.flapgame.gamelib.crashlytics",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.2.0",
+        "com.flapgame.gamelib.firebase": "0.2.0"
+      }
+    },
+    "com.flapgame.gamelib.firebase": {
+      "version": "file:com.flapgame.gamelib.firebase",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.2.0"
+      }
+    },
     "com.flapgame.gamelib.haptics": {
       "version": "file:com.flapgame.gamelib.haptics",
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.1.0"
+        "com.flapgame.gamelib.core": "0.2.0"
+      }
+    },
+    "com.flapgame.gamelib.remoteconfig.firebase": {
+      "version": "file:com.flapgame.gamelib.remoteconfig.firebase",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.2.0",
+        "com.flapgame.gamelib.firebase": "0.2.0"
       }
     },
     "com.google.external-dependency-manager": {

@@ -148,3 +148,4 @@ $RECYCLE.BIN/
 # GameLib
 /[Aa]ssets/GameLib/Settings/*.local.asset
 .claude/settings.local.json
+/Packages/GoogleTgz/

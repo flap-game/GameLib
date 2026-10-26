@@ -45,6 +45,7 @@ namespace FlapGame.GameLib
     {
         public const int Consent = -300;
         public const int Firebase = -200;
+        public const int RemoteConfig = -150;
         public const int Analytics = -100;
         public const int Default = 0;
         public const int Iap = 100;

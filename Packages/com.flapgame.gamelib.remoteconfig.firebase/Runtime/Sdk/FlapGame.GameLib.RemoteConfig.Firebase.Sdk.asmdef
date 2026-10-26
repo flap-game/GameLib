@@ -1,0 +1,31 @@
+{
+  "name": "FlapGame.GameLib.RemoteConfig.Firebase.Sdk",
+  "rootNamespace": "FlapGame.GameLib.RemoteConfig",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.Firebase",
+    "FlapGame.GameLib.RemoteConfig.Firebase"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Firebase.App.dll",
+    "Firebase.Platform.dll",
+    "Firebase.TaskExtension.dll",
+    "Firebase.RemoteConfig.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "GAMELIB_FIREBASE_REMOTE_CONFIG"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.google.firebase.remote-config",
+      "expression": "",
+      "define": "GAMELIB_FIREBASE_REMOTE_CONFIG"
+    }
+  ],
+  "noEngineReferences": false
+}

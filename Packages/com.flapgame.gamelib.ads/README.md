@@ -65,5 +65,18 @@ Add the game's own condition through the launcher: `services.Resolve<AppOpenLaun
 
 ## Remote plan
 
-Register an `IAdsPlanSource` before the Ads module runs to drive providers, route order, rules and policy remotely
-(`AdsPlan`, typically one remote config key). Without one, the asset is used as is.
+An `AdsPlan` drives providers, route order, rules and policy remotely. With **Remote Config - Firebase** installed,
+AdsModule reads it as JSON from the key in **Plan Remote Config Key** (default `ads_plan`): at startup from the last
+session's cache (or the default on the Remote Config asset), then again after every fetch. Example value:
+
+```json
+{
+  "Name": "ab_max_only",
+  "Providers": ["max"],
+  "Placements": [{ "Id": "inter_win", "Routes": ["max"], "CooldownSeconds": 60 }],
+  "Policy": { "InterstitialMinIntervalSeconds": 180 }
+}
+```
+
+Fields left out keep the asset's values; unknown provider ids are dropped with a warning; malformed JSON means no plan.
+A game can register its own `IAdsPlanSource` before the Ads module runs instead. Without either, the asset is used as is.

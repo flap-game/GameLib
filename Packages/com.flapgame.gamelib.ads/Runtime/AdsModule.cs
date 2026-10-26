@@ -65,6 +65,10 @@ namespace FlapGame.GameLib.Ads
                  "the consent flow finishes. 0 = wait forever.")]
         [Min(0f)] public float ConsentTimeoutSeconds = 20f;
 
+        [Tooltip("Remote config key holding the JSON ads plan (providers, routes, policy overrides). Read when a remote " +
+                 "config module is installed and the game registered no IAdsPlanSource of its own. Empty = no plan.")]
+        public string PlanRemoteConfigKey = "ads_plan";
+
         [Tooltip("Seconds the mock adapter pretends to show an ad for. Editor / development builds only.")]
         [Min(0f)] public float NullAdapterFakeDelaySeconds = 0.5f;
 
@@ -158,8 +162,14 @@ namespace FlapGame.GameLib.Ads
             IConsentState consentState = services.Resolve<IConsentState>();
             services.TryResolve(out IAppLifecycle lifecycle);
 
-            // 1. Plan known without network: only when the game (or a remote config module) registered a source first.
-            services.TryResolve(out IAdsPlanSource planSource);
+            // 1. Plan known without network: the game's own source, else the remote config value (cache / default).
+            if (!services.TryResolve(out IAdsPlanSource planSource) && !string.IsNullOrEmpty(PlanRemoteConfigKey) &&
+                services.TryResolve(out IRemoteConfig remoteConfig))
+            {
+                var remoteSource = new RemoteConfigAdsPlanSource(PlanRemoteConfigKey, remoteConfig);
+                services.RegisterDisposable(remoteSource);
+                planSource = remoteSource;
+            }
             AdsPlan plan = null;
             try
             {

@@ -17,9 +17,10 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.ads.max` | AppLovin MAX adapter | 0.2.0 |
 | `com.flapgame.gamelib.ads.admob` | AdMob adapter | later |
 | `com.flapgame.gamelib.iap` | Unity IAP 5: consumable / non-consumable / subscription, localized price, restore | planned |
-| `com.flapgame.gamelib.firebase` | Shared Firebase initialization | planned |
-| `com.flapgame.gamelib.analytics.firebase` | Firebase Analytics (`ad_impression`, IAP events) | planned |
-| `com.flapgame.gamelib.crashlytics` | Firebase Crashlytics | planned |
+| `com.flapgame.gamelib.firebase` | Shared Firebase start and config checks (comes with the Firebase modules) | 0.3.0 |
+| `com.flapgame.gamelib.analytics.firebase` | Firebase Analytics (`ad_impression`, consent mode, optional `purchase`) | 0.3.0 |
+| `com.flapgame.gamelib.crashlytics` | Firebase Crashlytics with analytics breadcrumbs | 0.3.0 |
+| `com.flapgame.gamelib.remoteconfig.firebase` | `IRemoteConfig` on Firebase Remote Config (Ads reads its plan from it) | 0.3.0 |
 | `com.flapgame.gamelib.appsflyer` | AppsFlyer: ad revenue, purchases (manual or Purchase Connector), ATT, consent | planned |
 | `com.flapgame.gamelib.ui` | UI framework | later |
 

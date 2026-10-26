@@ -1,0 +1,22 @@
+{
+  "name": "com.flapgame.gamelib.crashlytics",
+  "version": "0.2.0",
+  "displayName": "GameLib Crashlytics",
+  "description": "Firebase Crashlytics as ICrashReporter, with analytics events as breadcrumbs and the shared user id.",
+  "unity": "6000.4",
+  "author": {
+    "name": "Flap Game",
+    "url": "https://github.com/flap-game/GameLib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flap-game/GameLib.git"
+  },
+  "keywords": [
+    "gamelib"
+  ],
+  "dependencies": {
+    "com.flapgame.gamelib.core": "0.2.0",
+    "com.flapgame.gamelib.firebase": "0.2.0"
+  }
+}

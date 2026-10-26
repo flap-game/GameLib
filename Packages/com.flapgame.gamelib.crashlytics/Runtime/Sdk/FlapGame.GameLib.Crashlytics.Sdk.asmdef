@@ -1,0 +1,31 @@
+{
+  "name": "FlapGame.GameLib.Crashlytics.Sdk",
+  "rootNamespace": "FlapGame.GameLib.Crashlytics",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.Firebase",
+    "FlapGame.GameLib.Crashlytics"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Firebase.App.dll",
+    "Firebase.Platform.dll",
+    "Firebase.TaskExtension.dll",
+    "Firebase.Crashlytics.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "GAMELIB_FIREBASE_CRASHLYTICS"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.google.firebase.crashlytics",
+      "expression": "",
+      "define": "GAMELIB_FIREBASE_CRASHLYTICS"
+    }
+  ],
+  "noEngineReferences": false
+}

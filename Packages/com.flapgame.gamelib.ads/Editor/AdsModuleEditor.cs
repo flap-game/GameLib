@@ -65,6 +65,7 @@ namespace FlapGame.GameLib.Ads.Editor
             EditorGUILayout.Space(6);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("InitializeInBackground"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("ConsentTimeoutSeconds"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("PlanRemoteConfigKey"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("NullAdapterFakeDelaySeconds"));
             EditorGUILayout.Space(6);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("ConsentDebug"), true);

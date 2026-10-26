@@ -63,6 +63,22 @@ namespace FlapGame.GameLib.Editor
             RegistryScopes = new[] { "com.google.external-dependency-manager" },
         };
 
+        /// <summary>Firebase Unity SDK version every Firebase module installs (all Firebase packages must match).</summary>
+        public const string FirebaseVersion = "14.1.0";
+
+        /// <summary>A Firebase package from Google's tarball archive, e.g. <c>analytics</c> -> com.google.firebase.analytics.</summary>
+        public static SdkRequirement FirebaseSdk(string displayName, string product)
+        {
+            string package = "com.google.firebase." + product;
+            return new SdkRequirement
+            {
+                DisplayName = displayName,
+                PackageName = package,
+                Source = SdkSource.Tarball,
+                Location = $"https://dl.google.com/games/registry/unity/{package}/{package}-{FirebaseVersion}.tgz",
+            };
+        }
+
         public static IReadOnlyList<GameLibModuleInfo> All { get; } = new[]
         {
             new GameLibModuleInfo
@@ -119,27 +135,36 @@ namespace FlapGame.GameLib.Editor
             {
                 Id = "firebase",
                 DisplayName = "Firebase",
-                Description = "Shared Firebase initialization for Analytics and Crashlytics.",
-                ModuleTypeName = "FlapGame.GameLib.Firebase.FirebaseModule",
-                Available = false,
+                Description = "Shared Firebase start for Analytics, Crashlytics and Remote Config. Add one of those; this comes with it.",
+                ModuleTypeName = null,
+                Sdks = new[] { ExternalDependencyManager, FirebaseSdk("Firebase App", "app") },
             },
             new GameLibModuleInfo
             {
                 Id = "analytics.firebase",
                 DisplayName = "Analytics - Firebase",
-                Description = "Firebase Analytics sink: game events, ad_impression and purchase events.",
+                Description = "Firebase Analytics sink: game events within Firebase limits, ad_impression revenue, consent mode.",
                 DependsOn = new[] { "firebase" },
                 ModuleTypeName = "FlapGame.GameLib.Analytics.Firebase.FirebaseAnalyticsModule",
-                Available = false,
+                Sdks = new[] { FirebaseSdk("Firebase Analytics", "analytics") },
             },
             new GameLibModuleInfo
             {
                 Id = "crashlytics",
                 DisplayName = "Crashlytics",
-                Description = "Firebase Crashlytics with analytics breadcrumbs and custom keys.",
+                Description = "Firebase Crashlytics as ICrashReporter, with analytics breadcrumbs and the shared user id.",
                 DependsOn = new[] { "firebase" },
                 ModuleTypeName = "FlapGame.GameLib.Crashlytics.CrashlyticsModule",
-                Available = false,
+                Sdks = new[] { FirebaseSdk("Firebase Crashlytics", "crashlytics") },
+            },
+            new GameLibModuleInfo
+            {
+                Id = "remoteconfig.firebase",
+                DisplayName = "Remote Config - Firebase",
+                Description = "IRemoteConfig on Firebase Remote Config: defaults in the asset, last fetch cached on disk. Ads reads its plan from it.",
+                DependsOn = new[] { "firebase" },
+                ModuleTypeName = "FlapGame.GameLib.RemoteConfig.RemoteConfigModule",
+                Sdks = new[] { FirebaseSdk("Firebase Remote Config", "remote-config") },
             },
             new GameLibModuleInfo
             {

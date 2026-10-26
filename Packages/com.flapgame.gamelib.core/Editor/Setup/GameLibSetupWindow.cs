@@ -30,6 +30,7 @@ namespace FlapGame.GameLib.Editor
         private List<GameLibIssue> doctorIssues;
         private Request pendingRequest;
         private string pendingLabel;
+        private string downloading;
         private UnityEditor.Editor moduleEditor;
 
         [MenuItem("GameLib/Setup", priority = 0)]
@@ -181,19 +182,21 @@ namespace FlapGame.GameLib.Editor
             if (missing.Count > 0)
                 return;
 
-            bool sdksReady = module.Sdks.All(s => installed.ContainsKey(s.PackageName));
-            if (module.Sdks.Length > 0)
+            // The SDKs of the whole chain: Analytics - Firebase also needs Firebase App from the firebase module.
+            List<SdkRequirement> sdks = AllSdks(module);
+            bool sdksReady = sdks.All(s => installed.ContainsKey(s.PackageName));
+            if (sdks.Count > 0)
             {
                 Step(2, "Third-party SDK", sdksReady, () =>
                 {
-                    foreach (SdkRequirement sdk in module.Sdks.Where(s => !installed.ContainsKey(s.PackageName)))
+                    foreach (SdkRequirement sdk in sdks.Where(s => !installed.ContainsKey(s.PackageName)))
                         DrawSdkInstall(module, sdk);
                 });
                 if (!sdksReady)
                     return;
             }
 
-            int assetStep = module.Sdks.Length > 0 ? 3 : 2;
+            int assetStep = sdks.Count > 0 ? 3 : 2;
             if (module.ModuleTypeName == null)
             {
                 EditorGUILayout.HelpBox("Ready. This module has no asset of its own; it is configured where its README says.", MessageType.Info);
@@ -250,7 +253,7 @@ namespace FlapGame.GameLib.Editor
                         {
                             // Every registry the module's SDKs need, so dependencies between them resolve (MAX -> EDM on OpenUPM).
                             var manifest = new ManifestManager();
-                            foreach (SdkRequirement other in module.Sdks.Where(s => s.Source == SdkSource.ScopedRegistry))
+                            foreach (SdkRequirement other in AllSdks(module).Where(s => s.Source == SdkSource.ScopedRegistry))
                                 manifest.EnsureScopedRegistry(other.RegistryName, other.RegistryUrl, other.RegistryScopes);
                             manifest.Save();
                             string identifier = string.IsNullOrEmpty(sdk.Location) ? sdk.PackageName : $"{sdk.PackageName}@{sdk.Location}";
@@ -258,11 +261,45 @@ namespace FlapGame.GameLib.Editor
                         }
                     }
                     break;
+                case SdkSource.Tarball:
+                    using (new EditorGUI.DisabledScope(pendingRequest != null || downloading != null))
+                    {
+                        EditorGUILayout.LabelField($"Downloads {TarballInstaller.FileName(sdk)} into Packages/{TarballInstaller.Folder}/ - commit that folder.",
+                                                   EditorStyles.wordWrappedMiniLabel);
+                        if (downloading == sdk.PackageName)
+                            EditorGUILayout.HelpBox($"Downloading {sdk.DisplayName}...", MessageType.Info);
+                        else if (GUILayout.Button($"Install {sdk.DisplayName}"))
+                            InstallTarball(module, sdk);
+                    }
+                    break;
                 default:
                     EditorGUILayout.HelpBox($"Install {sdk.DisplayName} following the module README.", MessageType.Warning);
                     break;
             }
         }
+
+        private async void InstallTarball(GameLibModuleInfo module, SdkRequirement sdk)
+        {
+            downloading = sdk.PackageName;
+            try
+            {
+                // Every registry the module chain needs, so the tarball's dependencies resolve (Firebase -> EDM on OpenUPM).
+                await TarballInstaller.InstallAsync(sdk, AllSdks(module).Where(s => s.Source == SdkSource.ScopedRegistry));
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[GameLib] Installing {sdk.DisplayName} from {sdk.Location} failed: {e.Message}");
+            }
+            finally
+            {
+                downloading = null;
+                Refresh();
+                Repaint();
+            }
+        }
+
+        private static List<SdkRequirement> AllSdks(GameLibModuleInfo module) =>
+            GameLibModuleCatalog.WithDependencies(module).SelectMany(m => m.Sdks).Distinct().ToList();
 
         private void DrawInlineEditor(Object target)
         {
@@ -302,7 +339,7 @@ namespace FlapGame.GameLib.Editor
                 return ModuleState.ComingSoon;
             if (!GameLibProject.IsInstalled(module, installed))
                 return ModuleState.NotInstalled;
-            if (module.Sdks.Any(s => !installed.ContainsKey(s.PackageName)))
+            if (AllSdks(module).Any(s => !installed.ContainsKey(s.PackageName)))
                 return ModuleState.NeedsSetup;
             if (module.ModuleTypeName == null)
                 return ModuleState.Ready;

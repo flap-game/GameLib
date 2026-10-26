@@ -1,0 +1,31 @@
+{
+  "name": "FlapGame.GameLib.Analytics.Firebase.Sdk",
+  "rootNamespace": "FlapGame.GameLib.Analytics.Firebase",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.Firebase",
+    "FlapGame.GameLib.Analytics.Firebase"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Firebase.App.dll",
+    "Firebase.Platform.dll",
+    "Firebase.TaskExtension.dll",
+    "Firebase.Analytics.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "GAMELIB_FIREBASE_ANALYTICS"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.google.firebase.analytics",
+      "expression": "",
+      "define": "GAMELIB_FIREBASE_ANALYTICS"
+    }
+  ],
+  "noEngineReferences": false
+}
