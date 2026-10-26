@@ -70,6 +70,29 @@ namespace FlapGame.GameLib.AppsFlyer
         public void EnableTcfDataCollection(bool enabled) => AF.enableTCFDataCollection(enabled);
 #endif
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private static bool? purchaseConnectorAvailable;
+
+        public bool IsPurchaseConnectorAvailable => purchaseConnectorAvailable ??= HasAndroidPurchaseClient();
+
+        // Plugin 7.0.x comments com.appsflyer:purchase-connector out of AppsFlyerDependencies.xml (AGP 8 namespace clash);
+        // its C# calls then only log a warning. The library's PurchaseClient class tells whether it made it into the build.
+        private static bool HasAndroidPurchaseClient()
+        {
+            try
+            {
+                using var purchaseClient = new AndroidJavaClass("com.appsflyer.api.PurchaseClient");
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+#else
+        public bool IsPurchaseConnectorAvailable => true;
+#endif
+
         public void StartPurchaseConnector(bool sandbox, bool storeKit2)
         {
             // iOS routes the connector's callbacks to a GameObject by name.

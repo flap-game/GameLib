@@ -21,7 +21,8 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.analytics.firebase` | Firebase Analytics (`ad_impression`, consent mode, optional `purchase`) | 0.3.0 |
 | `com.flapgame.gamelib.crashlytics` | Firebase Crashlytics with analytics breadcrumbs | 0.3.0 |
 | `com.flapgame.gamelib.remoteconfig.firebase` | `IRemoteConfig` on Firebase Remote Config (Ads reads its plan from it) | 0.3.0 |
-| `com.flapgame.gamelib.appsflyer` | AppsFlyer: ad revenue, purchases (manual or Purchase Connector), ATT, consent | 0.3.0 |
+| `com.flapgame.gamelib.att` | iOS App Tracking Transparency prompt: after the consent form (optional delay) or on demand | 0.4.0 |
+| `com.flapgame.gamelib.appsflyer` | AppsFlyer: ad revenue, purchases (manual or Purchase Connector), consent; starts after ATT | 0.3.0 |
 | `com.flapgame.gamelib.ui` | UI framework | later |
 
 Modules never reference each other directly; they talk through contracts in `core`
@@ -39,7 +40,7 @@ the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, 
 | Purchase | IAP → `IAnalytics.TrackPurchase` → AppsFlyer `af_purchase` (or Purchase Connector), Firebase `purchase` (opt-in) |
 | Remove ads | IAP grants `no_ads` in `IEntitlements` → Ads suppresses interstitial, banner, app open |
 | Consent | Ads runs the CMP → `IConsentState` → ad SDKs, Firebase consent mode, AppsFlyer DMA consent |
-| ATT (iOS) | AppsFlyer asks after the CMP answer → `IConsentState.Att` → AppsFlyer starts with the answer |
+| ATT (iOS) | ATT module asks after the CMP answer (+ delay) → `IConsentState.Att` → AppsFlyer starts with the answer |
 | Remote values | Remote Config → `IRemoteConfig` → Ads plan (`ads_plan`), game values |
 | App open rule | Ads `AppOpenLauncher` on `IAppLifecycle.Resumed`; ads, ad clicks and purchases are not returns |
 
@@ -48,7 +49,7 @@ the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, 
 Add `core` to `Packages/manifest.json`, then open **GameLib > Setup** to add further modules and their SDKs step by step:
 
 ```json
-"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.3.0"
+"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.4.0"
 ```
 
 Unity does not resolve git dependencies between packages, so when installing by hand add every package

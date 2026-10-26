@@ -18,6 +18,7 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
             public (string Network, AdMediation Mediation, string Currency, double Revenue, Dictionary<string, string> Values) Revenue;
 
             public string Version => "test";
+            public bool IsPurchaseConnectorAvailable { get; set; } = true;
             public Task InitializeAsync(string devKey, string appId, bool debug) { Calls.Add($"init:{devKey}:{appId}"); return Task.CompletedTask; }
             public Task StartAsync() { Calls.Add("start"); return Task.CompletedTask; }
             public void SetCustomerUserId(string userId) => Calls.Add("cuid:" + userId);
@@ -32,23 +33,21 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
             public void StartPurchaseConnector(bool sandbox, bool storeKit2) => Calls.Add("connector");
         }
 
-        private sealed class FakeAtt : IAttPrompt
+        private sealed class FakeAtt : IAttService
         {
             public AttStatus Status { get; set; } = AttStatus.NotDetermined;
-            public AttStatus Answer = AttStatus.Authorized;
             public int Requests;
 
-            public Task<AttStatus> RequestAsync()
+            public Task<AttStatus> RequestAsync(CancellationToken cancellationToken = default)
             {
                 Requests++;
-                Status = Answer;
-                return Task.FromResult(Answer);
+                return Task.FromResult(Status);
             }
         }
 
-        private static AppsFlyerStartup.Options Options(AttMode att = AttMode.Request) => new()
+        private static AppsFlyerStartup.Options Options(bool waitForAtt = true) => new()
         {
-            DevKey = "key", AppId = "123", Att = att,
+            DevKey = "key", AppId = "123", WaitForAtt = waitForAtt,
             ConsentWait = TimeSpan.FromSeconds(60), AttWait = TimeSpan.FromSeconds(60),
         };
 
@@ -142,23 +141,21 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
         // ---------- startup order ----------
 
         [Test]
-        public async Task Startup_WaitsForTheCmp_ThenConsent_ThenAtt_ThenStarts()
+        public async Task Startup_WaitsForTheCmp_ThenConsent_ThenStarts()
         {
             var backend = new FakeBackend();
             var consent = new ConsentStateStore();
-            var att = new FakeAtt();
+            var att = new FakeAtt { Status = AttStatus.Authorized };
             var startup = new AppsFlyerStartup(backend, consent, att, Options(), () => Task.CompletedTask, () => true);
 
             Task run = startup.RunAsync(CancellationToken.None);
             await Task.Yield();
             Assert.That(backend.Calls, Is.EqualTo(new[] { "init:key:123" }), "waits for the CMP answer");
-            Assert.That(att.Requests, Is.EqualTo(0), "no ATT prompt over the consent form");
 
             consent.Update(new ConsentState { GdprApplies = true, HasUserConsent = true });
             await run;
 
             Assert.That(backend.Calls, Is.EqualTo(new[] { "init:key:123", "consent:True:True", "start" }));
-            Assert.That(att.Requests, Is.EqualTo(1));
             Assert.That(consent.Current.Att, Is.EqualTo(AttStatus.Authorized), "the ATT answer is shared");
             Assert.That(consent.Current.GdprApplies, Is.True, "SetAtt keeps the CMP answer");
         }
@@ -191,22 +188,7 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
         }
 
         [Test]
-        public async Task Startup_AttNotDeterminedWhileInactive_IsAskedAgain()
-        {
-            var backend = new FakeBackend();
-            var consent = new ConsentStateStore();
-            var att = new FakeAtt { Answer = AttStatus.NotDetermined };
-            var startup = new AppsFlyerStartup(backend, consent, att, Options(), null, null, (_, _) => Task.CompletedTask);
-            consent.Update(new ConsentState());
-
-            await startup.RunAsync(CancellationToken.None);
-
-            Assert.That(att.Requests, Is.EqualTo(3));
-            Assert.That(backend.Calls[^1], Is.EqualTo("start"));
-        }
-
-        [Test]
-        public async Task Startup_WaitForOther_PollsUntilAnswered()
+        public async Task Startup_WaitsForTheAttAnswer_WithoutPrompting()
         {
             var backend = new FakeBackend();
             var att = new FakeAtt();
@@ -214,16 +196,16 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
             Task Delay(TimeSpan t, CancellationToken ct)
             {
                 if (t == TimeSpan.FromSeconds(60)) return Task.Delay(Timeout.Infinite, ct);
-                if (++polls == 3) att.Status = AttStatus.Denied; // MAX's flow answered
+                if (++polls == 3) att.Status = AttStatus.Denied; // the ATT module (or MAX's flow) got the answer
                 return Task.CompletedTask;
             }
             var consent = new ConsentStateStore();
             consent.Update(new ConsentState());
-            var startup = new AppsFlyerStartup(backend, consent, att, Options(AttMode.WaitForOther), null, null, Delay);
+            var startup = new AppsFlyerStartup(backend, consent, att, Options(), null, null, delay: Delay);
 
             await startup.RunAsync(CancellationToken.None);
 
-            Assert.That(att.Requests, Is.EqualTo(0), "never prompts itself");
+            Assert.That(att.Requests, Is.EqualTo(0), "the ATT module shows the prompt, not AppsFlyer");
             Assert.That(consent.Current.Att, Is.EqualTo(AttStatus.Denied));
             Assert.That(backend.Calls[^1], Is.EqualTo("start"));
         }
@@ -232,7 +214,7 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
         public async Task Startup_TcfAndPurchaseConnector()
         {
             var backend = new FakeBackend();
-            var options = Options(AttMode.DoNotWait);
+            var options = Options(waitForAtt: false);
             options.ConsentSource = AppsFlyerConsentSource.Tcf;
             options.PurchaseMode = AppsFlyerPurchaseMode.PurchaseConnector;
             var consent = new ConsentStateStore();
@@ -242,6 +224,71 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
             await startup.RunAsync(CancellationToken.None);
 
             Assert.That(backend.Calls, Is.EqualTo(new[] { "init:key:123", "tcf:True", "connector", "start" }));
+        }
+
+        [Test]
+        public async Task Startup_WithoutAttModule_DoesNotWait()
+        {
+            var backend = new FakeBackend();
+            var consent = new ConsentStateStore();
+            consent.Update(new ConsentState());
+            var startup = new AppsFlyerStartup(backend, consent, null, Options(), null, null,
+                                               delay: (_, ct) => Task.Delay(Timeout.Infinite, ct));
+
+            await startup.RunAsync(CancellationToken.None);
+
+            Assert.That(backend.Calls[^1], Is.EqualTo("start"));
+            Assert.That(consent.Current.Att, Is.EqualTo(AttStatus.NotApplicable));
+        }
+
+        [Test]
+        public async Task Startup_SendsTheUserIdBeforeTheStart()
+        {
+            var backend = new FakeBackend();
+            var consent = new ConsentStateStore();
+            consent.Update(new ConsentState());
+            var startup = new AppsFlyerStartup(backend, consent, new FakeAtt { Status = AttStatus.NotApplicable }, Options(), null, null,
+                                               () => "player-42");
+
+            await startup.RunAsync(CancellationToken.None);
+
+            Assert.That(backend.Calls, Is.EqualTo(new[] { "init:key:123", "consent:False:", "cuid:player-42", "start" }), "the install carries the user id");
+        }
+
+        // ---------- module ----------
+
+        [Test]
+        public async Task Module_ConnectorMissing_FallsBackToAfPurchase()
+        {
+            var backend = new FakeBackend { IsPurchaseConnectorAvailable = false };
+            IAppsFlyerBackend previous = AppsFlyerBackend.Current;
+            AppsFlyerBackend.Current = backend;
+            var module = ScriptableObject.CreateInstance<AppsFlyerModule>();
+            module.DevKey = "key";
+            module.WaitForConsent = false;
+            module.PurchaseMode = AppsFlyerPurchaseMode.PurchaseConnector;
+
+            var services = new ServiceRegistry();
+            var analytics = new AnalyticsService();
+            services.Register<IAnalytics>(analytics);
+            services.Register<IAnalyticsSinkRegistry>(analytics);
+            try
+            {
+                LogAssert.Expect(LogType.Warning, new Regex("Purchase Connector is not in this build"));
+                await module.InstallAsync(services);
+                analytics.TrackPurchase(new PurchaseRecord { ProductId = "coins", Price = 0.99m, Currency = "USD", TransactionId = "GPA.2" });
+                for (int wait = 0; wait < 100 && !backend.Calls.Contains("event:af_purchase"); wait++)
+                    await Task.Delay(10);
+
+                Assert.That(backend.Calls, Does.Not.Contain("connector"));
+                Assert.That(backend.Calls, Does.Contain("event:af_purchase"), "Android purchases still reach AppsFlyer");
+            }
+            finally
+            {
+                AppsFlyerBackend.Current = previous;
+                services.Dispose();
+                UnityEngine.Object.DestroyImmediate(module);
+            }
         }
     }
 }

@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using AOT;
 #endif
 
-namespace FlapGame.GameLib.AppsFlyer
+namespace FlapGame.GameLib.Att
 {
     /// <summary>iOS App Tracking Transparency: the status, and the system prompt. Other platforms: not applicable.</summary>
     public interface IAttPrompt
@@ -18,7 +18,7 @@ namespace FlapGame.GameLib.AppsFlyer
 
     /// <summary>
     /// <see cref="IAttPrompt"/> over <c>GameLibAtt.mm</c> (ATTrackingManager). The Info.plist usage text and the weak
-    /// AppTrackingTransparency link are added at build time by the AppsFlyer module's iOS post-processor.
+    /// AppTrackingTransparency link are added at build time by the ATT module's iOS post-processor (AttIosPostProcessor).
     /// </summary>
     public sealed class AttPrompt : IAttPrompt
     {

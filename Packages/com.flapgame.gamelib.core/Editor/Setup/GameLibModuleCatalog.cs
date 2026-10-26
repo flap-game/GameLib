@@ -142,6 +142,13 @@ namespace FlapGame.GameLib.Editor
             },
             new GameLibModuleInfo
             {
+                Id = "att",
+                DisplayName = "App Tracking Transparency",
+                Description = "iOS ATT prompt after the consent form (optional delay) or when the game asks. Nothing on Android.",
+                ModuleTypeName = "FlapGame.GameLib.Att.AttModule",
+            },
+            new GameLibModuleInfo
+            {
                 Id = "iap",
                 DisplayName = "In-App Purchases",
                 Description = "Unity IAP 5: consumables, non-consumables and subscriptions, localized prices, restore.",
@@ -190,18 +197,19 @@ namespace FlapGame.GameLib.Editor
             {
                 Id = "appsflyer",
                 DisplayName = "AppsFlyer",
-                Description = "AppsFlyer attribution, ad revenue, purchases (manual or Purchase Connector), ATT and consent.",
+                Description = "AppsFlyer attribution, ad revenue, purchases (manual or Purchase Connector), consent; starts after the ATT answer.",
+                DependsOn = new[] { "att" },
                 ModuleTypeName = "FlapGame.GameLib.AppsFlyer.AppsFlyerModule",
                 Sdks = new[]
                 {
                     ExternalDependencyManager,
-                    // 6.17.900: the last 6.x. 7.0.x also works with GameLib but ships its Android Purchase Connector disabled.
+                    // 7.0.3 leaves the Android Purchase Connector out; GameLib then logs af_purchase on Android (AppsFlyerModule).
                     new SdkRequirement
                     {
                         DisplayName = "AppsFlyer Unity plugin",
                         PackageName = "appsflyer-unity-plugin",
                         Source = SdkSource.Git,
-                        Location = "https://github.com/AppsFlyerSDK/appsflyer-unity-plugin.git#v6.17.900",
+                        Location = "https://github.com/AppsFlyerSDK/appsflyer-unity-plugin.git#v7.0.3",
                     },
                 },
             },

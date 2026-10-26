@@ -1,9 +1,9 @@
 {
-  "name": "FlapGame.GameLib.AppsFlyer.Editor",
+  "name": "FlapGame.GameLib.Att.Editor",
   "rootNamespace": "FlapGame.GameLib",
   "references": [
     "FlapGame.GameLib.Core",
-    "FlapGame.GameLib.AppsFlyer"
+    "FlapGame.GameLib.Att"
   ],
   "includePlatforms": [
     "Editor"

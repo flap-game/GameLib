@@ -30,6 +30,12 @@ namespace FlapGame.GameLib.AppsFlyer
         /// <summary>The SDK reads the TCF v2.2 strings the CMP stored instead of <see cref="SetConsent"/>.</summary>
         void EnableTcfDataCollection(bool enabled);
 
+        /// <summary>
+        /// False when the Purchase Connector's native library is missing from the build (plugin 7.0.x on Android), so
+        /// <see cref="StartPurchaseConnector"/> would do nothing and purchases must be logged as <c>af_purchase</c>.
+        /// </summary>
+        bool IsPurchaseConnectorAvailable { get; }
+
         /// <summary>Starts AppsFlyer's ROI360 Purchase Connector (needs an ROI360 subscription).</summary>
         void StartPurchaseConnector(bool sandbox, bool storeKit2);
     }

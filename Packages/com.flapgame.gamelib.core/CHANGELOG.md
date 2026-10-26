@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0] - 2026-10-26
+- IAttService contract (App Tracking Transparency status and prompt), implemented by the new ATT module.
+- IConsentState.WaitUntilResolvedAsync: wait for the CMP answer with a timeout.
+- BufferedAnalyticsSink.TryGetPendingUserId: the user id set before the SDK started.
+- GameLib > Setup: ATT module; AppsFlyer installs plugin 7.0.3 and the ATT module with it.
+
 ## [0.3.0] - 2026-10-26
 - IRemoteConfig contract and RemoteConfigJson (Newtonsoft parsing shared by every remote config provider).
 - BufferedAnalyticsSink<T>: buffers calls for an SDK that starts in the background, flushes in order, turns itself off on failure or timeout.

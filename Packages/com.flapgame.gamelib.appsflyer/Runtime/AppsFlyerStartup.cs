@@ -5,17 +5,6 @@ using UnityEngine;
 
 namespace FlapGame.GameLib.AppsFlyer
 {
-    /// <summary>Who shows the iOS App Tracking Transparency prompt before AppsFlyer starts.</summary>
-    public enum AttMode
-    {
-        /// <summary>GameLib shows the prompt (after the CMP answer), then starts AppsFlyer.</summary>
-        Request = 0,
-        /// <summary>Another SDK shows it (e.g. MAX's consent flow); AppsFlyer waits until it was answered.</summary>
-        WaitForOther = 1,
-        /// <summary>Start without waiting: the first session carries no IDFA even if the user allows tracking later.</summary>
-        DoNotWait = 2,
-    }
-
     /// <summary>Where AppsFlyer's DMA consent comes from.</summary>
     public enum AppsFlyerConsentSource
     {
@@ -27,7 +16,8 @@ namespace FlapGame.GameLib.AppsFlyer
 
     /// <summary>
     /// The start order AppsFlyer needs: SDK created → CMP answered (or no CMP) → consent sent → App Tracking Transparency
-    /// answered (iOS) → Purchase Connector → start. Every wait has a timeout, so the launch is always reported.
+    /// answered (iOS; the ATT module or another SDK shows the prompt) → customer user id → Purchase Connector → start.
+    /// Every wait has a timeout, so the launch is always reported.
     /// </summary>
     public sealed class AppsFlyerStartup
     {
@@ -39,7 +29,7 @@ namespace FlapGame.GameLib.AppsFlyer
             public bool WaitForConsent = true;
             public TimeSpan ConsentWait = TimeSpan.FromSeconds(60);
             public AppsFlyerConsentSource ConsentSource;
-            public AttMode Att;
+            public bool WaitForAtt = true;
             public TimeSpan AttWait = TimeSpan.FromSeconds(60);
             public AppsFlyerPurchaseMode PurchaseMode;
             public bool PurchaseConnectorSandbox;
@@ -47,21 +37,23 @@ namespace FlapGame.GameLib.AppsFlyer
         }
 
         private static readonly TimeSpan AttPollInterval = TimeSpan.FromMilliseconds(500);
-        private static readonly TimeSpan AttRetryDelay = TimeSpan.FromSeconds(1);
-        private const int AttRequestAttempts = 3;
 
         private readonly IAppsFlyerBackend backend;
         private readonly IConsentState consent;
-        private readonly IAttPrompt att;
+        private readonly IAttService att;
         private readonly Options options;
         private readonly Func<Task> bootstrapReady;
         private readonly Func<bool> hasCmp;
+        private readonly Func<string> pendingUserId;
         private readonly Func<TimeSpan, CancellationToken, Task> delay;
 
         /// <param name="bootstrapReady">Completes once every module installed (the Ads module registers the CMP then).</param>
         /// <param name="hasCmp">True when a CMP (<see cref="IConsentService"/>) is registered, so an answer will come.</param>
-        public AppsFlyerStartup(IAppsFlyerBackend backend, IConsentState consent, IAttPrompt att, Options options,
-                                Func<Task> bootstrapReady, Func<bool> hasCmp, Func<TimeSpan, CancellationToken, Task> delay = null)
+        /// <param name="att">The ATT module's service; null when it is not installed (no wait for the ATT answer).</param>
+        /// <param name="pendingUserId">The user id the game set so far (sent before the start, so the install carries it), or null.</param>
+        public AppsFlyerStartup(IAppsFlyerBackend backend, IConsentState consent, IAttService att, Options options,
+                                Func<Task> bootstrapReady, Func<bool> hasCmp, Func<string> pendingUserId = null,
+                                Func<TimeSpan, CancellationToken, Task> delay = null)
         {
             this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
             this.consent = consent;
@@ -69,12 +61,13 @@ namespace FlapGame.GameLib.AppsFlyer
             this.options = options ?? throw new ArgumentNullException(nameof(options));
             this.bootstrapReady = bootstrapReady;
             this.hasCmp = hasCmp;
+            this.pendingUserId = pendingUserId;
             this.delay = delay ?? Task.Delay;
         }
 
         /// <summary>Upper bound of <see cref="RunAsync"/> before the SDK itself answers.</summary>
         public TimeSpan MaxWait => (options.WaitForConsent ? options.ConsentWait : TimeSpan.Zero) +
-                                   (options.Att == AttMode.DoNotWait ? TimeSpan.Zero : options.AttWait);
+                                   (options.WaitForAtt ? options.AttWait : TimeSpan.Zero);
 
         public async Task RunAsync(CancellationToken cancellationToken)
         {
@@ -83,8 +76,9 @@ namespace FlapGame.GameLib.AppsFlyer
             if (options.WaitForConsent && consent != null)
             {
                 if (bootstrapReady != null) await bootstrapReady();
-                if (!consent.Current.IsResolved && (hasCmp == null || hasCmp()))
-                    await WaitForConsentAsync(cancellationToken);
+                if (!consent.Current.IsResolved && (hasCmp == null || hasCmp()) &&
+                    !await consent.WaitUntilResolvedAsync(options.ConsentWait, cancellationToken, delay))
+                    Debug.LogWarning($"[AppsFlyer] No consent answer after {options.ConsentWait.TotalSeconds:0}s - starting without it.");
             }
 
             if (options.ConsentSource == AppsFlyerConsentSource.Tcf)
@@ -98,6 +92,9 @@ namespace FlapGame.GameLib.AppsFlyer
             AttStatus status = await ResolveAttAsync(cancellationToken);
             if (status != AttStatus.NotApplicable) consent?.SetAtt(status);
 
+            string userId = pendingUserId?.Invoke();
+            if (!string.IsNullOrEmpty(userId)) backend.SetCustomerUserId(userId);
+
             if (options.PurchaseMode == AppsFlyerPurchaseMode.PurchaseConnector)
                 backend.StartPurchaseConnector(options.PurchaseConnectorSandbox, options.StoreKit2);
 
@@ -105,41 +102,14 @@ namespace FlapGame.GameLib.AppsFlyer
             await backend.StartAsync();
         }
 
-        private async Task WaitForConsentAsync(CancellationToken cancellationToken)
-        {
-            var answered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            void OnChanged(ConsentState state)
-            {
-                if (state.IsResolved) answered.TrySetResult(true);
-            }
-
-            consent.Changed += OnChanged;
-            try
-            {
-                if (consent.Current.IsResolved) return;
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                Task timeout = delay(options.ConsentWait, cts.Token);
-                if (await Task.WhenAny(answered.Task, timeout) != answered.Task)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    Debug.LogWarning($"[AppsFlyer] No consent answer after {options.ConsentWait.TotalSeconds:0}s - starting without it.");
-                }
-                cts.Cancel();
-            }
-            finally
-            {
-                consent.Changed -= OnChanged;
-            }
-        }
-
         private async Task<AttStatus> ResolveAttAsync(CancellationToken cancellationToken)
         {
-            if (att == null || options.Att == AttMode.DoNotWait) return att?.Status ?? AttStatus.NotApplicable;
+            if (att == null) return AttStatus.NotApplicable;
             AttStatus status = att.Status;
-            if (status != AttStatus.NotDetermined) return status;
+            if (status != AttStatus.NotDetermined || !options.WaitForAtt) return status;
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            Task<AttStatus> answer = options.Att == AttMode.Request ? RequestAsync(cts.Token) : PollAsync(cts.Token);
+            Task<AttStatus> answer = PollAsync(cts.Token);
             Task timeout = delay(options.AttWait, cts.Token);
             Task finished = await Task.WhenAny(answer, timeout);
             cts.Cancel();
@@ -148,18 +118,6 @@ namespace FlapGame.GameLib.AppsFlyer
             cancellationToken.ThrowIfCancellationRequested();
             Debug.LogWarning($"[AppsFlyer] App Tracking Transparency not answered after {options.AttWait.TotalSeconds:0}s - starting without IDFA.");
             return att.Status;
-        }
-
-        // iOS answers "not determined" at once when the app is not active (e.g. right after another prompt); ask again.
-        private async Task<AttStatus> RequestAsync(CancellationToken cancellationToken)
-        {
-            AttStatus status = AttStatus.NotDetermined;
-            for (int attempt = 0; attempt < AttRequestAttempts && status == AttStatus.NotDetermined; attempt++)
-            {
-                if (attempt > 0) await delay(AttRetryDelay, cancellationToken);
-                status = await att.RequestAsync();
-            }
-            return status;
         }
 
         private async Task<AttStatus> PollAsync(CancellationToken cancellationToken)

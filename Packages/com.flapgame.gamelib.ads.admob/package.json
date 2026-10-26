@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.ads.admob",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "displayName": "GameLib Ads - AdMob",
   "description": "Google AdMob adapter and Google UMP consent for the Ads module.",
   "unity": "6000.4",
@@ -16,7 +16,7 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.3.0",
-    "com.flapgame.gamelib.ads": "0.3.0"
+    "com.flapgame.gamelib.core": "0.4.0",
+    "com.flapgame.gamelib.ads": "0.4.0"
   }
 }

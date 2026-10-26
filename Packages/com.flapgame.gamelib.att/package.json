@@ -1,0 +1,21 @@
+{
+  "name": "com.flapgame.gamelib.att",
+  "version": "0.4.0",
+  "displayName": "GameLib App Tracking Transparency",
+  "description": "iOS App Tracking Transparency prompt: after the consent form, optional delay, or when the game asks.",
+  "unity": "6000.4",
+  "author": {
+    "name": "Flap Game",
+    "url": "https://github.com/flap-game/GameLib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flap-game/GameLib.git"
+  },
+  "keywords": [
+    "gamelib"
+  ],
+  "dependencies": {
+    "com.flapgame.gamelib.core": "0.4.0"
+  }
+}

@@ -8,14 +8,13 @@ namespace FlapGame.GameLib.AppsFlyer
 {
     /// <summary>
     /// Adds the AppsFlyer sink to <see cref="IAnalytics"/> at once and starts AppsFlyer in the background in the order it
-    /// needs (<see cref="AppsFlyerStartup"/>): CMP answer → consent → App Tracking Transparency → start. Everything tracked
-    /// meanwhile is buffered and sent after the start.
+    /// needs (<see cref="AppsFlyerStartup"/>): CMP answer → consent → App Tracking Transparency answer (the ATT module
+    /// shows the prompt) → customer user id → start. Everything tracked meanwhile is buffered and sent after the start.
     /// </summary>
     [CreateAssetMenu(menuName = "GameLib/Modules/AppsFlyer", fileName = "AppsFlyerModule")]
     public sealed class AppsFlyerModule : GameLibModule
     {
         public const string LogTag = "[AppsFlyer]";
-        public const string DefaultAttUsageDescription = "Your data will be used to deliver personalized ads to you.";
 
         [Header("App")]
         [Tooltip("AppsFlyer dashboard > App settings > Dev key.")]
@@ -39,15 +38,12 @@ namespace FlapGame.GameLib.AppsFlyer
         public AppsFlyerConsentSource ConsentSource = AppsFlyerConsentSource.ConsentState;
 
         [Header("iOS App Tracking Transparency")]
-        [Tooltip("Request: GameLib shows the prompt after the CMP answer. WaitForOther: another SDK shows it (MAX's consent flow). " +
-                 "DoNotWait: start at once (the first session then never has the IDFA).")]
-        public AttMode Att = AttMode.Request;
+        [Tooltip("Start only after the ATT prompt was answered (shown by the ATT module, or by another SDK such as MAX's consent " +
+                 "flow), so the install carries the IDFA. Off: start at once - the first session then never has the IDFA.")]
+        public bool WaitForAtt = true;
 
-        [Tooltip("Longest wait for the prompt answer, in seconds.")]
+        [Tooltip("Longest wait for the ATT answer, in seconds. Keep it above the ATT module's delay.")]
         [Min(0f)] public float AttWaitSeconds = 60f;
-
-        [Tooltip("Info.plist NSUserTrackingUsageDescription: the sentence the prompt shows. Added at build time when Att = Request.")]
-        [TextArea(2, 4)] public string AttUsageDescription = DefaultAttUsageDescription;
 
         [Header("Purchases")]
         [Tooltip("Manual: GameLib logs af_purchase for every purchase. PurchaseConnector: AppsFlyer's ROI360 connector validates " +
@@ -83,7 +79,15 @@ namespace FlapGame.GameLib.AppsFlyer
                 return default;
             }
 
-            var sink = new AppsFlyerSink(backend, PurchaseMode, ForwardAllEvents, ForwardedEvents);
+            AppsFlyerPurchaseMode purchaseMode = PurchaseMode;
+            if (purchaseMode == AppsFlyerPurchaseMode.PurchaseConnector && !backend.IsPurchaseConnectorAvailable)
+            {
+                // Plugin 7.0.x leaves the Android connector out of its dependencies; its calls would only log a warning.
+                Debug.LogWarning($"{LogTag} The Purchase Connector is not in this build - logging af_purchase for purchases instead.");
+                purchaseMode = AppsFlyerPurchaseMode.Manual;
+            }
+
+            var sink = new AppsFlyerSink(backend, purchaseMode, ForwardAllEvents, ForwardedEvents);
             var buffer = new BufferedAnalyticsSink<AppsFlyerSink>(sink, LogTag);
             services.Resolve<IAnalyticsSinkRegistry>().AddSink(buffer);
 
@@ -96,8 +100,12 @@ namespace FlapGame.GameLib.AppsFlyer
                 services.RegisterDisposable(Disposable.Create(() => consent.Changed -= Apply));
             }
 
-            var startup = new AppsFlyerStartup(backend, consent, new AttPrompt(), BuildOptions(), WaitForBootstrapAsync,
-                                               () => services.IsRegistered<IConsentService>());
+            services.TryResolve(out IAttService att);
+            AppsFlyerStartup.Options options = BuildOptions();
+            options.PurchaseMode = purchaseMode;
+            var startup = new AppsFlyerStartup(backend, consent, att, options, WaitForBootstrapAsync,
+                                               () => services.IsRegistered<IConsentService>(),
+                                               () => buffer.TryGetPendingUserId(out string userId) ? userId : null);
             TimeSpan timeout = startup.MaxWait + TimeSpan.FromSeconds(30);
             Debug.Log($"{LogTag} Plugin {backend.Version}; starting after consent and ATT.");
             _ = buffer.InitializeAsync(startup.RunAsync, timeout, expectedFailure: Application.isEditor, cancellationToken);
@@ -112,7 +120,7 @@ namespace FlapGame.GameLib.AppsFlyer
             WaitForConsent = WaitForConsent,
             ConsentWait = TimeSpan.FromSeconds(ConsentWaitSeconds),
             ConsentSource = ConsentSource,
-            Att = Att,
+            WaitForAtt = WaitForAtt,
             AttWait = TimeSpan.FromSeconds(AttWaitSeconds),
             PurchaseMode = PurchaseMode,
             PurchaseConnectorSandbox = PurchaseConnectorSandbox && Debug.isDebugBuild,
@@ -129,8 +137,6 @@ namespace FlapGame.GameLib.AppsFlyer
                 issues.Add(GameLibIssue.Warning("AppsFlyer: iOS App Id is empty - required for iOS builds."));
             else if (!long.TryParse(IosAppId.Trim(), out _))
                 issues.Add(GameLibIssue.Error("AppsFlyer: iOS App Id must be the numeric Apple id, without 'id'."));
-            if (Att == AttMode.Request && string.IsNullOrWhiteSpace(AttUsageDescription))
-                issues.Add(GameLibIssue.Error("AppsFlyer: ATT Usage Description is empty - iOS kills an app that shows the prompt without it."));
             if (PurchaseMode == AppsFlyerPurchaseMode.Manual && ForwardAllEvents)
                 issues.Add(GameLibIssue.Warning("AppsFlyer: Forward All Events also sends iap_* events; af_purchase already carries the revenue."));
         }

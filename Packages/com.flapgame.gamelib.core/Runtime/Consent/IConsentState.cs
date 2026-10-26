@@ -27,6 +27,40 @@ namespace FlapGame.GameLib
         void SetAtt(AttStatus status);
     }
 
+    public static class ConsentStateExtensions
+    {
+        /// <summary>
+        /// Completes with true once the CMP answer is in (at once when it already is), or false after
+        /// <paramref name="timeout"/>. <paramref name="delay"/> replaces <see cref="Task.Delay(TimeSpan, CancellationToken)"/> in tests.
+        /// </summary>
+        public static async Task<bool> WaitUntilResolvedAsync(this IConsentState consent, TimeSpan timeout, CancellationToken cancellationToken = default,
+                                                              Func<TimeSpan, CancellationToken, Task> delay = null)
+        {
+            if (consent == null) throw new ArgumentNullException(nameof(consent));
+            var answered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnChanged(ConsentState state)
+            {
+                if (state.IsResolved) answered.TrySetResult(true);
+            }
+
+            consent.Changed += OnChanged;
+            try
+            {
+                if (consent.Current.IsResolved) return true;
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                Task timer = (delay ?? Task.Delay)(timeout, cts.Token);
+                bool resolved = await Task.WhenAny(answered.Task, timer) == answered.Task;
+                cts.Cancel();
+                cancellationToken.ThrowIfCancellationRequested();
+                return resolved;
+            }
+            finally
+            {
+                consent.Changed -= OnChanged;
+            }
+        }
+    }
+
     public enum ConsentStatus
     {
         Unknown     = 0,

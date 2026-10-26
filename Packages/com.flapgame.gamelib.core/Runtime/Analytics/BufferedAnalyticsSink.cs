@@ -204,6 +204,19 @@ namespace FlapGame.GameLib
             target.SetUserId(userId);
         }
 
+        /// <summary>
+        /// The user id set while pending, for an SDK that wants it before its own start (it is still replayed on
+        /// <see cref="MarkReady"/>). False when none was set or the sink is no longer pending.
+        /// </summary>
+        public bool TryGetPendingUserId(out string userId)
+        {
+            lock (gate)
+            {
+                userId = pendingUserId;
+                return state == BufferedSinkState.Pending && pendingUserIdSet;
+            }
+        }
+
         private void Enqueue(Action<TTarget> call)
         {
             if (pendingCalls.Count >= MaxQueuedCalls)
