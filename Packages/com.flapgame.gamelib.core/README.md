@@ -5,7 +5,7 @@ Foundation package of GameLib. Every other `com.flapgame.gamelib.*` package depe
 Install:
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.6.0
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.7.0
 ```
 
 Then open **GameLib > Setup**, create the settings asset (Core), and add modules one by one.
@@ -39,3 +39,14 @@ A module that throws during startup is logged and skipped; tick **Required** on 
 ## Checks
 
 **GameLib > Setup > Check project** lists missing packages, SDKs and module settings. Errors also stop the player build.
+
+## Scripts and agents
+
+`GameLibCli` does what GameLib Setup does, from the command line, and writes a JSON report with an exit code:
+
+```
+Unity -batchmode -quit -projectPath <project> -executeMethod FlapGame.GameLib.Editor.GameLibCli.Install -gamelibModules ads.max,iap
+Unity -batchmode -quit -projectPath <project> -executeMethod FlapGame.GameLib.Editor.GameLibCli.Doctor
+```
+
+Agents that integrate GameLib into a game follow [Documentation~/agent-guide.md](Documentation~/agent-guide.md).

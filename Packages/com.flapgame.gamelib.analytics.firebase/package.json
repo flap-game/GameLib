@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.analytics.firebase",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "displayName": "GameLib Analytics - Firebase",
   "description": "Firebase Analytics sink: every IAnalytics event within Firebase limits, ad_impression revenue, consent mode, optional purchase event.",
   "unity": "6000.4",
@@ -16,7 +16,7 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.6.0",
-    "com.flapgame.gamelib.firebase": "0.6.0"
+    "com.flapgame.gamelib.core": "0.7.0",
+    "com.flapgame.gamelib.firebase": "0.7.0"
   }
 }

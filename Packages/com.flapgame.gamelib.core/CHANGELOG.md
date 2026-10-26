@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.0] - 2026-10-26
+- GameLibCli: GameLib Setup from batch mode for scripts and agents. `Install -gamelibModules id,...` adds the modules, their GameLib dependencies and SDKs (scoped registries, the newest registry version when none is pinned, Firebase tarballs), then creates and lists the module assets; run it until it exits 0 (2 = run again after Unity resolves). `Doctor` reports every module's state, its asset settings and the setup issues. JSON report in Logs/gamelib-<command>.json, exit code 1 on errors. Same API in the Editor: `InstallModules`, `BuildDoctorReport`.
+- Documentation~/agent-guide.md: integration order, rules and checks for AI agents.
+- ManifestManager.HasScopedRegistry; TarballInstaller.DownloadAsync (download without touching the manifest).
+
 ## [0.5.0] - 2026-10-26
 - iOS: Control Center, Notification Center, an incoming-call banner or a system alert no longer raise IAppLifecycle.Resumed (Unity pauses for them on iOS, not on Android); only a real trip to the background does - so no app open ad after pulling Control Center down. Native observer in Plugins/iOS/GameLibLifecycle.mm.
 - BufferedAnalyticsSink.RunLatest(key, call): last call per key, never dropped, flushed before the queued calls - consent for Firebase and AppsFlyer uses it, so events never reach Firebase without consent mode. A full buffer of ad revenue / purchases drops a new plain event instead of revenue.

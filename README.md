@@ -50,11 +50,14 @@ the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, 
 Add `core` to `Packages/manifest.json`, then open **GameLib > Setup** to add further modules and their SDKs step by step:
 
 ```json
-"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.6.0"
+"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.7.0"
 ```
 
 Unity does not resolve git dependencies between packages, so when installing by hand add every package
 a module depends on (listed in its `package.json`) with the same tag. An OpenUPM registry is planned from 1.0.
+
+Without the window, `GameLibCli.Install` / `GameLibCli.Doctor` run the same steps in batch mode. An AI agent that integrates
+GameLib follows the [agent guide](Packages/com.flapgame.gamelib.core/Documentation~/agent-guide.md).
 
 ## External Dependency Manager
 

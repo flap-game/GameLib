@@ -74,6 +74,10 @@ namespace FlapGame.GameLib.Editor
                        && (v.Contains(".git") || v.Contains("#")));
         }
 
+        /// <summary>True when a scoped registry with this URL is listed (trailing slash insensitive).</summary>
+        public bool HasScopedRegistry(string url) =>
+            Registries().OfType<JObject>().Any(reg => UrlEquals((string)reg["url"], url));
+
         // Adds a scoped registry, or merges missing scopes into an existing entry
         // with the same URL (trailing slash insensitive).
         public void EnsureScopedRegistry(string name, string url, string[] scopes)

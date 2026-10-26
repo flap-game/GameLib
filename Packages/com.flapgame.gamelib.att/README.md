@@ -31,5 +31,5 @@ With `Manual`, keep AppsFlyer's *Att Wait Seconds* in mind: AppsFlyer starts wit
 Install by hand:
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.att#v0.6.0
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.att#v0.7.0
 ```
