@@ -213,6 +213,13 @@ namespace FlapGame.GameLib.Editor
                     },
                 },
             },
+            new GameLibModuleInfo
+            {
+                Id = "build",
+                DisplayName = "Cloud Build",
+                Description = "Unity Cloud Build: Unity splash off, App Store upload script for iOS builds.",
+                ModuleTypeName = null,
+            },
         };
 
         public static GameLibModuleInfo Find(string id) => All.FirstOrDefault(m => m.Id == id);

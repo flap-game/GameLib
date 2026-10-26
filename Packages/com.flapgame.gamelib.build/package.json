@@ -1,0 +1,21 @@
+{
+  "name": "com.flapgame.gamelib.build",
+  "version": "0.6.0",
+  "displayName": "GameLib Build",
+  "description": "Unity Cloud Build hooks: Unity splash off, App Store upload script for iOS.",
+  "unity": "6000.4",
+  "author": {
+    "name": "Flap Game",
+    "url": "https://github.com/flap-game/GameLib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flap-game/GameLib.git"
+  },
+  "keywords": [
+    "gamelib"
+  ],
+  "dependencies": {
+    "com.flapgame.gamelib.core": "0.6.0"
+  }
+}

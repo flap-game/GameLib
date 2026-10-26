@@ -23,6 +23,7 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.remoteconfig.firebase` | `IRemoteConfig` on Firebase Remote Config (Ads reads its plan from it) | 0.3.0 |
 | `com.flapgame.gamelib.att` | iOS App Tracking Transparency prompt: after the consent form (optional delay) or on demand | 0.4.0 |
 | `com.flapgame.gamelib.appsflyer` | AppsFlyer: ad revenue, purchases (manual or Purchase Connector), consent; starts after ATT | 0.3.0 |
+| `com.flapgame.gamelib.build` | Unity Cloud Build: splash off, App Store upload of iOS builds | 0.6.0 |
 | `com.flapgame.gamelib.ui` | UI framework | later |
 
 Modules never reference each other directly; they talk through contracts in `core`
@@ -49,7 +50,7 @@ the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, 
 Add `core` to `Packages/manifest.json`, then open **GameLib > Setup** to add further modules and their SDKs step by step:
 
 ```json
-"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.5.0"
+"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.6.0"
 ```
 
 Unity does not resolve git dependencies between packages, so when installing by hand add every package

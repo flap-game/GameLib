@@ -34,6 +34,7 @@
     "com.flapgame.gamelib.analytics.firebase",
     "com.flapgame.gamelib.appsflyer",
     "com.flapgame.gamelib.att",
+    "com.flapgame.gamelib.build",
     "com.flapgame.gamelib.core",
     "com.flapgame.gamelib.crashlytics",
     "com.flapgame.gamelib.firebase",
