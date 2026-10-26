@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c108821604c5e746bb2bd2980999788, type: 3}
+  m_Name: GameLibSettings
+  m_EditorClassIdentifier: FlapGame.GameLib.Core::FlapGame.GameLib.GameLibSettings
+  autoInitialize: 1
+  logAnalyticsInDevelopment: 1
+  modules:
+  - {fileID: 11400000, guid: 743932052c884b0418574af3e5667004, type: 2}
