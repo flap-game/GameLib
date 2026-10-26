@@ -55,7 +55,14 @@ foreach ($readme in $readmes | Where-Object { Test-Path $_ }) {
     if ($updated -ne $text) { Set-Content -NoNewline -Encoding utf8NoBOM $readme $updated }
 }
 
-$versionCs = Join-Path $root 'Packages/com.flapgame.gamelib.core/Runtime/GameLibVersion.cs'
+# The dev project's lock records the embedded packages' internal dependency versions too.
+$lock = Join-Path $root 'Packages/packages-lock.json'
+if (Test-Path $lock) {
+    (Get-Content $lock -Raw) -replace '("com\.flapgame\.gamelib\.[^"]+": )"\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?"', "`$1`"$Version`"" |
+        Set-Content -NoNewline -Encoding utf8NoBOM $lock
+}
+
+$versionCs =Join-Path $root 'Packages/com.flapgame.gamelib.core/Runtime/GameLibVersion.cs'
 (Get-Content $versionCs -Raw) -replace 'Current = "[^"]*"', "Current = `"$Version`"" |
     Set-Content -NoNewline -Encoding utf8NoBOM $versionCs
 

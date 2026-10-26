@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.haptics",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "GameLib Haptics",
   "description": "Vibration and haptic feedback for Android and iOS.",
   "unity": "6000.4",
@@ -16,6 +16,6 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.2.0"
+    "com.flapgame.gamelib.core": "0.3.0"
   }
 }

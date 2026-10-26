@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-10-26
 - IRemoteConfig contract and RemoteConfigJson (Newtonsoft parsing shared by every remote config provider).
 - BufferedAnalyticsSink<T>: buffers calls for an SDK that starts in the background, flushes in order, turns itself off on failure or timeout.
 - Disposable.Create, GameLibModuleOrder.RemoteConfig.

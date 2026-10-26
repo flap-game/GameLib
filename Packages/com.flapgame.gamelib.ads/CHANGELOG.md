@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-10-26
 - The ads plan comes from remote config again: with a remote config module installed and no IAdsPlanSource of the game's own, AdsModule reads the JSON plan under PlanRemoteConfigKey (default `ads_plan`) at install and follows every activation (RemoteConfigAdsPlanSource).
 
 ## [0.2.0] - 2026-10-26
