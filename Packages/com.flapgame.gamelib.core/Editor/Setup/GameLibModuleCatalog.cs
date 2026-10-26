@@ -52,6 +52,17 @@ namespace FlapGame.GameLib.Editor
         public const string PackagePrefix = "com.flapgame.gamelib.";
         public const string CorePackageName = PackagePrefix + "core";
 
+        /// <summary>Google's External Dependency Manager, needed by MAX, Firebase and AppsFlyer; served by OpenUPM.</summary>
+        public static readonly SdkRequirement ExternalDependencyManager = new()
+        {
+            DisplayName = "External Dependency Manager",
+            PackageName = "com.google.external-dependency-manager",
+            Source = SdkSource.ScopedRegistry,
+            RegistryName = "package.openupm.com",
+            RegistryUrl = "https://package.openupm.com",
+            RegistryScopes = new[] { "com.google.external-dependency-manager" },
+        };
+
         public static IReadOnlyList<GameLibModuleInfo> All { get; } = new[]
         {
             new GameLibModuleInfo
@@ -67,7 +78,6 @@ namespace FlapGame.GameLib.Editor
                 DisplayName = "Ads",
                 Description = "Placement-based interstitial, rewarded, banner and app open ads, with per-game show rules.",
                 ModuleTypeName = "FlapGame.GameLib.Ads.AdsModule",
-                Available = false,
             },
             new GameLibModuleInfo
             {
@@ -75,10 +85,13 @@ namespace FlapGame.GameLib.Editor
                 DisplayName = "Ads - AppLovin MAX",
                 Description = "AppLovin MAX adapter and MAX consent flow for the Ads module.",
                 DependsOn = new[] { "ads" },
-                ModuleTypeName = "FlapGame.GameLib.Ads.Max.MaxAdsModule",
-                Available = false,
+                ModuleTypeName = null,
                 Sdks = new[]
                 {
+                    // The MAX plugin compiles against uGUI and UnityWebRequest; minimal projects lack them.
+                    new SdkRequirement { DisplayName = "Unity UI", PackageName = "com.unity.ugui", Source = SdkSource.UnityRegistry, Location = "2.0.0" },
+                    new SdkRequirement { DisplayName = "Unity Web Request module", PackageName = "com.unity.modules.unitywebrequest", Source = SdkSource.UnityRegistry, Location = "1.0.0" },
+                    ExternalDependencyManager,
                     new SdkRequirement
                     {
                         DisplayName = "AppLovin MAX SDK",

@@ -16,3 +16,4 @@ MonoBehaviour:
   logAnalyticsInDevelopment: 1
   modules:
   - {fileID: 11400000, guid: 743932052c884b0418574af3e5667004, type: 2}
+  - {fileID: 11400000, guid: 49feb58e9d2b05d4ea0dfb3fbe2e6d68, type: 2}

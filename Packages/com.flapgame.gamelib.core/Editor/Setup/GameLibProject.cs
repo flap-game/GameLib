@@ -115,7 +115,7 @@ namespace FlapGame.GameLib.Editor
             Dictionary<string, PackageInfo> installed = InstalledPackages();
             foreach (GameLibModuleInfo module in GameLibModuleCatalog.All)
             {
-                if (!IsInstalled(module, installed) || module.ModuleTypeName == null)
+                if (!IsInstalled(module, installed))
                     continue;
 
                 Type type = FindModuleType(module);

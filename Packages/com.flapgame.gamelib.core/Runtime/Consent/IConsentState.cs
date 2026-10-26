@@ -21,13 +21,32 @@ namespace FlapGame.GameLib
         void Update(ConsentState state);
     }
 
+    public enum ConsentStatus
+    {
+        Unknown     = 0,
+        NotRequired = 1,
+        Required    = 2,
+        Obtained    = 3,
+    }
+
     /// <summary>
-    /// The CMP's game-facing side, registered only by a module that owns a consent form (MAX CMP, UMP).
-    /// Show a "Privacy settings" button when <see cref="IsPrivacyOptionsRequired"/> is true (required by Google for EEA users).
+    /// A consent platform (CMP: MAX CMP, Google UMP). Registered only by a module that owns one; the Ads module runs the
+    /// initial flow itself. Gameplay only needs it for a "Privacy settings" button: show it when
+    /// <see cref="IsPrivacyOptionsRequired"/> is true and call <see cref="ShowPrivacyOptionsAsync"/> on click
+    /// (required by Google for EEA users).
     /// </summary>
     public interface IConsentService
     {
+        ConsentStatus Status { get; }
+
+        /// <summary>True when ads can be requested (NotRequired region, or consent already obtained).</summary>
+        bool CanRequestAds { get; }
+
+        /// <summary>True when the platform requires the app to offer a privacy-options entry point (EEA users under UMP).</summary>
         bool IsPrivacyOptionsRequired { get; }
+
+        /// <summary>Gathers consent information and shows the form if required. Must complete before ad SDKs initialize.</summary>
+        ValueTask RequestAsync(CancellationToken cancellationToken = default);
 
         /// <summary>Re-opens the consent / privacy options form for a user who already answered. No-op when unavailable.</summary>
         ValueTask ShowPrivacyOptionsAsync(CancellationToken cancellationToken = default);

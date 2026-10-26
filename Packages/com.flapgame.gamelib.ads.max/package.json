@@ -1,0 +1,22 @@
+{
+  "name": "com.flapgame.gamelib.ads.max",
+  "version": "0.1.0",
+  "displayName": "GameLib Ads - AppLovin MAX",
+  "description": "AppLovin MAX provider for GameLib Ads, including the MAX consent flow.",
+  "unity": "6000.4",
+  "author": {
+    "name": "Flap Game",
+    "url": "https://github.com/flap-game/GameLib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flap-game/GameLib.git"
+  },
+  "keywords": [
+    "gamelib"
+  ],
+  "dependencies": {
+    "com.flapgame.gamelib.core": "0.1.0",
+    "com.flapgame.gamelib.ads": "0.1.0"
+  }
+}

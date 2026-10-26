@@ -1,0 +1,19 @@
+{
+  "name": "FlapGame.GameLib.Ads.Editor",
+  "rootNamespace": "FlapGame.GameLib.Ads.Editor",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.Ads"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

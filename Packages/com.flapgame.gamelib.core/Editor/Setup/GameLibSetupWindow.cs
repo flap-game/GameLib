@@ -187,13 +187,19 @@ namespace FlapGame.GameLib.Editor
                 Step(2, "Third-party SDK", sdksReady, () =>
                 {
                     foreach (SdkRequirement sdk in module.Sdks.Where(s => !installed.ContainsKey(s.PackageName)))
-                        DrawSdkInstall(sdk);
+                        DrawSdkInstall(module, sdk);
                 });
                 if (!sdksReady)
                     return;
             }
 
             int assetStep = module.Sdks.Length > 0 ? 3 : 2;
+            if (module.ModuleTypeName == null)
+            {
+                EditorGUILayout.HelpBox("Ready. This module has no asset of its own; it is configured where its README says.", MessageType.Info);
+                return;
+            }
+
             GameLibModule asset = GameLibProject.FindModuleAsset(module, settings);
             bool listed = asset != null && settings != null && settings.Modules.Contains(asset);
             Step(assetStep, "Module asset", listed, () =>
@@ -222,7 +228,7 @@ namespace FlapGame.GameLib.Editor
                 DrawIssues(null, issues);
         }
 
-        private void DrawSdkInstall(SdkRequirement sdk)
+        private void DrawSdkInstall(GameLibModuleInfo module, SdkRequirement sdk)
         {
             EditorGUILayout.LabelField($"{sdk.DisplayName} ({sdk.PackageName})", EditorStyles.wordWrappedLabel);
             switch (sdk.Source)
@@ -234,6 +240,22 @@ namespace FlapGame.GameLib.Editor
                         string identifier = sdk.Source == SdkSource.Git ? sdk.Location : $"{sdk.PackageName}@{sdk.Location}";
                         if (GUILayout.Button($"Install {sdk.DisplayName}"))
                             StartRequest(Client.Add(identifier), $"Installing {sdk.DisplayName}...");
+                    }
+                    break;
+                case SdkSource.ScopedRegistry:
+                    using (new EditorGUI.DisabledScope(pendingRequest != null))
+                    {
+                        EditorGUILayout.LabelField($"Adds the scoped registry {sdk.RegistryUrl}", EditorStyles.wordWrappedMiniLabel);
+                        if (GUILayout.Button($"Install {sdk.DisplayName}"))
+                        {
+                            // Every registry the module's SDKs need, so dependencies between them resolve (MAX -> EDM on OpenUPM).
+                            var manifest = new ManifestManager();
+                            foreach (SdkRequirement other in module.Sdks.Where(s => s.Source == SdkSource.ScopedRegistry))
+                                manifest.EnsureScopedRegistry(other.RegistryName, other.RegistryUrl, other.RegistryScopes);
+                            manifest.Save();
+                            string identifier = string.IsNullOrEmpty(sdk.Location) ? sdk.PackageName : $"{sdk.PackageName}@{sdk.Location}";
+                            StartRequest(Client.Add(identifier), $"Installing {sdk.DisplayName}...");
+                        }
                     }
                     break;
                 default:
@@ -282,6 +304,8 @@ namespace FlapGame.GameLib.Editor
                 return ModuleState.NotInstalled;
             if (module.Sdks.Any(s => !installed.ContainsKey(s.PackageName)))
                 return ModuleState.NeedsSetup;
+            if (module.ModuleTypeName == null)
+                return ModuleState.Ready;
 
             GameLibModule asset = GameLibProject.FindModuleAsset(module, settings);
             if (asset == null || settings == null || !settings.Modules.Contains(asset))

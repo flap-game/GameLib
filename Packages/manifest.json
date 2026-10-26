@@ -1,13 +1,36 @@
 {
+  "scopedRegistries": [
+    {
+      "name": "AppLovin MAX Unity",
+      "url": "https://unity.packages.applovin.com/",
+      "scopes": [
+        "com.applovin.mediation.ads",
+        "com.applovin.mediation.adapters",
+        "com.applovin.mediation.dsp"
+      ]
+    },
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.google.external-dependency-manager"
+      ]
+    }
+  ],
   "dependencies": {
     "com.unity.ide.visualstudio": "2.0.27",
     "com.unity.test-framework": "1.6.0",
     "com.unity.modules.androidjni": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0",
     "com.unity.modules.ui": "1.0.0",
-    "com.unity.modules.imgui": "1.0.0"
+    "com.unity.modules.imgui": "1.0.0",
+    "com.applovin.mediation.ads": "8.6.6",
+    "com.unity.modules.unitywebrequest": "1.0.0",
+    "com.unity.ugui": "2.0.0"
   },
   "testables": [
+    "com.flapgame.gamelib.ads",
+    "com.flapgame.gamelib.ads.max",
     "com.flapgame.gamelib.core",
     "com.flapgame.gamelib.haptics"
   ]

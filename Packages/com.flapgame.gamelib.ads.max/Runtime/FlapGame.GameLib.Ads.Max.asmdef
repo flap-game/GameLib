@@ -1,0 +1,26 @@
+{
+  "name": "FlapGame.GameLib.Ads.Max",
+  "rootNamespace": "FlapGame.GameLib.Ads.Max",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.Ads",
+    "MaxSdk.Scripts"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "GAMELIB_MAX"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.applovin.mediation.ads",
+      "expression": "",
+      "define": "GAMELIB_MAX"
+    }
+  ],
+  "noEngineReferences": false
+}

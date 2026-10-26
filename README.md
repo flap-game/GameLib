@@ -13,8 +13,8 @@ GameLib is the successor of CoreGame.
 |---|---|---|
 | `com.flapgame.gamelib.core` | Bootstrap, lifecycle, consent, entitlements, analytics contracts, **GameLib Setup** window | 0.1.0 |
 | `com.flapgame.gamelib.haptics` | Vibration / haptic feedback | 0.1.0 |
-| `com.flapgame.gamelib.ads` | Placement-based ads (interstitial, rewarded, banner, app open), ad policy | planned |
-| `com.flapgame.gamelib.ads.max` | AppLovin MAX adapter | planned |
+| `com.flapgame.gamelib.ads` | Placement-based ads (interstitial, rewarded, banner, app open), ad policy | 0.2.0 |
+| `com.flapgame.gamelib.ads.max` | AppLovin MAX adapter | 0.2.0 |
 | `com.flapgame.gamelib.ads.admob` | AdMob adapter | later |
 | `com.flapgame.gamelib.iap` | Unity IAP 5: consumable / non-consumable / subscription, localized price, restore | planned |
 | `com.flapgame.gamelib.firebase` | Shared Firebase initialization | planned |
