@@ -35,6 +35,14 @@
         "com.flapgame.gamelib.firebase": "0.2.0"
       }
     },
+    "com.flapgame.gamelib.appsflyer": {
+      "version": "file:com.flapgame.gamelib.appsflyer",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.2.0"
+      }
+    },
     "com.flapgame.gamelib.core": {
       "version": "file:com.flapgame.gamelib.core",
       "depth": 0,
@@ -62,6 +70,14 @@
     },
     "com.flapgame.gamelib.haptics": {
       "version": "file:com.flapgame.gamelib.haptics",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.2.0"
+      }
+    },
+    "com.flapgame.gamelib.iap": {
+      "version": "file:com.flapgame.gamelib.iap",
       "depth": 0,
       "source": "embedded",
       "dependencies": {

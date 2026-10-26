@@ -1,0 +1,26 @@
+{
+  "name": "FlapGame.GameLib.Iap.Sdk",
+  "rootNamespace": "FlapGame.GameLib.Iap",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.Iap",
+    "Unity.Purchasing"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "GAMELIB_IAP"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.purchasing",
+      "expression": "5.0.0",
+      "define": "GAMELIB_IAP"
+    }
+  ],
+  "noEngineReferences": false
+}

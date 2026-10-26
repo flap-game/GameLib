@@ -219,6 +219,7 @@ namespace FlapGame.GameLib.Ads
             if (forwarder != null)
                 services.Register<IConsentService>(forwarder);
             ConsentState initial = MapConsent(forwarder);
+            initial.Att = consentState.Current.Att; // ATT belongs to whoever asks for it, not to the CMP
             service.ApplyConsent(initial);
             if (forwarder == null)
                 consentState.Update(initial); // no CMP at all: publish "not required" so trackers do not wait

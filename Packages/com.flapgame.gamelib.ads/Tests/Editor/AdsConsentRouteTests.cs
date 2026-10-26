@@ -130,6 +130,7 @@ namespace FlapGame.GameLib.Ads.Tests
         [Test]
         public void Route_WithoutUnitForThisPlatform_IsSkipped_SoTheNextRouteLoads()
         {
+            AdsTestPlatform.RequireAndroidUnitIds();
             using CompositeAdsService ads = Create();
             ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
 

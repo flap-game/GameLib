@@ -1,0 +1,31 @@
+{
+  "name": "FlapGame.GameLib.AppsFlyer.Sdk",
+  "rootNamespace": "FlapGame.GameLib.AppsFlyer",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.AppsFlyer",
+    "AppsFlyer"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "GAMELIB_APPSFLYER"
+  ],
+  "versionDefines": [
+    {
+      "name": "appsflyer-unity-plugin",
+      "expression": "",
+      "define": "GAMELIB_APPSFLYER"
+    },
+    {
+      "name": "appsflyer-unity-plugin",
+      "expression": "7.0.0",
+      "define": "GAMELIB_APPSFLYER_7"
+    }
+  ],
+  "noEngineReferences": false
+}

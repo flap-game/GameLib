@@ -19,6 +19,12 @@ namespace FlapGame.GameLib
 
         /// <summary>Replaces the state. Marks it resolved. No event when nothing changed.</summary>
         void Update(ConsentState state);
+
+        /// <summary>
+        /// Sets only <see cref="ConsentState.Att"/> - written by whoever asks for App Tracking Transparency, which is not
+        /// the CMP - without marking the CMP answer resolved. No event when nothing changed.
+        /// </summary>
+        void SetAtt(AttStatus status);
     }
 
     public enum ConsentStatus
@@ -67,6 +73,18 @@ namespace FlapGame.GameLib
 
             ConsentState next = state.Clone();
             next.IsResolved = true;
+            Publish(next);
+        }
+
+        public void SetAtt(AttStatus status)
+        {
+            ConsentState next = current.Clone();
+            next.Att = status;
+            Publish(next);
+        }
+
+        private void Publish(ConsentState next)
+        {
             if (next.Equals(current))
                 return;
 

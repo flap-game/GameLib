@@ -32,10 +32,12 @@
     "com.flapgame.gamelib.ads",
     "com.flapgame.gamelib.ads.max",
     "com.flapgame.gamelib.analytics.firebase",
+    "com.flapgame.gamelib.appsflyer",
     "com.flapgame.gamelib.core",
     "com.flapgame.gamelib.crashlytics",
     "com.flapgame.gamelib.firebase",
     "com.flapgame.gamelib.haptics",
+    "com.flapgame.gamelib.iap",
     "com.flapgame.gamelib.remoteconfig.firebase"
   ]
 }

@@ -4,7 +4,7 @@
 .DESCRIPTION
   Rewrites "version" and internal com.flapgame.gamelib.* dependency versions in every
   Packages/com.flapgame.gamelib.*/package.json, GameLibVersion.Current, and turns the
-  "Unreleased" CHANGELOG heading into today's date.
+  "Unreleased" CHANGELOG heading into today's date, and points the README install URLs at the new tag.
   With -Tag (run after committing) it creates:
     v<version>                  - used by git URL installs (?path=...#v<version>)
     <package>/<version>         - one per package, for OpenUPM gitTagPrefix
@@ -45,6 +45,14 @@ foreach ($p in $packages) {
         $text = $text -replace '## \[[^\]]+\] - Unreleased', "## [$Version] - $date"
         Set-Content -NoNewline -Encoding utf8NoBOM $changelog $text
     }
+}
+
+# Install snippets in the READMEs point at the release tag (git URLs end with #v<version>).
+$readmes = @(Join-Path $root 'README.md') + @($packages | ForEach-Object { Join-Path $_.FullName 'README.md' })
+foreach ($readme in $readmes | Where-Object { Test-Path $_ }) {
+    $text = Get-Content $readme -Raw
+    $updated = $text -replace '(GameLib\.git\?path=[^#\s"]+)#v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?', "`$1#v$Version"
+    if ($updated -ne $text) { Set-Content -NoNewline -Encoding utf8NoBOM $readme $updated }
 }
 
 $versionCs = Join-Path $root 'Packages/com.flapgame.gamelib.core/Runtime/GameLibVersion.cs'

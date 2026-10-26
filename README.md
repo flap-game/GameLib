@@ -16,16 +16,32 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.ads` | Placement-based ads (interstitial, rewarded, banner, app open), ad policy | 0.2.0 |
 | `com.flapgame.gamelib.ads.max` | AppLovin MAX adapter | 0.2.0 |
 | `com.flapgame.gamelib.ads.admob` | AdMob adapter | later |
-| `com.flapgame.gamelib.iap` | Unity IAP 5: consumable / non-consumable / subscription, localized price, restore | planned |
+| `com.flapgame.gamelib.iap` | Unity IAP 5: consumable / non-consumable / subscription, localized price, restore | 0.3.0 |
 | `com.flapgame.gamelib.firebase` | Shared Firebase start and config checks (comes with the Firebase modules) | 0.3.0 |
 | `com.flapgame.gamelib.analytics.firebase` | Firebase Analytics (`ad_impression`, consent mode, optional `purchase`) | 0.3.0 |
 | `com.flapgame.gamelib.crashlytics` | Firebase Crashlytics with analytics breadcrumbs | 0.3.0 |
 | `com.flapgame.gamelib.remoteconfig.firebase` | `IRemoteConfig` on Firebase Remote Config (Ads reads its plan from it) | 0.3.0 |
-| `com.flapgame.gamelib.appsflyer` | AppsFlyer: ad revenue, purchases (manual or Purchase Connector), ATT, consent | planned |
+| `com.flapgame.gamelib.appsflyer` | AppsFlyer: ad revenue, purchases (manual or Purchase Connector), ATT, consent | 0.3.0 |
 | `com.flapgame.gamelib.ui` | UI framework | later |
 
 Modules never reference each other directly; they talk through contracts in `core`
-(analytics events, ad revenue, purchases, consent, entitlements such as `no_ads`).
+(analytics events, ad revenue, purchases, consent, entitlements such as `no_ads`, remote config).
+
+Third-party SDK calls live in separate `*.Sdk` assemblies that compile only when the SDK package is present
+(`versionDefines`). A module's asset therefore never turns into a missing script, and its logic is unit tested without
+the SDK. Compile-checked against: AppLovin MAX 8.6.6, Firebase 14.1.0, AppsFlyer 6.17.900 and 7.0.3, Unity IAP 5.4.4.
+
+## How the pieces connect
+
+| Flow | Path |
+|---|---|
+| Ad revenue | Ads (MAX) → `IAnalytics.TrackAdRevenue` → Firebase `ad_impression`, AppsFlyer `logAdRevenue`, Crashlytics breadcrumb |
+| Purchase | IAP → `IAnalytics.TrackPurchase` → AppsFlyer `af_purchase` (or Purchase Connector), Firebase `purchase` (opt-in) |
+| Remove ads | IAP grants `no_ads` in `IEntitlements` → Ads suppresses interstitial, banner, app open |
+| Consent | Ads runs the CMP → `IConsentState` → ad SDKs, Firebase consent mode, AppsFlyer DMA consent |
+| ATT (iOS) | AppsFlyer asks after the CMP answer → `IConsentState.Att` → AppsFlyer starts with the answer |
+| Remote values | Remote Config → `IRemoteConfig` → Ads plan (`ads_plan`), game values |
+| App open rule | Ads `AppOpenLauncher` on `IAppLifecycle.Resumed`; ads, ad clicks and purchases are not returns |
 
 ## Install
 

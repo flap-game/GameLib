@@ -1,0 +1,21 @@
+{
+  "name": "com.flapgame.gamelib.appsflyer",
+  "version": "0.2.0",
+  "displayName": "GameLib AppsFlyer",
+  "description": "AppsFlyer attribution as an analytics sink: ad revenue, purchases (manual af_purchase or Purchase Connector), DMA consent, iOS App Tracking Transparency before start.",
+  "unity": "6000.4",
+  "author": {
+    "name": "Flap Game",
+    "url": "https://github.com/flap-game/GameLib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flap-game/GameLib.git"
+  },
+  "keywords": [
+    "gamelib"
+  ],
+  "dependencies": {
+    "com.flapgame.gamelib.core": "0.2.0"
+  }
+}

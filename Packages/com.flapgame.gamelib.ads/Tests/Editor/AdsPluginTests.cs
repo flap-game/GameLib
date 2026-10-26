@@ -203,6 +203,7 @@ namespace FlapGame.GameLib.Ads.Tests
         [Test]
         public void Primary_ActivatesOnlyTheFirstRoute_AfterInit()
         {
+            AdsTestPlatform.RequireAndroidUnitIds();
             using var ads = Create();
             Assert.That(max.Active, Is.Empty, "nothing loads before the adapter initialized");
             Init(ads);
@@ -322,6 +323,7 @@ namespace FlapGame.GameLib.Ads.Tests
         [Test]
         public void Init_ContextCarriesPlatformUnitIds_AndConsent()
         {
+            AdsTestPlatform.RequireAndroidUnitIds();
             using var ads = Create();
             ads.ApplyConsent(new ConsentState { GdprApplies = true, HasUserConsent = false });
             Init(ads);
@@ -341,6 +343,7 @@ namespace FlapGame.GameLib.Ads.Tests
         [Test]
         public void Plan_RouteOrder_IsUsed_AndUnknownRoutesIgnored()
         {
+            AdsTestPlatform.RequireAndroidUnitIds();
             var plan = new AdsPlan
             {
                 Name = "ab_b",
@@ -750,6 +753,7 @@ namespace FlapGame.GameLib.Ads.Tests
         [Test]
         public void NullAdapter_FailNextLoads_TriggersFallback()
         {
+            AdsTestPlatform.RequireAndroidUnitIds();
             settings.Placements.Add(new AdPlacement { Id = "mock", Format = AdFormat.Interstitial, Routes = { new AdRoute("none"), new AdRoute("admob", "a9") } });
             var nullAdapter = new NullAdsAdapter(settings, 0f, allowFakeAds: true) { FailNextLoads = 1 };
             using var ads = new CompositeAdsService(new IAdsProviderAdapter[] { nullAdapter, adMob }, settings, null, null, () => clock);

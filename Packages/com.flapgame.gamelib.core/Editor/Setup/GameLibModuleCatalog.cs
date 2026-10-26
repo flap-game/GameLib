@@ -125,10 +125,9 @@ namespace FlapGame.GameLib.Editor
                 DisplayName = "In-App Purchases",
                 Description = "Unity IAP 5: consumables, non-consumables and subscriptions, localized prices, restore.",
                 ModuleTypeName = "FlapGame.GameLib.Iap.IapModule",
-                Available = false,
                 Sdks = new[]
                 {
-                    new SdkRequirement { DisplayName = "Unity IAP", PackageName = "com.unity.purchasing", Source = SdkSource.UnityRegistry, Location = "5.3.1" },
+                    new SdkRequirement { DisplayName = "Unity IAP", PackageName = "com.unity.purchasing", Source = SdkSource.UnityRegistry, Location = "5.4.4" },
                 },
             },
             new GameLibModuleInfo
@@ -172,7 +171,18 @@ namespace FlapGame.GameLib.Editor
                 DisplayName = "AppsFlyer",
                 Description = "AppsFlyer attribution, ad revenue, purchases (manual or Purchase Connector), ATT and consent.",
                 ModuleTypeName = "FlapGame.GameLib.AppsFlyer.AppsFlyerModule",
-                Available = false,
+                Sdks = new[]
+                {
+                    ExternalDependencyManager,
+                    // 6.17.900: the last 6.x. 7.0.x also works with GameLib but ships its Android Purchase Connector disabled.
+                    new SdkRequirement
+                    {
+                        DisplayName = "AppsFlyer Unity plugin",
+                        PackageName = "appsflyer-unity-plugin",
+                        Source = SdkSource.Git,
+                        Location = "https://github.com/AppsFlyerSDK/appsflyer-unity-plugin.git#v6.17.900",
+                    },
+                },
             },
         };
 
