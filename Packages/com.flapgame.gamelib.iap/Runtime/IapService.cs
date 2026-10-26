@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -30,6 +31,8 @@ namespace FlapGame.GameLib.Iap
         {
             public TaskCompletionSource<bool> Result;
             public IDisposable ExternalActivity;
+            // Stops the timeout timers once the restore finished.
+            public readonly CancellationTokenSource Timers = new();
             public bool WaitingForFetch;
             // The store fetches before it answers the restore, and that fetch can complete first.
             public bool? FetchSucceeded;
@@ -49,6 +52,7 @@ namespace FlapGame.GameLib.Iap
         private readonly IAppLifecycle lifecycle;
         private readonly IIapTransactionLog grantedLog;
         private readonly Dictionary<string, IapProduct> products = new(StringComparer.Ordinal);
+        private readonly IReadOnlyList<IapProduct> productList;
         private readonly List<IapProductConfig> configs;
         private readonly HashSet<string> owned = new(StringComparer.Ordinal);
         private readonly List<(IapStoreOrder Order, IapPurchase Purchase)> held = new();
@@ -57,13 +61,13 @@ namespace FlapGame.GameLib.Iap
         private Restoring restoring;
         private bool disposed;
 
-        private readonly Func<TimeSpan, Task> delay;
+        private readonly Func<TimeSpan, CancellationToken, Task> delay;
 
-        /// <param name="delay">Defaults to <see cref="Task.Delay(TimeSpan)"/>; replaced in tests.</param>
+        /// <param name="delay">Defaults to <see cref="Task.Delay(TimeSpan, CancellationToken)"/>; replaced in tests.</param>
         public IapService(IIapStore store, IEnumerable<IapProductConfig> configs, IEntitlements entitlements, IAnalytics analytics,
                           IAppLifecycle lifecycle = null, IIapTransactionLog grantedLog = null, Func<TimeSpan, Task> delay = null)
         {
-            this.delay = delay ?? Task.Delay;
+            this.delay = delay != null ? (time, _) => delay(time) : (Func<TimeSpan, CancellationToken, Task>)Task.Delay;
             this.store = store;
             this.entitlements = entitlements;
             this.analytics = analytics;
@@ -72,6 +76,7 @@ namespace FlapGame.GameLib.Iap
             this.configs = (configs ?? Enumerable.Empty<IapProductConfig>()).Where(c => c != null && !string.IsNullOrWhiteSpace(c.Id)).ToList();
             foreach (IapProductConfig c in this.configs)
                 products[c.Id] = new IapProduct { Id = c.Id, Kind = c.Kind, Entitlement = string.IsNullOrWhiteSpace(c.Entitlement) ? null : c.Entitlement.Trim() };
+            productList = products.Values.ToList().AsReadOnly();
 
             // A non-consumable bought earlier is owned from the first frame, before the store answers.
             foreach (IapProduct p in products.Values)
@@ -92,7 +97,9 @@ namespace FlapGame.GameLib.Iap
 
         public event Action Ready;
 
-        public IReadOnlyList<IapProduct> Products => products.Values.ToList();
+        public IReadOnlyList<IapProduct> Products => productList;
+
+        public event Action OwnedChanged;
 
         public event Action<IapPurchase> PurchaseGranted
         {
@@ -203,7 +210,7 @@ namespace FlapGame.GameLib.Iap
 
         private async Task RestoreTimeoutAsync(Restoring current)
         {
-            await delay(RestoreTimeout);
+            if (!await DelayAsync(RestoreTimeout, current)) return;
             if (restoring != current || current.WaitingForFetch) return;
             Debug.LogWarning($"[IAP] Restore: no answer from the store after {RestoreTimeout.TotalSeconds:0}s.");
             FinishRestore(current, false);
@@ -211,10 +218,24 @@ namespace FlapGame.GameLib.Iap
 
         private async Task RestoreFetchTimeoutAsync(Restoring current)
         {
-            await delay(RestoreFetchTimeout);
+            if (!await DelayAsync(RestoreFetchTimeout, current)) return;
             if (restoring != current) return;
             Debug.LogWarning($"[IAP] Restore: no purchase list after {RestoreFetchTimeout.TotalSeconds:0}s - returning anyway.");
             FinishRestore(current, true);
+        }
+
+        /// <returns>False when the restore finished first (the timer was stopped).</returns>
+        private async Task<bool> DelayAsync(TimeSpan time, Restoring current)
+        {
+            try
+            {
+                await delay(time, current.Timers.Token);
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
         }
 
         private void OnRestoreFetchResult(bool success)
@@ -229,6 +250,7 @@ namespace FlapGame.GameLib.Iap
             if (restoring == current) restoring = null;
             current.ExternalActivity?.Dispose();
             current.ExternalActivity = null;
+            current.Timers.Cancel();
             current.Result.TrySetResult(success);
         }
 
@@ -257,24 +279,37 @@ namespace FlapGame.GameLib.Iap
 
         private void OnPurchasesFetched(IReadOnlyList<IapStoreOrder> paid)
         {
+            bool changed = false;
             foreach (IapProduct p in products.Values)
             {
                 if (p.Kind == PurchaseProductKind.Consumable) continue;
                 bool isOwned = paid.Any(o => o.ProductId == p.Id && (p.Kind != PurchaseProductKind.Subscription || o.SubscriptionActive != false));
                 if (isOwned)
                 {
-                    owned.Add(p.Id);
+                    changed |= owned.Add(p.Id);
                     if (p.Entitlement != null) entitlements?.Grant(p.Entitlement);
                 }
                 else if (p.Kind == PurchaseProductKind.Subscription)
                 {
                     // An expired subscription stops granting; a non-consumable is never taken back here.
-                    owned.Remove(p.Id);
+                    changed |= owned.Remove(p.Id);
                     if (p.Entitlement != null) entitlements?.Revoke(p.Entitlement);
                 }
             }
 
+            if (changed) RaiseOwnedChanged();
             OnRestoreFetchResult(true);
+        }
+
+        private void RaiseOwnedChanged()
+        {
+            Action handlers = OwnedChanged;
+            if (handlers == null) return;
+            foreach (Delegate handler in handlers.GetInvocationList())
+            {
+                try { ((Action)handler)(); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
         }
 
         private void OnPurchasesFetchFailed(string reason) => OnRestoreFetchResult(false);
@@ -321,11 +356,18 @@ namespace FlapGame.GameLib.Iap
         private void Grant(IapStoreOrder order, IapPurchase purchase)
         {
             IapProduct product = purchase.Product;
-            if (product.Kind != PurchaseProductKind.Consumable) owned.Add(product.Id);
-            if (product.Entitlement != null) entitlements?.Grant(product.Entitlement);
+            bool ownedChanged = product.Kind != PurchaseProductKind.Consumable && owned.Add(product.Id);
 
             // Logged before the handlers: a crash in between loses this grant rather than granting it twice on redelivery.
-            if (!string.IsNullOrEmpty(order.TransactionId)) grantedLog.Add(order.TransactionId);
+            // With PlayerPrefs on both sides one save covers the log and a new entitlement (it writes every key).
+            bool entitlementSaves = product.Entitlement != null && entitlements is PlayerPrefsEntitlements && !entitlements.Has(product.Entitlement);
+            if (!string.IsNullOrEmpty(order.TransactionId))
+            {
+                if (entitlementSaves && grantedLog is PlayerPrefsTransactionLog prefsLog) prefsLog.Add(order.TransactionId, save: false);
+                else grantedLog.Add(order.TransactionId);
+            }
+            if (product.Entitlement != null) entitlements?.Grant(product.Entitlement);
+            if (ownedChanged) RaiseOwnedChanged();
 
             Action<IapPurchase> handlers = grantedHandlers;
             if (handlers != null)
@@ -430,6 +472,7 @@ namespace FlapGame.GameLib.Iap
             }
             if (restoring != null) FinishRestore(restoring, false);
             Complete(null, IapPurchaseStatus.Failed, null, "IAP shut down");
+            (store as IDisposable)?.Dispose();
         }
     }
 }

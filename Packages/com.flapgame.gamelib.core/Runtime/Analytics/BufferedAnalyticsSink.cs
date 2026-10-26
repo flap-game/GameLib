@@ -35,7 +35,8 @@ namespace FlapGame.GameLib
         private string pendingUserId;
         private bool pendingUserIdSet;
         private bool warnedQueueFull;
-        private BufferedSinkState state = BufferedSinkState.Pending;
+        // Written under the lock; Ready and Failed are final, so a lock-free read of Ready is safe (the flush already ran).
+        private volatile BufferedSinkState state = BufferedSinkState.Pending;
 
         /// <param name="bufferEvent">Which events are worth buffering (null = all), e.g. only those the SDK forwards, so
         /// events it would drop anyway do not take the room of ad revenue and purchases. Live calls are not filtered.</param>
@@ -201,13 +202,26 @@ namespace FlapGame.GameLib
 
         public void Track(AnalyticsEvent analyticsEvent)
         {
+            if (state == BufferedSinkState.Ready)
+            {
+                target.Track(analyticsEvent);
+                return;
+            }
             if (bufferEvent != null && State == BufferedSinkState.Pending && !bufferEvent(analyticsEvent)) return;
             Run(t => t.Track(analyticsEvent), revenue: false);
         }
 
-        public void TrackAdRevenue(AdRevenue revenue) => Run(t => t.TrackAdRevenue(revenue), revenue: true);
+        public void TrackAdRevenue(AdRevenue revenue)
+        {
+            if (state == BufferedSinkState.Ready) target.TrackAdRevenue(revenue);
+            else Run(t => t.TrackAdRevenue(revenue), revenue: true);
+        }
 
-        public void TrackPurchase(PurchaseRecord purchase) => Run(t => t.TrackPurchase(purchase), revenue: true);
+        public void TrackPurchase(PurchaseRecord purchase)
+        {
+            if (state == BufferedSinkState.Ready) target.TrackPurchase(purchase);
+            else Run(t => t.TrackPurchase(purchase), revenue: true);
+        }
 
         public void SetUserProperty(string name, string value)
         {

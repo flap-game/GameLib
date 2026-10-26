@@ -11,7 +11,7 @@ the PO sets them on GameHub.
 Install:
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.build#v0.7.0
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.build#v0.7.1
 ```
 
 ## Project setup

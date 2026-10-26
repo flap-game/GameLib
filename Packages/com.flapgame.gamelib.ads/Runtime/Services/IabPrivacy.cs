@@ -150,16 +150,38 @@ namespace FlapGame.GameLib.Ads
         /// <summary>The app's default SharedPreferences (<c>&lt;package&gt;_preferences</c>), where CMPs write TCF.</summary>
         private sealed class AndroidDefaultPreferencesStore : IIabPrivacyStore
         {
+            // The keys of one Read arrive within a few ms: they share one getAll() copy instead of one each.
+            private const int SnapshotMilliseconds = 100;
+
+            private readonly object gate = new();
+            private AndroidJavaObject prefs;   // Android keeps one instance per file, so it stays current
+            private AndroidJavaObject snapshot;
+            private int snapshotAt;
+
             public string Get(string key)
             {
+                lock (gate)
+                {
+                    int now = Environment.TickCount;
+                    if (snapshot == null || unchecked(now - snapshotAt) > SnapshotMilliseconds)
+                    {
+                        snapshot?.Dispose();
+                        snapshot = null;
+                        snapshot = Prefs().Call<AndroidJavaObject>("getAll");
+                        snapshotAt = now;
+                    }
+                    using var value = snapshot.Call<AndroidJavaObject>("get", key);
+                    return value?.Call<string>("toString");
+                }
+            }
+
+            private AndroidJavaObject Prefs()
+            {
+                if (prefs != null) return prefs;
                 using var player   = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
                 using var activity = player.GetStatic<AndroidJavaObject>("currentActivity");
                 string name = activity.Call<string>("getPackageName") + "_preferences";
-                using var prefs = activity.Call<AndroidJavaObject>("getSharedPreferences", name, 0);
-                if (!prefs.Call<bool>("contains", key)) return null;
-                using var all = prefs.Call<AndroidJavaObject>("getAll");
-                using var value = all.Call<AndroidJavaObject>("get", key);
-                return value?.Call<string>("toString");
+                return prefs = activity.Call<AndroidJavaObject>("getSharedPreferences", name, 0);
             }
         }
 #endif

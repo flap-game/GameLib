@@ -78,6 +78,8 @@ namespace FlapGame.GameLib.Ads
         [Header("Test Mode")]
         [Tooltip("Enable to show test ads. Add device IDs below (printed in logcat on first run).")]
         public bool TestMode;
+        [Tooltip("Info logs for every ad load, show and retry also in release builds (always on in the Editor and development builds). Warnings and errors are always logged.")]
+        public bool VerboseLogs;
         [Tooltip("AdMob test device IDs.")]
         public List<string> AdMobTestDeviceIds = new();
         [Tooltip("MAX test device advertising IDs. Only applied when TestMode is enabled.")]
@@ -157,6 +159,7 @@ namespace FlapGame.GameLib.Ads
 
         public override async ValueTask InstallAsync(IServiceRegistry services, CancellationToken cancellationToken = default)
         {
+            AdsLog.Verbose = VerboseLogs || Debug.isDebugBuild;
             IAnalytics analytics = services.Resolve<IAnalytics>();
             IEntitlements entitlements = services.Resolve<IEntitlements>();
             IConsentState consentState = services.Resolve<IConsentState>();

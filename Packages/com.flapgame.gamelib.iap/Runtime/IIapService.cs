@@ -23,6 +23,12 @@ namespace FlapGame.GameLib.Iap
 
         IReadOnlyList<IapProduct> Products { get; }
 
+        /// <summary>
+        /// Raised when <see cref="IsOwned"/> changed for a product: a purchase was granted, the owned purchases arrived from
+        /// the store (after launch or a restore), a subscription expired. Refresh "owned" badges here instead of polling.
+        /// </summary>
+        event Action OwnedChanged;
+
         bool TryGetProduct(string productId, out IapProduct product);
 
         /// <summary>The store's localized price ("$0.99", "23.000 ₫"), or <paramref name="fallback"/> before the store answered.</summary>

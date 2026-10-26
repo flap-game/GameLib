@@ -52,7 +52,11 @@ namespace FlapGame.GameLib.Analytics.Firebase
             "user_id", "last_advertising_id_reset",
         };
 
+        private const int MaxCachedEventNames = 256;
+
         private readonly HashSet<string> warned = new(StringComparer.Ordinal);
+        // Event names that needed a rename (rare: a typo in game code), so the rename and its warning text are built once.
+        private readonly Dictionary<string, string> renamedEvents = new(StringComparer.Ordinal);
         private readonly Action<string> warn;
 
         /// <param name="warn">Warning sink (defaults to <c>Debug.LogWarning</c>); each distinct message once.</param>
@@ -62,21 +66,22 @@ namespace FlapGame.GameLib.Analytics.Firebase
         }
 
         /// <summary>
-        /// Returns a copy of <paramref name="analyticsEvent"/> that fits Firebase limits, or null when it
-        /// cannot be sent (empty name). Values keep their type except strings, which are truncated, and
-        /// unsupported objects, which become truncated strings. Item arrays (<c>IDictionary&lt;string, object&gt;</c>
-        /// sequences, e.g. the <c>items</c> of <c>purchase</c>) pass through.
+        /// Returns <paramref name="analyticsEvent"/> fitted to Firebase limits, or null when it cannot be sent (empty
+        /// name). An event that already fits is returned as is, without a copy; otherwise the result is a copy. Values
+        /// keep their type except strings, which are truncated, and unsupported objects, which become truncated strings.
+        /// Item arrays (<c>IDictionary&lt;string, object&gt;</c> sequences, e.g. the <c>items</c> of <c>purchase</c>) pass through.
         /// </summary>
         public AnalyticsEvent? Sanitize(AnalyticsEvent analyticsEvent)
         {
-            string name = SanitizeName(analyticsEvent.Name, MaxEventNameLength, ReservedEventNames);
+            if (Fits(analyticsEvent))
+                return analyticsEvent;
+
+            string name = SanitizeEventName(analyticsEvent.Name);
             if (name == null)
             {
                 WarnOnce("empty-event", "[FirebaseAnalytics] Dropped an event with an empty name.");
                 return null;
             }
-            if (name != analyticsEvent.Name)
-                WarnOnce("event-name:" + analyticsEvent.Name, $"[FirebaseAnalytics] Event '{analyticsEvent.Name}' renamed to '{name}' (Firebase: ≤{MaxEventNameLength} chars [A-Za-z0-9_], starts with a letter, not reserved).");
 
             IReadOnlyDictionary<string, object> source = analyticsEvent.Parameters;
             if (source == null || source.Count == 0)
@@ -117,6 +122,40 @@ namespace FlapGame.GameLib.Analytics.Firebase
             return new AnalyticsEvent(name, result);
         }
 
+        // True when Sanitize would return the same name and the same values - checked without allocating.
+        private static bool Fits(AnalyticsEvent analyticsEvent)
+        {
+            if (!IsValidName(analyticsEvent.Name, MaxEventNameLength, ReservedEventNames)) return false;
+            IReadOnlyDictionary<string, object> parameters = analyticsEvent.Parameters;
+            if (parameters == null) return true;
+            if (parameters.Count > MaxParametersPerEvent) return false;
+            foreach (KeyValuePair<string, object> kv in parameters)
+            {
+                // Valid keys map to themselves, so distinct source keys cannot collide.
+                if (!IsValidName(kv.Key, MaxParameterNameLength, null) || !PassesThrough(kv.Value)) return false;
+            }
+            return true;
+        }
+
+        // SanitizeName for an event name, with its warning; renames are cached so a renamed event costs one lookup.
+        private string SanitizeEventName(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return null;
+            lock (renamedEvents)
+            {
+                if (renamedEvents.TryGetValue(original, out string cached)) return cached;
+            }
+
+            string name = SanitizeName(original, MaxEventNameLength, ReservedEventNames);
+            if (name != null && name != original)
+                WarnOnce("event-name:" + original, $"[FirebaseAnalytics] Event '{original}' renamed to '{name}' (Firebase: ≤{MaxEventNameLength} chars [A-Za-z0-9_], starts with a letter, not reserved).");
+            lock (renamedEvents)
+            {
+                if (renamedEvents.Count < MaxCachedEventNames) renamedEvents[original] = name;
+            }
+            return name;
+        }
+
         /// <summary>Sanitized user property name, or null to skip the call.</summary>
         public string SanitizeUserPropertyName(string name)
         {
@@ -154,6 +193,7 @@ namespace FlapGame.GameLib.Analytics.Firebase
         public static string SanitizeName(string name, int maxLength, ICollection<string> reservedNames = null)
         {
             if (string.IsNullOrEmpty(name)) return null;
+            if (IsValidName(name, maxLength, reservedNames)) return name;
 
             var sb = new StringBuilder(name.Length + RenamePrefix.Length);
             foreach (char c in name)
@@ -165,6 +205,33 @@ namespace FlapGame.GameLib.Analytics.Firebase
                 clean = RenamePrefix + clean;
 
             return clean.Length > maxLength ? clean.Substring(0, maxLength) : clean;
+        }
+
+        /// <summary>True when <see cref="SanitizeName"/> returns <paramref name="name"/> itself: [A-Za-z0-9_] only, starts
+        /// with a letter, no reserved prefix, not reserved, within <paramref name="maxLength"/>.</summary>
+        public static bool IsValidName(string name, int maxLength, ICollection<string> reservedNames = null)
+        {
+            if (string.IsNullOrEmpty(name) || name.Length > maxLength || !IsAsciiLetter(name[0])) return false;
+            foreach (char c in name)
+                if (!IsAsciiLetterOrDigit(c) && c != '_') return false;
+            return !HasReservedPrefix(name) && (reservedNames == null || !reservedNames.Contains(name));
+        }
+
+        // True when SanitizeValue returns the value itself, untruncated.
+        private static bool PassesThrough(object value)
+        {
+            switch (value)
+            {
+                case string s:
+                    return s.Length <= MaxParameterStringValueLength;
+                case bool:
+                case sbyte: case byte: case short: case ushort: case int: case uint: case long:
+                case float: case double: case decimal:
+                case IEnumerable<IDictionary<string, object>>:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>Strings truncated to 100 chars; numbers / bools / item arrays unchanged; anything else stringified.</summary>

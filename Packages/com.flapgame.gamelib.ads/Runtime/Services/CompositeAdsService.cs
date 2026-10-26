@@ -38,6 +38,9 @@ namespace FlapGame.GameLib.Ads
         private readonly HashSet<string> droppedProviders = new();
         // Placements each provider received a unit for at init (a route with no unit id for this platform never loads).
         private readonly Dictionary<string, HashSet<string>> assignedPlacements = new();
+        // EffectiveRoutes per placement object, cleared whenever an input changes (InvalidateRoutes). The lists are never
+        // mutated once cached, so a caller iterating one while the cache is cleared keeps a consistent snapshot.
+        private readonly Dictionary<AdPlacement, List<string>> routeCache = new();
         private readonly HashSet<(string Placement, string Provider)> activeRoutes = new();
         private readonly Dictionary<string, int> primaryDepth = new();
         private readonly Dictionary<string, string> showingProvider = new();
@@ -228,6 +231,7 @@ namespace FlapGame.GameLib.Ads
                     foreach (AdUnitAssignment u in context.Units)
                         if (!string.IsNullOrEmpty(u.PlacementId)) assigned.Add(u.PlacementId);
                 assignedPlacements[id] = assigned;
+                InvalidateRoutes();
                 init = adapter.InitializeAsync(context, cancellationToken).AsTask();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -272,6 +276,7 @@ namespace FlapGame.GameLib.Ads
             // One SDK failing to initialize must not take the other providers down: its routes simply disappear.
             Debug.LogError($"{LogPrefix} {id} failed to initialize: {reason} - its routes are dropped.");
             droppedProviders.Add(id);
+            InvalidateRoutes();
             ReconcileAll();
         }
 
@@ -288,6 +293,7 @@ namespace FlapGame.GameLib.Ads
                 return;
             }
             if (disposed || !droppedProviders.Remove(id)) return;
+            InvalidateRoutes();
             initializedProviders.Add(id);
             Debug.Log($"{LogPrefix} {id} finished initializing late - its routes are back.");
             // Consent first (the module republishes it), then the provider starts loading.
@@ -313,6 +319,7 @@ namespace FlapGame.GameLib.Ads
         private void SetPlan(AdsPlan newPlan, bool log)
         {
             plan = newPlan;
+            InvalidateRoutes();
             planProviders = null;
             if (plan?.Providers != null && plan.Providers.Count > 0)
             {
@@ -405,6 +412,7 @@ namespace FlapGame.GameLib.Ads
         // settings -> plan rules -> legacy rows.
         private void Rebuild(bool logPlan, bool logLegacy)
         {
+            InvalidateRoutes();
             placements.Clear();
             disabled.Clear();
             foreach (KeyValuePair<string, AdPlacement> kv in basePlacements) placements[kv.Key] = kv.Value.Clone();
@@ -497,7 +505,7 @@ namespace FlapGame.GameLib.Ads
         public IReadOnlyList<string> GetEffectiveRoutes(string placementId)
         {
             if (string.IsNullOrEmpty(placementId) || !placements.TryGetValue(placementId, out AdPlacement p)) return Array.Empty<string>();
-            return EffectiveRoutes(p);
+            return EffectiveRoutes(p).ToArray();
         }
 
         /// <summary>True when the composite told this provider to keep the placement loaded.</summary>
@@ -513,8 +521,10 @@ namespace FlapGame.GameLib.Ads
             return false;
         }
 
+        // Called on every readiness check (CanShow / IsPlacementReady, often from UI every frame): served from routeCache.
         private List<string> EffectiveRoutes(AdPlacement p)
         {
+            if (routeCache.TryGetValue(p, out List<string> cached)) return cached;
             var list = new List<string>();
             if (p.Routes != null)
             {
@@ -529,8 +539,11 @@ namespace FlapGame.GameLib.Ads
             if (!list.Contains(AdProviderIds.None) && Usable(AdProviderIds.None)
                 && byId[AdProviderIds.None] is NullAdsAdapter { ServesAllPlacements: true })
                 list.Add(AdProviderIds.None);
+            routeCache[p] = list;
             return list;
         }
+
+        private void InvalidateRoutes() => routeCache.Clear();
 
         private bool Usable(string providerId) =>
             byId.ContainsKey(providerId) && !droppedProviders.Contains(providerId)
@@ -541,10 +554,11 @@ namespace FlapGame.GameLib.Ads
         private bool HasUnit(string providerId, string placementId) =>
             !assignedPlacements.TryGetValue(providerId, out HashSet<string> assigned) || assigned.Contains(placementId);
 
-        private IEnumerable<IAdsProviderAdapter> RoutedAdapters(AdPlacement p)
-        {
-            foreach (string id in EffectiveRoutes(p)) yield return byId[id];
-        }
+        // A fullscreen placement that used up MaxShowsPerSession cannot show again this session: keeping it loaded would
+        // hold an ad (several MB for a video) and its reload request for nothing.
+        private bool SessionCapReached(AdPlacement p) =>
+            !p.IsBannerLike && p.MaxShowsPerSession > 0
+            && showsThisSession.TryGetValue(p.Id, out int shows) && shows >= p.MaxShowsPerSession;
 
         private void ReconcileAll()
         {
@@ -560,6 +574,7 @@ namespace FlapGame.GameLib.Ads
             if (placements.TryGetValue(placementId, out AdPlacement p) && !disabled.Contains(placementId)
                 && !(p.SuppressedByNoAds && noAdsApplied))
             {
+                bool capped = SessionCapReached(p);
                 List<string> routes = EffectiveRoutes(p);
                 int count = routes.Count;
                 if (loadStrategy == AdLoadStrategy.Primary && count > 0)
@@ -567,7 +582,8 @@ namespace FlapGame.GameLib.Ads
                     int depth = primaryDepth.TryGetValue(placementId, out int d) ? d : 1;
                     count = Mathf.Clamp(depth, 1, routes.Count);
                 }
-                for (int i = 0; i < count; i++) desired.Add(routes[i]);
+                if (!capped)
+                    for (int i = 0; i < count; i++) desired.Add(routes[i]);
                 if (showingProvider.TryGetValue(placementId, out string showing)) desired.Add(showing);
                 desired.RemoveWhere(id => !initializedProviders.Contains(id));
             }
@@ -698,8 +714,8 @@ namespace FlapGame.GameLib.Ads
         {
             if (string.IsNullOrEmpty(placementId) || !placements.TryGetValue(placementId, out AdPlacement p)) return false;
             if (disabled.Contains(placementId)) return false;
-            foreach (IAdsProviderAdapter adapter in RoutedAdapters(p))
-                if (adapter.IsPlacementReady(placementId)) return true;
+            foreach (string routeId in EffectiveRoutes(p))
+                if (byId[routeId].IsPlacementReady(placementId)) return true;
             return false;
         }
 
@@ -823,10 +839,11 @@ namespace FlapGame.GameLib.Ads
             bool displayed = false;
             try
             {
-                foreach (IAdsProviderAdapter adapter in RoutedAdapters(p))
+                foreach (string routeId in EffectiveRoutes(p))
                 {
+                    IAdsProviderAdapter adapter = byId[routeId];
                     if (!adapter.IsPlacementReady(placementId)) continue;
-                    string providerId = AdProviderIds.Normalize(adapter.ProviderId);
+                    string providerId = routeId;
                     showingProvider[placementId] = providerId;
                     AdShowResult result;
                     try
@@ -872,8 +889,9 @@ namespace FlapGame.GameLib.Ads
         {
             if (string.IsNullOrEmpty(placementId) || !placements.TryGetValue(placementId, out AdPlacement p) || !p.IsBannerLike)
                 return 0f;
-            foreach (IAdsProviderAdapter adapter in RoutedAdapters(p))
+            foreach (string routeId in EffectiveRoutes(p))
             {
+                IAdsProviderAdapter adapter = byId[routeId];
                 if (adapter is not IBannerMetrics metrics || !adapter.IsPlacementReady(placementId)) continue;
                 float height = metrics.GetBannerHeightPixels(placementId);
                 if (height > 0f) return height;
@@ -889,9 +907,10 @@ namespace FlapGame.GameLib.Ads
             if (disabled.Contains(placementId) || (p.SuppressedByNoAds && IsNoAdsOwned())) return 0f;
             float loaded = GetBannerHeightPixels(placementId);
             if (loaded > 0f) return loaded;
-            foreach (IAdsProviderAdapter adapter in RoutedAdapters(p))
+            foreach (string routeId in EffectiveRoutes(p))
             {
-                if (adapter is not IBannerMetrics metrics || !activeRoutes.Contains((placementId, AdProviderIds.Normalize(adapter.ProviderId)))) continue;
+                IAdsProviderAdapter adapter = byId[routeId];
+                if (adapter is not IBannerMetrics metrics || !activeRoutes.Contains((placementId, routeId))) continue;
                 float height = metrics.GetExpectedBannerHeightPixels(placementId);
                 if (height > 0f) return height;
             }

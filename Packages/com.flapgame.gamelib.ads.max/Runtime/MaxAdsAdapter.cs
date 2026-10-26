@@ -163,7 +163,7 @@ namespace FlapGame.GameLib.Ads
 
             if (disposed) throw new ObjectDisposedException(nameof(MaxAdsAdapter));
             initialized = true;
-            Debug.Log($"{LogPrefix} Initialized with {assigned.Count} placement(s) on {unitFormats.Count} unit(s).");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Initialized with {assigned.Count} placement(s) on {unitFormats.Count} unit(s).");
 
             // Placements activated before init (the composite should not, but be tolerant) start loading now.
             foreach (string unit in new List<string>(unitFormats.Keys))
@@ -255,7 +255,7 @@ namespace FlapGame.GameLib.Ads
             if (consent.DoNotSell.HasValue) MaxSdk.SetDoNotSell(consent.DoNotSell.Value);
             if (consent.IsAgeRestrictedUser)
                 Debug.LogWarning($"{LogPrefix} Age-restricted user: MAX 8.6.6 has no runtime age-restricted API; configure child-directed treatment in the AppLovin dashboard.");
-            Debug.Log($"{LogPrefix} Consent applied: {consent}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Consent applied: {consent}.");
         }
 
         /// <summary>Stops every reload, resolves pending shows as Failed, destroys banners and unsubscribes from MAX.</summary>
@@ -380,7 +380,7 @@ namespace FlapGame.GameLib.Ads
                 int attempt = retryAttempts.TryGetValue(unit, out int previous) ? previous + 1 : 1;
                 retryAttempts[unit] = attempt;
                 double seconds = Math.Min(MaxRetryDelaySeconds, Math.Pow(2, Math.Min(attempt, 10)));
-                Debug.Log($"{LogPrefix} {Describe(unit)} retry #{attempt} in {seconds:0}s.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {Describe(unit)} retry #{attempt} in {seconds:0}s.");
                 // Awaited on the Unity main thread: the continuation resumes on UnitySynchronizationContext.
                 await Task.Delay(TimeSpan.FromSeconds(seconds), lifetime.Token);
             }
@@ -429,7 +429,7 @@ namespace FlapGame.GameLib.Ads
             loadedUnits.Remove(unit);
             showingPlacement[unit] = p.Id;
             NotifyUnit(unit); // the shared ad is consumed for every placement of the unit
-            Debug.Log($"{LogPrefix} Showing {adType} {p.Id}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing {adType} {p.Id}.");
 
             AdShowResult result;
             try
@@ -453,7 +453,7 @@ namespace FlapGame.GameLib.Ads
                 showingPlacement.Remove(unit);
             }
 
-            Debug.Log($"{LogPrefix} {adType} {p.Id} result: {result}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {adType} {p.Id} result: {result}.");
             LoadUnit(unit);
             return result;
         }
@@ -490,7 +490,7 @@ namespace FlapGame.GameLib.Ads
             }
             if (!activePlacements.Contains(p.Id))
             {
-                Debug.Log($"{LogPrefix} Banner {p.Id} not shown: placement not active.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {p.Id} not shown: placement not active.");
                 return AdShowResult.Failed;
             }
 
@@ -531,7 +531,7 @@ namespace FlapGame.GameLib.Ads
                 return AdShowResult.Failed;
             }
 
-            Debug.Log($"{LogPrefix} Showing banner {p.Id}{(loadedBannerUnits.Contains(unit) ? "" : " (displays once loaded)")}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing banner {p.Id}{(loadedBannerUnits.Contains(unit) ? "" : " (displays once loaded)")}.");
             return AdShowResult.Completed;
         }
 
@@ -542,7 +542,7 @@ namespace FlapGame.GameLib.Ads
             else MaxSdk.DestroyBanner(unit);
             bool wasLoaded = loadedBannerUnits.Remove(unit);
             retryAttempts.Remove(unit);
-            Debug.Log($"{LogPrefix} Banner {Describe(unit)} destroyed.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {Describe(unit)} destroyed.");
             if (wasLoaded && !disposed) NotifyUnit(unit);
         }
 
@@ -554,7 +554,7 @@ namespace FlapGame.GameLib.Ads
             loadingUnits.Remove(unit);
             retryAttempts.Remove(unit);
             loadedUnits.Add(unit);
-            Debug.Log($"{LogPrefix} {Describe(unit)} loaded.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {Describe(unit)} loaded.");
             NotifyUnit(unit);
         }
 
@@ -563,7 +563,7 @@ namespace FlapGame.GameLib.Ads
             if (!unitPlacements.ContainsKey(unit)) return;
             loadingUnits.Remove(unit);
             string message = ErrorText(error);
-            Debug.Log($"{LogPrefix} {Describe(unit)} load failed: {message}");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {Describe(unit)} load failed: {message}");
             RaiseLoadFailed(unit, message);
             if (!disposed && IsUnitActive(unit)) _ = RetryAfterBackoffAsync(unit);
         }
@@ -610,7 +610,7 @@ namespace FlapGame.GameLib.Ads
             if (!unitPlacements.ContainsKey(unit)) return;
             retryAttempts.Remove(unit);
             if (!loadedBannerUnits.Add(unit)) return; // auto-refresh
-            Debug.Log($"{LogPrefix} {Describe(unit)} loaded.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {Describe(unit)} loaded.");
             NotifyUnit(unit);
         }
 

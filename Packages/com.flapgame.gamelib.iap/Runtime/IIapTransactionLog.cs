@@ -24,14 +24,18 @@ namespace FlapGame.GameLib.Iap
 
         public bool Contains(string transactionId) => !string.IsNullOrEmpty(transactionId) && Load().Contains(transactionId);
 
-        public void Add(string transactionId)
+        public void Add(string transactionId) => Add(transactionId, save: true);
+
+        /// <param name="save">False only when a <c>PlayerPrefs.Save</c> follows before the store confirmation (it writes
+        /// every key, this one too).</param>
+        public void Add(string transactionId, bool save)
         {
             if (string.IsNullOrEmpty(transactionId) || Contains(transactionId)) return;
             List<string> list = Load();
             list.Add(transactionId);
             if (list.Count > Capacity) list.RemoveRange(0, list.Count - Capacity);
             PlayerPrefs.SetString(Key, string.Join(Separator, list));
-            PlayerPrefs.Save(); // the grant must survive a crash before the store confirmation
+            if (save) PlayerPrefs.Save(); // the grant must survive a crash before the store confirmation
         }
 
         private List<string> Load() =>

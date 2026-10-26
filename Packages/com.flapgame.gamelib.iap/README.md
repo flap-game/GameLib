@@ -27,6 +27,7 @@ iap.PurchaseGranted += purchase =>
 
 priceLabel.text = iap.GetPriceString("gems_100", "...");   // localized: "$1.99", "49.000 ₫"
 iap.Ready += RefreshPrices;                                // prices arrive after the store connects
+iap.OwnedChanged += RefreshOwnedBadges;                    // owned products arrive after Ready, and change on restore / expiry
 
 IapPurchaseResult result = await iap.PurchaseAsync("gems_100", placement: "shop");
 // Success, Cancelled, Failed, Deferred (Ask to Buy / pending payment: granted later), AlreadyOwned, NotReady

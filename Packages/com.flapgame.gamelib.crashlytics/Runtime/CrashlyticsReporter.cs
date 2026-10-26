@@ -58,15 +58,24 @@ namespace FlapGame.GameLib.Crashlytics
 
         // ── IAnalyticsSink ───────────────────────────────────────────────
 
-        public void Track(AnalyticsEvent analyticsEvent) => buffer.Track(analyticsEvent);
+        public void Track(AnalyticsEvent analyticsEvent)
+        {
+            if (BreadcrumbsFromAnalytics) buffer.Track(analyticsEvent);
+        }
 
         public void SetUserProperty(string name, string value) => buffer.SetUserProperty(name, value);
 
         public void SetUserId(string userId) => buffer.SetUserId(userId);
 
-        public void TrackAdRevenue(AdRevenue revenue) => buffer.TrackAdRevenue(revenue);
+        public void TrackAdRevenue(AdRevenue revenue)
+        {
+            if (BreadcrumbsFromAnalytics) buffer.TrackAdRevenue(revenue);
+        }
 
-        public void TrackPurchase(PurchaseRecord purchase) => buffer.TrackPurchase(purchase);
+        public void TrackPurchase(PurchaseRecord purchase)
+        {
+            if (BreadcrumbsFromAnalytics) buffer.TrackPurchase(purchase);
+        }
 
         /// <summary>Live Crashlytics calls behind the buffer.</summary>
         private sealed class Target : IAnalyticsSink

@@ -45,6 +45,22 @@ namespace FlapGame.GameLib.Crashlytics.Tests
         }
 
         [Test]
+        public void Breadcrumb_Numbers_AreInvariant_AndTheBuilderIsReused()
+        {
+            var e = new AnalyticsEvent("score", new Dictionary<string, object>
+            {
+                ["int"] = -42,
+                ["long"] = long.MinValue,
+                ["double"] = 0.1,
+                ["decimal"] = 1.5m,
+            });
+            const string expected = "score decimal=1.5 double=0.1 int=-42 long=-9223372036854775808";
+            Assert.AreEqual(expected, CrashBreadcrumbFormatter.Format(e));
+            Assert.AreEqual("single n=7", CrashBreadcrumbFormatter.Format(new AnalyticsEvent("single", new Dictionary<string, object> { ["n"] = 7 })));
+            Assert.AreEqual(expected, CrashBreadcrumbFormatter.Format(e), "same text on a reused builder");
+        }
+
+        [Test]
         public void Breadcrumb_LongLine_IsCutAtMaxLength()
         {
             var e = new AnalyticsEvent("x", new Dictionary<string, object> { ["a"] = new string('z', 1000) });

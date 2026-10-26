@@ -6,6 +6,6 @@ namespace FlapGame.GameLib
     /// </summary>
     public static class GameLibVersion
     {
-        public const string Current = "0.7.0";
+        public const string Current = "0.7.1";
     }
 }

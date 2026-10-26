@@ -120,6 +120,38 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void SessionCap_Reached_StopsLoadingThePlacement()
+        {
+            using var ads = Create();
+            Init(ads);
+            Assert.That(max.Active, Does.Contain("inter"));
+            max.MarkReady("inter");
+
+            Await(ads.ShowAsync("inter"));
+            Assert.That(max.Active, Does.Contain("inter"), "one show left");
+            clock = 100f;
+            Await(ads.ShowAsync("inter"));
+
+            Assert.That(max.Active, Has.No.Member("inter"), "capped: no reload for a placement that cannot show again");
+            Assert.That(adMob.Active, Has.No.Member("inter"));
+            Assert.That(adMob.Active, Does.Contain("reward"), "other placements keep loading");
+        }
+
+        [Test]
+        public void EffectiveRoutes_FollowAPlanChange()
+        {
+            using var ads = Create();
+            Init(ads);
+            Assert.That(ads.GetEffectiveRoutes("inter"), Is.EqualTo(new[] { AdProviderIds.Max, AdProviderIds.AdMob }));
+
+            ads.ApplyPlan(new AdsPlan { Name = "admob_only", Providers = new List<string> { AdProviderIds.AdMob } });
+            Assert.That(ads.GetEffectiveRoutes("inter"), Is.EqualTo(new[] { AdProviderIds.AdMob }));
+
+            ads.ApplyPlan(null);
+            Assert.That(ads.GetEffectiveRoutes("inter"), Is.EqualTo(new[] { AdProviderIds.Max, AdProviderIds.AdMob }));
+        }
+
+        [Test]
         public void NoAdsOwned_BlocksSuppressedPlacement_ButNotRewarded()
         {
             using var ads = Create();

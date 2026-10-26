@@ -12,32 +12,65 @@ namespace FlapGame.GameLib.Iap
     /// <see cref="IIapStore"/> over Unity IAP 5's <see cref="StoreController"/> (Google Play, App Store; the fake store in the
     /// Editor). Compiled only when com.unity.purchasing is installed.
     /// </summary>
-    public sealed class UnityIapStore : IIapStore
+    public sealed class UnityIapStore : IIapStore, IDisposable
     {
         private readonly StoreController controller;
+        // Kept to unsubscribe: the controller outlives this store (a bootstrap reset creates a new one).
+        private readonly Action<List<Product>> onProductsFetched;
+        private readonly Action<ProductFetchFailed> onProductsFetchFailed;
+        private readonly Action<PendingOrder> onPurchasePending;
+        private readonly Action<FailedOrder> onPurchaseFailed;
+        private readonly Action<Order> onPurchaseConfirmed;
+        private readonly Action<DeferredOrder> onPurchaseDeferred;
+        private readonly Action<Orders> onPurchasesFetched;
+        private readonly Action<PurchasesFetchFailureDescription> onPurchasesFetchFailed;
+        private bool disposed;
 
         public UnityIapStore()
         {
             controller = UnityIAPServices.StoreController();
-            controller.OnProductsFetched += fetched => ProductsFetched?.Invoke(fetched.Select(ToProduct).ToList());
-            controller.OnProductsFetchFailed += failed => ProductsFetchFailed?.Invoke(failed.FailureReason);
-            controller.OnPurchasePending += order => PurchasePending?.Invoke(ToOrder(order));
-            controller.OnPurchaseFailed += order => PurchaseFailed?.Invoke(ToOrder(order), Map(order.FailureReason), order.Details);
-            controller.OnPurchaseConfirmed += order =>
+            onProductsFetched = fetched => ProductsFetched?.Invoke(fetched.Select(ToProduct).ToList());
+            onProductsFetchFailed = failed => ProductsFetchFailed?.Invoke(failed.FailureReason);
+            onPurchasePending = order => PurchasePending?.Invoke(ToOrder(order));
+            onPurchaseFailed = order => PurchaseFailed?.Invoke(ToOrder(order), Map(order.FailureReason), order.Details);
+            onPurchaseConfirmed = order =>
             {
                 if (order is FailedOrder failed)
                     PurchaseFailed?.Invoke(ToOrder(failed), Map(failed.FailureReason), failed.Details);
             };
-            controller.OnPurchaseDeferred += order => PurchaseDeferred?.Invoke(ToOrder(order));
+            onPurchaseDeferred = order => PurchaseDeferred?.Invoke(ToOrder(order));
             // Google lists a paid order that is not acknowledged yet (e.g. the app was killed between grant and confirm)
             // under PendingOrders; it is still owned. DeferredOrders are not paid.
-            controller.OnPurchasesFetched += orders =>
+            onPurchasesFetched = orders =>
                 PurchasesFetched?.Invoke(orders.ConfirmedOrders.Cast<Order>().Concat(orders.PendingOrders).Select(ToOrder).ToList());
-            controller.OnPurchasesFetchFailed += failure =>
+            onPurchasesFetchFailed = failure =>
             {
                 Debug.LogWarning($"[IAP] Fetching owned purchases failed: {failure.Message}");
                 PurchasesFetchFailed?.Invoke(failure.Message);
             };
+
+            controller.OnProductsFetched += onProductsFetched;
+            controller.OnProductsFetchFailed += onProductsFetchFailed;
+            controller.OnPurchasePending += onPurchasePending;
+            controller.OnPurchaseFailed += onPurchaseFailed;
+            controller.OnPurchaseConfirmed += onPurchaseConfirmed;
+            controller.OnPurchaseDeferred += onPurchaseDeferred;
+            controller.OnPurchasesFetched += onPurchasesFetched;
+            controller.OnPurchasesFetchFailed += onPurchasesFetchFailed;
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            controller.OnProductsFetched -= onProductsFetched;
+            controller.OnProductsFetchFailed -= onProductsFetchFailed;
+            controller.OnPurchasePending -= onPurchasePending;
+            controller.OnPurchaseFailed -= onPurchaseFailed;
+            controller.OnPurchaseConfirmed -= onPurchaseConfirmed;
+            controller.OnPurchaseDeferred -= onPurchaseDeferred;
+            controller.OnPurchasesFetched -= onPurchasesFetched;
+            controller.OnPurchasesFetchFailed -= onPurchasesFetchFailed;
         }
 
         public event Action<IReadOnlyList<IapStoreProduct>> ProductsFetched;
@@ -126,7 +159,8 @@ namespace FlapGame.GameLib.Iap
                 ProductId = item?.Product?.definition?.id,
                 TransactionId = order.Info?.TransactionID,
                 OriginalTransactionId = order.Info?.Apple?.OriginalTransactionID,
-                Receipt = order.Info?.Receipt,
+                // Unity IAP rebuilds the receipt on every read (on iOS from the whole app receipt): only when a grant needs it.
+                ReceiptSource = () => order.Info?.Receipt,
                 SubscriptionActive = subscribed == Result.True ? true : subscribed == Result.False ? false : null,
                 Native = order,
             };

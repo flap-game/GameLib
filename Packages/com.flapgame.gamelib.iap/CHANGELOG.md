@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1] - 2026-10-26
+- New IIapService.OwnedChanged: raised when IsOwned changes (a grant, the owned purchases fetched at launch or after a restore, an expired subscription). Breaking for custom IIapService implementations.
+- The store receipt is built only when a new grant sends it (IapStoreOrder.Receipt is read through ReceiptSource on first use). On iOS Unity IAP rebuilt the whole app receipt for every order on every purchases fetch.
+- One PlayerPrefs.Save per grant instead of two: the transaction log and a new entitlement are written together, still before the PurchaseGranted handlers and the store confirmation.
+- Products is built once instead of a new list per read.
+- The restore timeout timers stop when the restore finishes.
+- UnityIapStore unsubscribes from the StoreController when the IAP service is disposed (bootstrap reset).
+
 ## [0.5.0] - 2026-10-26
 - Restored purchases and subscription renewals (App Store: OriginalTransactionId differs) are granted but not sent as revenue (IAnalytics.TrackPurchase); iap_purchase_success carries restore=true. IapPurchase.IsRestore, IapStoreOrder.OriginalTransactionId.
 - A transaction is logged before the PurchaseGranted handlers run: a crash in between can lose that grant but never grants it twice.

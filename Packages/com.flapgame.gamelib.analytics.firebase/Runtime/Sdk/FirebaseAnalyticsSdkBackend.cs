@@ -26,10 +26,11 @@ namespace FlapGame.GameLib.Analytics.Firebase
                 return;
             }
 
-            var list = new List<FA.Parameter>(parameters.Count);
+            var array = new FA.Parameter[parameters.Count];
+            int i = 0;
             foreach (KeyValuePair<string, object> kv in parameters)
-                list.Add(ToParameter(kv.Key, kv.Value));
-            FA.FirebaseAnalytics.LogEvent(name, list.ToArray());
+                array[i++] = ToParameter(kv.Key, kv.Value);
+            FA.FirebaseAnalytics.LogEvent(name, array);
         }
 
         public void SetUserProperty(string name, string value) => FA.FirebaseAnalytics.SetUserProperty(name, value);

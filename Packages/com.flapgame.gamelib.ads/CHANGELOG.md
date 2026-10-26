@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.1] - 2026-10-26
+- A fullscreen placement that reached MaxShowsPerSession is no longer kept loaded (no reload request, no ad held in memory for a placement that cannot show again this session).
+- CanShow / IsPlacementReady / banner heights no longer allocate: the effective routes of each placement are cached and rebuilt only when the plan, a provider or the placements change. Safe to call from UI every frame (PlacementReadyChanged is still the cheaper way).
+- New AdsModule.VerboseLogs: the info logs of every load, show and retry are written in the Editor and development builds only, unless it is on (on a device each Debug.Log captures a stack trace). Warnings and errors are unchanged. Static switch: AdsLog.Verbose.
+- Android: the IAB consent strings are read with one SharedPreferences lookup per read instead of one per key (about 24 JNI calls and 3 map copies down to a few).
+
 ## [0.5.0] - 2026-10-26
 - A shown app open ad no longer restarts the interstitial interval (AdsPolicy.AppOpenFollowsInterstitialRules = true still does both).
 - Banners requested before the ad SDKs initialized (e.g. in a menu's Start) are no longer reported Failed: the composite remembers the wanted banner per placement and shows it once a route is active. HideBanner / DestroyBanner cancel it.

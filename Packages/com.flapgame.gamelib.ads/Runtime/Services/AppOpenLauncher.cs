@@ -105,7 +105,7 @@ namespace FlapGame.GameLib.Ads
 
             if (SkipFirstLaunch && IsFirstLaunch)
             {
-                Debug.Log($"{LogPrefix} First launch after install: no app open ad.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} First launch after install: no app open ad.");
                 return;
             }
             _ = ColdStartAsync();
@@ -124,7 +124,7 @@ namespace FlapGame.GameLib.Ads
         {
             if (disposed || !started || (IgnoreReturnsInEditor && Application.isEditor)) return;
 
-            Debug.Log($"{LogPrefix} Resume: {info}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Resume: {info}.");
             if (info.FromExternalActivity || info.TimeAway.TotalSeconds < MinBackgroundSeconds) return;
             _ = TryShowAsync("return");
         }
@@ -140,7 +140,7 @@ namespace FlapGame.GameLib.Ads
                     if (lifecycle.IsPaused) return; // left during startup: the return shows one instead
                     if (Time.realtimeSinceStartup >= latest)
                     {
-                        Debug.Log($"{LogPrefix} Ads not started {ColdStartMaxSeconds:0}s after launch - no launch app open ad.");
+                        if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Ads not started {ColdStartMaxSeconds:0}s after launch - no launch app open ad.");
                         return;
                     }
                     await Task.Delay(ColdStartPollMilliseconds, lifetime.Token);
@@ -150,7 +150,7 @@ namespace FlapGame.GameLib.Ads
                 {
                     if (Time.realtimeSinceStartup >= deadline)
                     {
-                        Debug.Log($"{LogPrefix} Launch ad not loaded within {ColdStartWaitSeconds:0}s: none this launch.");
+                        if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Launch ad not loaded within {ColdStartWaitSeconds:0}s: none this launch.");
                         return;
                     }
                     if (lifecycle.IsPaused) return; // left during loading: the return shows one instead
@@ -173,12 +173,12 @@ namespace FlapGame.GameLib.Ads
             if (disposed || showing) return;
             if (Gate != null && !Gate())
             {
-                Debug.Log($"{LogPrefix} Not shown on {trigger}: blocked by the game.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Not shown on {trigger}: blocked by the game.");
                 return;
             }
             if (!ads.CanShow(placementId, out AdBlockReason reason))
             {
-                Debug.Log($"{LogPrefix} Not shown on {trigger}: {reason}.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Not shown on {trigger}: {reason}.");
                 return;
             }
 
@@ -186,7 +186,7 @@ namespace FlapGame.GameLib.Ads
             try
             {
                 AdShowResult result = await ads.ShowAsync(placementId, lifetime.Token);
-                Debug.Log($"{LogPrefix} Shown on {trigger}: {result}.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Shown on {trigger}: {result}.");
             }
             catch (OperationCanceledException)
             {

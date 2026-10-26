@@ -28,6 +28,9 @@ namespace FlapGame.GameLib.RemoteConfig
         private Task inFlight;
         private bool inFlightTimedOut;
         private bool defaultsApplied;
+        // The server values of this session's last activation: reads come from here instead of a native call per read.
+        // Null until the first activation, when reads still ask the provider (Firebase keeps the previous activation).
+        private IReadOnlyDictionary<string, string> activated;
 
         /// <param name="provider">Null = defaults and cache only (no SDK); ready after the first fetch call.</param>
         /// <param name="fetchTimeout">≤ 0 or infinite = no timeout.</param>
@@ -130,7 +133,11 @@ namespace FlapGame.GameLib.RemoteConfig
                 // Server values only: a cached default would beat the module defaults on every later launch. Saved even
                 // when empty, so keys removed in the console fall back to the defaults next launch.
                 IReadOnlyDictionary<string, string> remote = provider.GetRemoteValues();
-                if (remote != null) cache?.Save(remote);
+                if (remote != null)
+                {
+                    cache?.Save(remote);
+                    Volatile.Write(ref activated, remote);
+                }
             }
             catch (Exception e)
             {
@@ -155,7 +162,12 @@ namespace FlapGame.GameLib.RemoteConfig
             if (string.IsNullOrEmpty(key)) return false;
             try
             {
-                if (provider != null && provider.TryGetRemoteString(key, out value)) return true;
+                IReadOnlyDictionary<string, string> snapshot = Volatile.Read(ref activated);
+                if (snapshot != null)
+                {
+                    if (snapshot.TryGetValue(key, out value)) return true;
+                }
+                else if (provider != null && provider.TryGetRemoteString(key, out value)) return true;
             }
             catch (Exception e)
             {

@@ -13,34 +13,65 @@ namespace FlapGame.GameLib.Crashlytics
     {
         public const int MaxLength = 256;
 
+        // Reused per thread: one line per tracked event, so no builder / key list per call.
+        [ThreadStatic] private static StringBuilder cachedLine;
+        [ThreadStatic] private static List<string> cachedKeys;
+
         public static string Format(AnalyticsEvent analyticsEvent)
         {
-            var line = new StringBuilder(analyticsEvent.Name);
+            StringBuilder line = cachedLine ??= new StringBuilder(MaxLength + 32);
+            line.Clear().Append(analyticsEvent.Name);
             IReadOnlyDictionary<string, object> parameters = analyticsEvent.Parameters;
-            if (parameters != null && parameters.Count > 0)
+            if (parameters != null && parameters.Count == 1)
             {
-                var keys = new List<string>(parameters.Keys);
+                foreach (KeyValuePair<string, object> kv in parameters)
+                    AppendParameter(line, kv.Key, kv.Value);
+            }
+            else if (parameters != null && parameters.Count > 1)
+            {
+                List<string> keys = cachedKeys ??= new List<string>();
+                keys.Clear();
+                foreach (KeyValuePair<string, object> kv in parameters)
+                    keys.Add(kv.Key);
                 keys.Sort(StringComparer.Ordinal);
                 foreach (string key in keys)
                 {
-                    line.Append(' ').Append(key).Append('=').Append(FormatValue(parameters[key]));
+                    AppendParameter(line, key, parameters[key]);
                     if (line.Length >= MaxLength) break;
                 }
+                keys.Clear();
             }
 
-            return line.Length > MaxLength ? line.ToString(0, MaxLength - 1) + "…" : line.ToString();
+            string result = line.Length > MaxLength ? line.ToString(0, MaxLength - 1) + "…" : line.ToString();
+            if (line.Capacity > 4 * MaxLength) cachedLine = null;   // one huge value must not stay pinned
+            return result;
         }
 
-        private static string FormatValue(object value)
+        private static void AppendParameter(StringBuilder line, string key, object value)
         {
+            line.Append(' ').Append(key).Append('=');
+            AppendValue(line, value);
+        }
+
+        private static void AppendValue(StringBuilder line, object value)
+        {
+            Span<char> digits = stackalloc char[32];
+            int written;
             switch (value)
             {
-                case null: return "null";
-                case string s: return s;
-                case bool b: return b ? "true" : "false";
-                case IFormattable f: return f.ToString(null, CultureInfo.InvariantCulture);
-                case System.Collections.IEnumerable: return "[…]";
-                default: return value.ToString();
+                case null: line.Append("null"); return;
+                case string s: line.Append(s); return;
+                case bool b: line.Append(b ? "true" : "false"); return;
+                // The common numbers are formatted into a stack buffer: same text as ToString(null, Invariant), no string.
+                case int i when i.TryFormat(digits, out written, default, CultureInfo.InvariantCulture):
+                    line.Append(digits.Slice(0, written));
+                    return;
+                case long l when l.TryFormat(digits, out written, default, CultureInfo.InvariantCulture):
+                    line.Append(digits.Slice(0, written));
+                    return;
+                case IFormattable f: line.Append(f.ToString(null, CultureInfo.InvariantCulture)); return;
+                case System.Collections.IEnumerable: line.Append("[…]"); return;
+                default: line.Append(value.ToString()); return;
             }
         }
     }

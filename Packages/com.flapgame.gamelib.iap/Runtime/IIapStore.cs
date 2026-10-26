@@ -86,7 +86,18 @@ namespace FlapGame.GameLib.Iap
         /// restore or a subscription renewal. Null elsewhere.</summary>
         public string OriginalTransactionId;
 
-        public string Receipt;
+        private string receipt;
+
+        /// <summary>The store receipt. Read through <see cref="ReceiptSource"/> on first use only: on iOS building it costs a
+        /// copy of the whole app receipt, and only a new grant needs it.</summary>
+        public string Receipt
+        {
+            get => receipt ??= ReceiptSource?.Invoke();
+            set => receipt = value;
+        }
+
+        /// <summary>Builds <see cref="Receipt"/> when it is first read (set by the store).</summary>
+        public Func<string> ReceiptSource;
 
         /// <summary>For subscriptions: false when the store says it is not active; null when it cannot tell.</summary>
         public bool? SubscriptionActive;

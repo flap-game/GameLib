@@ -44,7 +44,16 @@ namespace FlapGame.GameLib
                 Safe(sink, s => s.SetUserProperty(kv.Key, kv.Value));
         }
 
-        public void Track(AnalyticsEvent analyticsEvent) => ForEach(s => s.Track(analyticsEvent));
+        // The most frequent call: a plain loop, no closure per event.
+        public void Track(AnalyticsEvent analyticsEvent)
+        {
+            IAnalyticsSink[] current = Volatile.Read(ref sinks);
+            for (int i = 0; i < current.Length; i++)
+            {
+                try { current[i].Track(analyticsEvent); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
+        }
 
         public void SetUserProperty(string name, string value)
         {

@@ -22,6 +22,7 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
             // Server values only, like Firebase's RemoteValue source.
             public readonly Dictionary<string, string> Values = new();
             public bool Started;
+            public int Reads;
 
             public Task SetDefaultsAsync(IReadOnlyDictionary<string, string> defaults, CancellationToken cancellationToken)
             {
@@ -40,6 +41,7 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
             public bool TryGetRemoteString(string key, out string value)
             {
                 value = null;
+                Reads++;
                 return Started && Values.TryGetValue(key, out value);
             }
 
@@ -61,6 +63,22 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
             new(provider, defaults, new RemoteConfigCache(cachePath), TimeSpan.FromSeconds(timeoutSeconds));
 
         private static async Task<bool> CompletesWithin(Task task, int ms) => await Task.WhenAny(task, Task.Delay(ms)) == task;
+
+        [Test]
+        public async Task Reads_AfterActivation_ComeFromTheActivatedValues_NotANativeCallEach()
+        {
+            var provider = new FakeProvider();
+            provider.Values["lives"] = "7";
+            var service = Create(provider, new Dictionary<string, string> { ["speed"] = "2" });
+
+            await service.FetchAndActivateAsync();
+            provider.Reads = 0;
+
+            Assert.That(service.GetLong("lives", 5), Is.EqualTo(7));
+            Assert.That(service.GetLong("speed", 1), Is.EqualTo(2), "not on the server: the default");
+            Assert.That(service.GetString("missing", "x"), Is.EqualTo("x"));
+            Assert.That(provider.Reads, Is.EqualTo(0));
+        }
 
         [Test]
         public async Task Reads_ProviderWins_ThenCache_ThenDefaults_ThenCallerDefault()

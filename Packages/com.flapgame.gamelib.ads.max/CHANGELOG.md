@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.7.1] - 2026-10-26
+- Info logs follow AdsLog.Verbose (see Ads).
+
 ## [0.5.0] - 2026-10-26
 - Impression revenue currency moved to a named constant (MAX reports revenue in USD; AdInfo has no currency). No behaviour change.
 

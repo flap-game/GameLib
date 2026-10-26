@@ -395,6 +395,66 @@ namespace FlapGame.GameLib.Iap.Tests
             Assert.That(lifecycle.Open, Is.EqualTo(0));
         }
 
+        [Test]
+        public async Task OwnedChanged_FiresWhenOwnershipChanges_NotForAnUnchangedFetch()
+        {
+            await service.InitializeAsync();
+            int changes = 0;
+            service.OwnedChanged += () => changes++;
+
+            store.Owned(new IapStoreOrder { ProductId = "no_ads", TransactionId = "tx-1" });
+            Assert.That(changes, Is.EqualTo(1));
+            store.Owned(new IapStoreOrder { ProductId = "no_ads", TransactionId = "tx-1" });
+            Assert.That(changes, Is.EqualTo(1), "same purchases again");
+
+            store.Owned(new IapStoreOrder { ProductId = "no_ads", TransactionId = "tx-1" },
+                        new IapStoreOrder { ProductId = "vip", TransactionId = "tx-2", SubscriptionActive = true });
+            Assert.That(changes, Is.EqualTo(2));
+            store.Owned(new IapStoreOrder { ProductId = "no_ads", TransactionId = "tx-1" },
+                        new IapStoreOrder { ProductId = "vip", TransactionId = "tx-2", SubscriptionActive = false });
+            Assert.That(changes, Is.EqualTo(3), "subscription expired");
+        }
+
+        [Test]
+        public async Task OwnedChanged_FiresForANonConsumableGrant_NotForAConsumable()
+        {
+            await service.InitializeAsync();
+            service.PurchaseGranted += _ => { };
+            int changes = 0;
+            service.OwnedChanged += () => changes++;
+
+            store.Pending("gems_100", "tx-gems");
+            Assert.That(changes, Is.EqualTo(0));
+            store.Pending("no_ads", "tx-noads");
+            Assert.That(changes, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Products_IsBuiltOnce()
+        {
+            Assert.That(service.Products, Is.SameAs(service.Products));
+            Assert.That(service.Products.Select(p => p.Id), Is.EqualTo(new[] { "gems_100", "no_ads", "vip" }));
+        }
+
+        [Test]
+        public async Task Receipt_IsOnlyBuiltForANewGrant()
+        {
+            await service.InitializeAsync();
+            service.PurchaseGranted += _ => { };
+            int built = 0;
+            IapStoreOrder Order(string tx) => new() { ProductId = "gems_100", TransactionId = tx, ReceiptSource = () => { built++; return "receipt-" + tx; } };
+
+            store.Owned(Order("tx-owned"));
+            Assert.That(built, Is.EqualTo(0), "fetching purchases does not build receipts");
+
+            store.PendingOrder(Order("tx-new"));
+            Assert.That(built, Is.EqualTo(1));
+            Assert.That(sink.Purchases.Single().Receipt, Is.EqualTo("receipt-tx-new"));
+
+            store.PendingOrder(Order("tx-new"));
+            Assert.That(built, Is.EqualTo(1), "a redelivered, already granted transaction is only confirmed");
+        }
+
         private sealed class FakeLifecycle : IAppLifecycle
         {
             public int Open;

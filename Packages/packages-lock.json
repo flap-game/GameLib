@@ -14,7 +14,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1"
       }
     },
     "com.flapgame.gamelib.ads.admob": {
@@ -22,8 +22,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0",
-        "com.flapgame.gamelib.ads": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1",
+        "com.flapgame.gamelib.ads": "0.7.1"
       }
     },
     "com.flapgame.gamelib.ads.max": {
@@ -31,8 +31,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0",
-        "com.flapgame.gamelib.ads": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1",
+        "com.flapgame.gamelib.ads": "0.7.1"
       }
     },
     "com.flapgame.gamelib.analytics.firebase": {
@@ -40,8 +40,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0",
-        "com.flapgame.gamelib.firebase": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1",
+        "com.flapgame.gamelib.firebase": "0.7.1"
       }
     },
     "com.flapgame.gamelib.appsflyer": {
@@ -49,7 +49,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1"
       }
     },
     "com.flapgame.gamelib.att": {
@@ -57,7 +57,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1"
       }
     },
     "com.flapgame.gamelib.build": {
@@ -65,7 +65,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1"
       }
     },
     "com.flapgame.gamelib.core": {
@@ -81,8 +81,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0",
-        "com.flapgame.gamelib.firebase": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1",
+        "com.flapgame.gamelib.firebase": "0.7.1"
       }
     },
     "com.flapgame.gamelib.firebase": {
@@ -90,7 +90,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1"
       }
     },
     "com.flapgame.gamelib.haptics": {
@@ -98,7 +98,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1"
       }
     },
     "com.flapgame.gamelib.iap": {
@@ -106,7 +106,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1"
       }
     },
     "com.flapgame.gamelib.remoteconfig.firebase": {
@@ -114,8 +114,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.7.0",
-        "com.flapgame.gamelib.firebase": "0.7.0"
+        "com.flapgame.gamelib.core": "0.7.1",
+        "com.flapgame.gamelib.firebase": "0.7.1"
       }
     },
     "com.google.external-dependency-manager": {

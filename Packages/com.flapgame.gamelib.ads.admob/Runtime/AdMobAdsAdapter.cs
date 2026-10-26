@@ -97,7 +97,7 @@ namespace FlapGame.GameLib.Ads
 #if GAMELIB_ADMOB
             // Request configuration (test devices, child-directed tags) must be set before MobileAds.Initialize.
             PushRequestConfiguration();
-            Debug.Log($"{LogPrefix} Consent at init: {consent}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Consent at init: {consent}.");
 
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             MobileAds.Initialize(_ => tcs.TrySetResult(true));
@@ -106,7 +106,7 @@ namespace FlapGame.GameLib.Ads
             if (disposed) return;
 
             initialized = true;
-            Debug.Log($"{LogPrefix} Initialized with {units.Count} placement(s).");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Initialized with {units.Count} placement(s).");
 
             // Initialization never loads by itself: only placements the composite already activated start loading.
             foreach (string id in new List<string>(activeBeforeInit))
@@ -195,7 +195,9 @@ namespace FlapGame.GameLib.Ads
 #if GAMELIB_ADMOB
             if (disposed || placementId == null || !units.TryGetValue(placementId, out Unit unit)) return 0f;
             if (unit.Banner == null || !unit.BannerLoaded) return 0f;
-            try { return unit.Banner.GetHeightInPixels(); }
+            // Measured once per loaded view: a layout script may ask every frame, and each measure is a native call.
+            if (unit.LoadedHeightPixels > 0f) return unit.LoadedHeightPixels;
+            try { return unit.LoadedHeightPixels = unit.Banner.GetHeightInPixels(); }
             catch (Exception e)
             {
                 Debug.LogWarning($"{LogPrefix} Banner {placementId} height unknown: {e.Message}");
@@ -251,7 +253,7 @@ namespace FlapGame.GameLib.Ads
             unit.RetryPending = false;
             unit.RetryAttempt = 0;
             ReleaseBanner(unit);
-            Debug.Log($"{LogPrefix} Banner {placementId} destroyed.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {placementId} destroyed.");
             if (wasLoaded) RaiseReadyChanged(placementId);
 #endif
         }
@@ -269,7 +271,7 @@ namespace FlapGame.GameLib.Ads
 #if GAMELIB_ADMOB
             PushRequestConfiguration();
 #endif
-            Debug.Log($"{LogPrefix} Consent applied: {consent} (personalisation follows the TCF string written by UMP).");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Consent applied: {consent} (personalisation follows the TCF string written by UMP).");
         }
 
         /// <inheritdoc />
@@ -320,7 +322,7 @@ namespace FlapGame.GameLib.Ads
                 if (string.IsNullOrEmpty(unitId) && context.TestMode)
                 {
                     unitId = GoogleTestUnitId(placement.Format);
-                    Debug.Log($"{LogPrefix} {placement.Id}: no unit id, test mode uses Google's test unit {unitId}.");
+                    if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {placement.Id}: no unit id, test mode uses Google's test unit {unitId}.");
                 }
                 if (string.IsNullOrEmpty(unitId))
                 {
@@ -340,7 +342,7 @@ namespace FlapGame.GameLib.Ads
             }
             foreach (Slot slot in slots.Values)
                 if (slot.Members.Count > 1)
-                    Debug.Log($"{LogPrefix} {slot.Format} unit {slot.AdUnitId} is shared by {slot.Name}: one ad loaded for all.");
+                    if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {slot.Format} unit {slot.AdUnitId} is shared by {slot.Name}: one ad loaded for all.");
         }
 
         private static bool IsFullscreen(AdFormat format) =>
@@ -438,7 +440,7 @@ namespace FlapGame.GameLib.Ads
                 if (!AcceptLoad(slot, generation, ad == null, error?.GetMessage(), "Interstitial")) { ad?.Destroy(); return; }
                 slot.Interstitial?.Destroy();
                 slot.Interstitial = ad;
-                Debug.Log($"{LogPrefix} Interstitial {slot.Name} loaded.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Interstitial {slot.Name} loaded.");
                 RaiseReadyChanged(slot);
             }));
         }
@@ -451,7 +453,7 @@ namespace FlapGame.GameLib.Ads
                 if (!AcceptLoad(slot, generation, ad == null, error?.GetMessage(), "Rewarded")) { ad?.Destroy(); return; }
                 slot.Rewarded?.Destroy();
                 slot.Rewarded = ad;
-                Debug.Log($"{LogPrefix} Rewarded {slot.Name} loaded.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Rewarded {slot.Name} loaded.");
                 RaiseReadyChanged(slot);
             }));
         }
@@ -465,7 +467,7 @@ namespace FlapGame.GameLib.Ads
                 slot.AppOpen?.Destroy();
                 slot.AppOpen         = ad;
                 slot.AppOpenLoadedAt = DateTime.UtcNow;
-                Debug.Log($"{LogPrefix} App open {slot.Name} loaded.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} App open {slot.Name} loaded.");
                 RaiseReadyChanged(slot);
             }));
         }
@@ -504,7 +506,7 @@ namespace FlapGame.GameLib.Ads
             state.RetryAttempt++;
             state.RetryPending = true;
             double seconds = Math.Min(MaxRetryDelaySeconds, Math.Pow(2, Math.Min(state.RetryAttempt, 10)));
-            Debug.Log($"{LogPrefix} {label} {state.Name} load failed (retry #{state.RetryAttempt} in {seconds:0}s): {error}");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {label} {state.Name} load failed (retry #{state.RetryAttempt} in {seconds:0}s): {error}");
             _ = RetryAfterAsync(state, state.Generation, seconds, load);
         }
 
@@ -533,7 +535,7 @@ namespace FlapGame.GameLib.Ads
             if (slot.AppOpen == null) return false;
             if (DateTime.UtcNow - slot.AppOpenLoadedAt < Slot.AppOpenExpiry) return true;
 
-            Debug.Log($"{LogPrefix} App open {slot.Name} expired; discarding and reloading.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} App open {slot.Name} expired; discarding and reloading.");
             slot.AppOpen.Destroy();
             slot.AppOpen = null;
             EnsureLoading(slot);
@@ -555,6 +557,7 @@ namespace FlapGame.GameLib.Ads
             unit.Banner?.Destroy();
             unit.Banner        = null;
             unit.BannerLoaded  = false;
+            unit.LoadedHeightPixels = 0f;
             unit.BannerVisible = false;
         }
 
@@ -609,7 +612,7 @@ namespace FlapGame.GameLib.Ads
             ad.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(ad.GetResponseInfo)));
             ad.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
 
-            Debug.Log($"{LogPrefix} Showing interstitial {unit.Id}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing interstitial {unit.Id}.");
             unit.Slot.Interstitial = null; // consumed, for every placement on the slot
             RaiseReadyChanged(unit.Slot);
             ad.Show();
@@ -617,7 +620,7 @@ namespace FlapGame.GameLib.Ads
             // The ad is on screen: the caller's token no longer applies (see class remarks).
             AdShowResult result = await AwaitCloseAsync(tcs);
 
-            Debug.Log($"{LogPrefix} Interstitial {unit.Id} result: {result}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Interstitial {unit.Id} result: {result}.");
             ad.Destroy();
             if (!disposed) EnsureLoading(unit.Slot);
             return result;
@@ -641,7 +644,7 @@ namespace FlapGame.GameLib.Ads
             ad.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(ad.GetResponseInfo)));
             ad.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
 
-            Debug.Log($"{LogPrefix} Showing rewarded {unit.Id}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing rewarded {unit.Id}.");
             unit.Slot.Rewarded = null; // consumed, for every placement on the slot
             RaiseReadyChanged(unit.Slot);
             ad.Show(_ => RunOnMain(() => earned.TrySetResult(true)));
@@ -652,7 +655,7 @@ namespace FlapGame.GameLib.Ads
                 ? closed
                 : await RewardGrace.ResolveAsync(closed, earned.Task, LateRewardGrace);
 
-            Debug.Log($"{LogPrefix} Rewarded {unit.Id} result: {result}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Rewarded {unit.Id} result: {result}.");
             ad.Destroy();
             if (!disposed) EnsureLoading(unit.Slot);
             return result;
@@ -674,7 +677,7 @@ namespace FlapGame.GameLib.Ads
             ad.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(ad.GetResponseInfo)));
             ad.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
 
-            Debug.Log($"{LogPrefix} Showing app open {unit.Id}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing app open {unit.Id}.");
             unit.Slot.AppOpen = null; // consumed, for every placement on the slot
             RaiseReadyChanged(unit.Slot);
             ad.Show();
@@ -682,7 +685,7 @@ namespace FlapGame.GameLib.Ads
             // The ad is on screen: the caller's token no longer applies (see class remarks).
             AdShowResult result = await AwaitCloseAsync(tcs);
 
-            Debug.Log($"{LogPrefix} App open {unit.Id} result: {result}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} App open {unit.Id} result: {result}.");
             ad.Destroy();
             if (!disposed) EnsureLoading(unit.Slot);
             return result;
@@ -706,7 +709,7 @@ namespace FlapGame.GameLib.Ads
             }
             if (!unit.Active)
             {
-                Debug.Log($"{LogPrefix} Banner {unit.Id} not shown: placement not active.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {unit.Id} not shown: placement not active.");
                 return AdShowResult.Failed;
             }
 
@@ -723,12 +726,12 @@ namespace FlapGame.GameLib.Ads
                     ReleaseBanner(unit);
                     return AdShowResult.Failed;
                 }
-                Debug.Log($"{LogPrefix} Banner {unit.Id} created; it appears once loaded.");
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {unit.Id} created; it appears once loaded.");
                 return AdShowResult.Completed;
             }
 
             if (unit.BannerLoaded) unit.Banner.Show();
-            Debug.Log($"{LogPrefix} Showing banner {unit.Id}.");
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing banner {unit.Id}.");
             return AdShowResult.Completed;
         }
 
@@ -738,6 +741,7 @@ namespace FlapGame.GameLib.Ads
             var banner = new BannerView(unit.AdUnitId, GetAdSize(p), ToAdMobPosition(p.Position));
             unit.Banner       = banner;
             unit.BannerLoaded = false;
+            unit.LoadedHeightPixels = 0f;
             int generation    = unit.Generation;
 
             banner.OnBannerAdLoaded += () => RunOnMain(() =>
@@ -751,7 +755,7 @@ namespace FlapGame.GameLib.Ads
                 if (firstLoad)
                 {
                     RememberBannerHeight(unit);
-                    Debug.Log($"{LogPrefix} Banner {unit.Id} loaded.");
+                    if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {unit.Id} loaded.");
                     RaiseReadyChanged(unit.Id);
                 }
             });
@@ -798,9 +802,11 @@ namespace FlapGame.GameLib.Ads
             {
                 float height = unit.Banner.GetHeightInPixels();
                 if (height <= 0f) return;
+                unit.LoadedHeightPixels = height;
                 unit.ExpectedHeightPixels = height;
+                // No PlayerPrefs.Save (a blocking disk write mid-session): Unity saves on pause / quit, and losing the value
+                // in a crash only means the next launch estimates the height again.
                 PlayerPrefs.SetFloat(BannerHeightKey(unit.Id), height);
-                PlayerPrefs.Save();
             }
             catch (Exception e)
             {
@@ -926,6 +932,7 @@ namespace FlapGame.GameLib.Ads
 #endif
             public bool BannerLoaded;
             public float ExpectedHeightPixels; // cached GetExpectedBannerHeightPixels (orientation is fixed per session)
+            public float LoadedHeightPixels;   // measured height of the loaded view; 0 = not measured / no view
             // Desired visibility: Show() before the ad finished loading must still win.
             public bool BannerVisible;
 

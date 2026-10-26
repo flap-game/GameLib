@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.7.1] - 2026-10-26
+- IAnalytics.Track no longer allocates a closure per call, and a BufferedAnalyticsSink that is ready forwards Track / TrackAdRevenue / TrackPurchase directly (no closure, no lock).
+
 ## [0.7.0] - 2026-10-26
 - GameLibCli: GameLib Setup from batch mode for scripts and agents. `Install -gamelibModules id,...` adds the modules, their GameLib dependencies and SDKs (scoped registries, the newest registry version when none is pinned, Firebase tarballs), then creates and lists the module assets; run it until it exits 0 (2 = run again after Unity resolves). `Doctor` reports every module's state, its asset settings and the setup issues. JSON report in Logs/gamelib-<command>.json, exit code 1 on errors. Same API in the Editor: `InstallModules`, `BuildDoctorReport`.
 - Documentation~/agent-guide.md: integration order, rules and checks for AI agents.

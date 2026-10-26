@@ -30,6 +30,54 @@ namespace FlapGame.GameLib.Analytics.Firebase.Tests
         public void SetUp() => warnings.Clear();
 
         [Test]
+        public void Sanitizer_EventThatFits_IsPassedOnWithoutACopy()
+        {
+            var parameters = new Dictionary<string, object> { ["level"] = 3, ["mode"] = "hard", ["won"] = true };
+            var sanitizer = new FirebaseAnalyticsSanitizer(warnings.Add);
+
+            AnalyticsEvent? clean = sanitizer.Sanitize(new AnalyticsEvent("level_complete", parameters));
+
+            Assert.That(clean.Value.Name, Is.EqualTo("level_complete"));
+            Assert.That(clean.Value.Parameters, Is.SameAs(parameters));
+            Assert.That(warnings, Is.Empty);
+        }
+
+        [Test]
+        public void Sanitizer_EventThatDoesNotFit_IsStillCopiedAndFixed()
+        {
+            var sanitizer = new FirebaseAnalyticsSanitizer(warnings.Add);
+            var parameters = new Dictionary<string, object> { ["level"] = 3, ["note"] = null, ["big"] = ulong.MaxValue };
+
+            AnalyticsEvent? clean = sanitizer.Sanitize(new AnalyticsEvent("level_complete", parameters));
+
+            Assert.That(clean.Value.Parameters, Is.Not.SameAs(parameters));
+            Assert.That(clean.Value.Parameters["note"], Is.EqualTo(string.Empty));
+            Assert.That(clean.Value.Parameters["big"], Is.EqualTo((double)ulong.MaxValue));
+        }
+
+        [Test]
+        public void Sanitizer_RenamedEvent_IsRenamedTheSameEveryTime_AndWarnedOnce()
+        {
+            var sanitizer = new FirebaseAnalyticsSanitizer(warnings.Add);
+
+            for (int i = 0; i < 3; i++)
+                Assert.That(sanitizer.Sanitize(new AnalyticsEvent("level-complete")).Value.Name, Is.EqualTo("level_complete"));
+            Assert.That(sanitizer.Sanitize(new AnalyticsEvent("session_start")).Value.Name, Is.EqualTo("x_session_start"));
+            Assert.That(warnings.Count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void Sanitizer_IsValidName_MatchesSanitizeName()
+        {
+            foreach (string name in new[] { "level_complete", "a", "Level9", "1st", "_x", "x-y", "firebase_a", "ga_b", "session_start", new string('a', 40), new string('a', 41), "x_", "a__" })
+            {
+                bool valid = FirebaseAnalyticsSanitizer.IsValidName(name, 40, new HashSet<string> { "session_start" });
+                bool same = FirebaseAnalyticsSanitizer.SanitizeName(name, 40, new HashSet<string> { "session_start" }) == name;
+                Assert.That(valid, Is.EqualTo(same), name);
+            }
+        }
+
+        [Test]
         public void Sanitizer_FixesNames_ToFirebaseGrammar()
         {
             Assert.That(FirebaseAnalyticsSanitizer.SanitizeName("level-complete", 40), Is.EqualTo("level_complete"));

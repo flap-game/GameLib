@@ -37,6 +37,7 @@ if (ads.CanShow("revive", out AdBlockReason reason)) ShowReviveButton();
 | Policy | Rules over all fullscreen placements: global interstitial interval, first-interstitial delay, rewarded resets the interval, app open interval (90 s) and grace after another ad. |
 | App Open | `AppOpenPlacementId`: set it and the shared app open rule runs by itself (see below). |
 | Placements | Id, format, routes (provider + Android / iOS unit ids, in waterfall order), cooldown, session cap, hidden by no-ads, banner size / position. |
+| Logs | `VerboseLogs`: info logs for every load / show / retry also in release builds (always in the Editor and development builds). |
 
 Per-game interstitial rules (e.g. "from level 2 only") stay in game code: check your condition, then call
 `ShowInterstitialAsync`. `Policy` holds the time-based part.

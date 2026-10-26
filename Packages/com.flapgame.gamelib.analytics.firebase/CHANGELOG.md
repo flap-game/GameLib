@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.1] - 2026-10-26
+- An event that already fits Firebase limits (valid names, plain values, at most 25 parameters) is passed on without a copy and without building strings; renamed events are cached, so their rename and warning are built once. FirebaseAnalyticsSanitizer.IsValidName.
+- Parameters are built straight into the array LogEvent takes (no List + ToArray).
+
 ## [0.5.0] - 2026-10-26
 - A Firebase start slower than Init Timeout Seconds no longer turns analytics off for the session: one warning, and the buffered events are sent when Firebase is up.
 
