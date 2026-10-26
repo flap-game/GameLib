@@ -31,7 +31,7 @@ Modules never reference each other directly; they talk through contracts in `cor
 Add `core` to `Packages/manifest.json`, then open **GameLib > Setup** to add further modules and their SDKs step by step:
 
 ```json
-"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.1.0"
+"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.2.0"
 ```
 
 Unity does not resolve git dependencies between packages, so when installing by hand add every package
