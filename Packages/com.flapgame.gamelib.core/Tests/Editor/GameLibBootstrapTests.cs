@@ -90,6 +90,48 @@ namespace FlapGame.GameLib.Tests
         }
 
         [Test]
+        public void WhenReady_AfterFailedInitialize_IsFaulted()
+        {
+            TestModule broken = Module("broken", 0, new List<string>(), fail: true);
+            broken.Required = true;
+            Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await GameLibBootstrap.InitializeAsync(new GameLibModule[] { broken }, logAnalytics: false));
+
+            Task<IServiceRegistry> ready = GameLibBootstrap.WhenReadyAsync();
+
+            Assert.IsTrue(ready.IsFaulted);
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await ready);
+        }
+
+        [Test]
+        public async Task WhenReady_AfterResetFollowingFailure_WaitsForNextInitialize()
+        {
+            TestModule broken = Module("broken", 0, new List<string>(), fail: true);
+            broken.Required = true;
+            Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await GameLibBootstrap.InitializeAsync(new GameLibModule[] { broken }, logAnalytics: false));
+            GameLibBootstrap.Reset();
+
+            Task<IServiceRegistry> ready = GameLibBootstrap.WhenReadyAsync();
+            Assert.IsFalse(ready.IsCompleted);
+
+            IServiceRegistry services = await GameLibBootstrap.InitializeAsync(Array.Empty<GameLibModule>(), logAnalytics: false);
+            Assert.AreSame(services, await ready);
+        }
+
+        [Test]
+        public async Task Reset_DropsInitializedHandlers()
+        {
+            int raised = 0;
+            GameLibBootstrap.Initialized += _ => raised++;
+            GameLibBootstrap.Reset();
+
+            await GameLibBootstrap.InitializeAsync(Array.Empty<GameLibModule>(), logAnalytics: false);
+
+            Assert.AreEqual(0, raised);
+        }
+
+        [Test]
         public void Catalog_ListsDependenciesFirst()
         {
             IReadOnlyList<GameLibModuleInfo> chain = GameLibModuleCatalog.WithDependencies(GameLibModuleCatalog.Find("ads.max"));

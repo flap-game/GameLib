@@ -26,6 +26,10 @@ SDK created → CMP answered → consent sent → ATT answered (iOS) → custome
 with the user's choices. Everything tracked meanwhile is held and sent after the start (up to 200 calls). The ATT answer is
 also written to `IConsentState.Att`, so other modules see it.
 
+A consent change after the start (the player opens the privacy options form and withdraws) is sent to AppsFlyer at
+once, but the SDK applies DMA consent from its next start - the next launch. AppsFlyer does not recommend restarting
+the SDK mid-session for it, so GameLib does not.
+
 The user id (`IAnalytics.SetUserId`) becomes the AppsFlyer customer user id. Set it early (at launch, before the
 consent form is answered) and it goes out before `start`, so the install itself carries it; set later, it is attached
 to the events that follow.

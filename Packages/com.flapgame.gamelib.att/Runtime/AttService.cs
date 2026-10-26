@@ -17,7 +17,6 @@ namespace FlapGame.GameLib.Att
 
         private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan FocusPollInterval = TimeSpan.FromMilliseconds(100);
-        private static readonly TimeSpan FocusWait = TimeSpan.FromSeconds(10);
         private const int RequestAttempts = 3;
 
         private readonly IAttPrompt prompt;
@@ -85,8 +84,9 @@ namespace FlapGame.GameLib.Att
         {
             try
             {
-                // iOS ignores the request (answers "not determined" without a prompt) while the app is not active.
-                for (TimeSpan waited = TimeSpan.Zero; !isFocused() && waited < FocusWait; waited += FocusPollInterval)
+                // iOS ignores the request (answers "not determined" without a prompt) while the app is not active, and
+                // the prompt shows once per launch at most - so wait however long the player is away.
+                while (!isFocused())
                     await delay(FocusPollInterval, CancellationToken.None);
 
                 AttStatus status = AttStatus.NotDetermined;

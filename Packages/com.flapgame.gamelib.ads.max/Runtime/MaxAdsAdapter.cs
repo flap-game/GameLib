@@ -34,6 +34,8 @@ namespace FlapGame.GameLib.Ads
     {
         private const string LogPrefix = "[Ads/MAX]";
         private const double MaxRetryDelaySeconds = 60d;
+        // MAX documents impression-level revenue in USD; MaxSdkBase.AdInfo carries no currency field.
+        private const string RevenueCurrency = "USD";
 
         // Placement id -> assignment (placement + MAX unit id for this platform).
         private readonly Dictionary<string, AdUnitAssignment> assigned = new();
@@ -599,9 +601,8 @@ namespace FlapGame.GameLib.Ads
             }
 
             AdFormat format = assigned.TryGetValue(placementId, out AdUnitAssignment a) ? a.Format : unitFormats[unit];
-            // MAX reports impression revenue in USD (AdInfo has no currency field).
             ImpressionPaid?.Invoke(new AdImpression(placementId, AdProviderIds.Max, format, unit, info.NetworkName,
-                                                    info.Revenue, "USD", info.RevenuePrecision));
+                                                    info.Revenue, RevenueCurrency, info.RevenuePrecision));
         }
 
         private void OnAdViewLoaded(string unit)

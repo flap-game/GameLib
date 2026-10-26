@@ -18,6 +18,7 @@ namespace FlapGame.GameLib.Ads.Tests
         public readonly HashSet<string> Active = new();
         public readonly List<(string id, bool active)> ActiveCalls = new();
         public readonly List<string> Shown = new();
+        public readonly List<string> Hidden = new();
         public readonly List<string> Destroyed = new();
         public readonly List<(string id, bool suppressed)> SuppressCalls = new();
         public readonly List<ConsentState> Consents = new();
@@ -61,7 +62,7 @@ namespace FlapGame.GameLib.Ads.Tests
             return Pending != null ? new ValueTask<AdShowResult>(Pending.Task) : new ValueTask<AdShowResult>(NextResult);
         }
 
-        public void HideBanner(string placementId) { }
+        public void HideBanner(string placementId) => Hidden.Add(placementId);
         public void DestroyBanner(string placementId) => Destroyed.Add(placementId);
         public void ApplyConsent(ConsentState consent) => Consents.Add(consent);
         public void SetSuppressed(string placementId, bool suppressed) => SuppressCalls.Add((placementId, suppressed));
@@ -422,6 +423,35 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void Policy_AppOpen_DoesNotRestartTheInterstitialInterval_UnlessItFollowsTheRules()
+        {
+            settings.Policy.InterstitialMinIntervalSeconds = 180f;
+            settings.Policy.AppOpenMinIntervalSeconds = 0f;
+            settings.Placements.Add(new AdPlacement { Id = "open", Format = AdFormat.AppOpen, Routes = { new AdRoute("max", "m9") } });
+            using (var ads = Create())
+            {
+                max.MarkReady("open");
+                adMob.MarkReady("inter2");
+                clock = 200f;
+                Assert.That(Await(ads.ShowAsync("open")), Is.EqualTo(AdShowResult.Completed));
+                clock = 201f;
+                Assert.That(ads.CanShow("inter2", out _), Is.True, "a return to the app does not hold interstitials back");
+            }
+
+            settings.Policy.AppOpenFollowsInterstitialRules = true;
+            using (var ads = Create())
+            {
+                max.MarkReady("open");
+                adMob.MarkReady("inter2");
+                clock = 400f;
+                Assert.That(Await(ads.ShowAsync("open")), Is.EqualTo(AdShowResult.Completed));
+                clock = 401f;
+                Assert.That(ads.CanShow("inter2", out AdBlockReason reason), Is.False);
+                Assert.That(reason, Is.EqualTo(AdBlockReason.GlobalInterval));
+            }
+        }
+
+        [Test]
         public void Policy_FirstInterstitialDelay_FromServiceStart()
         {
             clock = 100f;
@@ -716,6 +746,59 @@ namespace FlapGame.GameLib.Ads.Tests
                 services.Dispose();
                 AdsProviderCatalog.ClearForTests();
             }
+        }
+
+        [Test]
+        public async Task Installer_ProviderJoiningLate_RepublishesConsent()
+        {
+            // MAX-style CMP: it answers only inside the SDK init, which outlasts the composite's init timeout.
+            var cmp = new GatedConsent { StatusValue = ConsentStatus.Unknown };
+            var factory = new FakeAdsFactory("max", 10, cmp);
+            AdsProviderCatalog.ClearForTests();
+            AdsProviderCatalog.Register(factory);
+            settings.Providers.Add(new AdsProviderConfig { ProviderId = "max" });
+            ServiceRegistry services = CoreServices();
+            settings.InitializeInBackground = true;
+            try
+            {
+                await settings.InstallAsync(services); // returns while the consent request is still pending
+                var composite = (CompositeAdsService)services.Resolve<IAdsService>();
+                composite.InitializeTimeout = TimeSpan.FromMilliseconds(50);
+                factory.Created.InitGate = new TaskCompletionSource<bool>();
+                LogAssert.Expect(LogType.Error, new Regex("max failed to initialize: timed out"));
+
+                cmp.Gate.SetResult(true);
+                for (int i = 0; i < 150 && !composite.IsInitialized; i++) await Task.Delay(20);
+                Assert.That(composite.IsInitialized, Is.True);
+                Assert.That(composite.IsProviderInitialized("max"), Is.False, "dropped by the init timeout");
+                await Task.Delay(100); // let the post-init consent push run
+                int pushed = factory.Created.Consents.Count;
+
+                cmp.StatusValue = ConsentStatus.Obtained; // the CMP inside the SDK init answered
+                factory.Created.InitGate.SetResult(true);
+                for (int i = 0; i < 150 && !composite.IsProviderInitialized("max"); i++) await Task.Delay(20);
+
+                Assert.That(composite.IsProviderInitialized("max"), Is.True, "joined late");
+                Assert.That(factory.Created.Consents.Count, Is.GreaterThan(pushed), "consent pushed again on the late join");
+                ConsentState expected = IabPrivacy.Map(ConsentStatus.Obtained, true);
+                Assert.That(services.Resolve<IConsentState>().Current.GdprApplies, Is.EqualTo(expected.GdprApplies));
+            }
+            finally
+            {
+                services.Dispose();
+                AdsProviderCatalog.ClearForTests();
+            }
+        }
+
+        private sealed class GatedConsent : IConsentService
+        {
+            public readonly TaskCompletionSource<bool> Gate = new();
+            public ConsentStatus StatusValue = ConsentStatus.Obtained;
+            public ConsentStatus Status => StatusValue;
+            public bool CanRequestAds => true;
+            public bool IsPrivacyOptionsRequired => false;
+            public ValueTask RequestAsync(CancellationToken cancellationToken = default) => new(Gate.Task);
+            public ValueTask ShowPrivacyOptionsAsync(CancellationToken cancellationToken = default) => default;
         }
 
         private static ServiceRegistry CoreServices()

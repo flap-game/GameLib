@@ -17,7 +17,9 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
             public Func<Task> Fetch = () => Task.CompletedTask;
             public Func<Task> SetDefaults = () => Task.CompletedTask;
             public int SetDefaultsCalls;
+            public int FetchCalls;
             public IReadOnlyDictionary<string, string> Defaults;
+            // Server values only, like Firebase's RemoteValue source.
             public readonly Dictionary<string, string> Values = new();
             public bool Started;
 
@@ -30,17 +32,18 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
 
             public async Task FetchAndActivateAsync(CancellationToken cancellationToken)
             {
+                FetchCalls++;
                 await Fetch();
                 Started = true;
             }
 
-            public bool TryGetString(string key, out string value)
+            public bool TryGetRemoteString(string key, out string value)
             {
                 value = null;
                 return Started && Values.TryGetValue(key, out value);
             }
 
-            public IReadOnlyDictionary<string, string> GetAll() => Values;
+            public IReadOnlyDictionary<string, string> GetRemoteValues() => Values;
         }
 
         private string cachePath;
@@ -79,7 +82,7 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
         }
 
         [Test]
-        public async Task Activation_SavesEveryValueToTheCache_AndRaisesActivated()
+        public async Task Activation_SavesServerValuesToTheCache_AndRaisesActivated()
         {
             var provider = new FakeProvider();
             provider.Values["ads_plan"] = "{\"Name\":\"p\"}";
@@ -94,6 +97,25 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
 
             RemoteConfigService nextLaunch = Create(new FakeProvider());
             Assert.That(nextLaunch.GetString("ads_plan"), Is.EqualTo("{\"Name\":\"p\"}"), "the next launch starts from the cache");
+        }
+
+        [Test]
+        public async Task Activation_CachesServerValuesOnly_SoDefaultsAndRemovedKeysComeBackNextLaunch()
+        {
+            new RemoteConfigCache(cachePath).Save(new Dictionary<string, string> { ["removed"] = "old_remote", ["kept"] = "old_remote" });
+            var provider = new FakeProvider();
+            provider.Values["kept"] = "remote";
+            RemoteConfigService service = Create(provider, new Dictionary<string, string> { ["tuning"] = "v1", ["removed"] = "default" });
+
+            await service.FetchAndActivateAsync();
+
+            Dictionary<string, string> cached = new RemoteConfigCache(cachePath).Load();
+            Assert.That(cached, Is.EquivalentTo(new Dictionary<string, string> { ["kept"] = "remote" }), "pushed defaults are not cached");
+
+            RemoteConfigService nextLaunch = Create(new FakeProvider(), new Dictionary<string, string> { ["tuning"] = "v2", ["removed"] = "default" });
+            Assert.That(nextLaunch.GetString("tuning"), Is.EqualTo("v2"), "a default changed in an app update reaches existing users");
+            Assert.That(nextLaunch.GetString("removed"), Is.EqualTo("default"), "a key removed in the console falls back to its default");
+            Assert.That(nextLaunch.GetString("kept"), Is.EqualTo("remote"));
         }
 
         [Test]
@@ -155,6 +177,34 @@ namespace FlapGame.GameLib.RemoteConfig.Tests
             LogAssert.Expect(LogType.Log, new Regex("Late fetch activated"));
             gate.SetResult(true);
             Assert.That(await CompletesWithin(activated.Task, 2000), Is.True, "a fetch landing after the timeout is still activated");
+        }
+
+        [Test]
+        public async Task FetchAfterTimeout_JoinsTheLateFetch_InsteadOfStartingAnother()
+        {
+            var gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var provider = new FakeProvider { Fetch = () => gate.Task };
+            RemoteConfigService service = Create(provider, timeoutSeconds: 0.05);
+            int activated = 0;
+            var firstActivation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            service.Activated += () => { activated++; firstActivation.TrySetResult(true); };
+
+            LogAssert.Expect(LogType.Warning, new Regex("timed out"));
+            await service.FetchAndActivateAsync();
+            LogAssert.Expect(LogType.Warning, new Regex("timed out"));
+            await service.FetchAndActivateAsync(); // a gameplay refresh while the first fetch still runs
+
+            Assert.That(provider.FetchCalls, Is.EqualTo(1));
+            Assert.That(provider.SetDefaultsCalls, Is.EqualTo(1));
+
+            LogAssert.Expect(LogType.Log, new Regex("Late fetch activated"));
+            gate.SetResult(true);
+            Assert.That(await CompletesWithin(firstActivation.Task, 2000), Is.True);
+            await Task.Delay(100);
+            Assert.That(activated, Is.EqualTo(1), "one round trip, one activation");
+
+            await service.FetchAndActivateAsync();
+            Assert.That(provider.FetchCalls, Is.EqualTo(2), "a fetch after the late one ended starts a new round trip");
         }
 
         [Test]

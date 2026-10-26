@@ -22,7 +22,8 @@ if (services.TryResolve(out ICrashReporter crashes))
 - **Report Uncaught Exceptions As Fatal**: off by default (uncaught C# exceptions show as non-fatal, the game usually
   keeps running).
 - It installs first among the modules. Calls made before Firebase is up are buffered and sent in order; if Firebase
-  cannot start within **Init Timeout Seconds**, crash reporting is off for the session (one log line).
+  cannot start at all, crash reporting is off for the session (one log line); past **Init Timeout Seconds** it only
+  warns and keeps buffering.
 
 Test it on a device build: throw from a button, restart the app, and the crash shows in the Firebase console within
 minutes. Symbol upload for native (IL2CPP) stacks: see Firebase's Crashlytics Unity docs.

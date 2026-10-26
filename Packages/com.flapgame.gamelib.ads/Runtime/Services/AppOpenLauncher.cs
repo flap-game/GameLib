@@ -45,11 +45,28 @@ namespace FlapGame.GameLib.Ads
             this.ads         = ads ?? throw new ArgumentNullException(nameof(ads));
             this.lifecycle   = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
             this.placementId = placementId ?? throw new ArgumentNullException(nameof(placementId));
+            if (ads is CompositeAdsService composite)
+                AdsStarted = () => composite.IsInitialized || composite.HasActiveRoute(placementId);
             lifecycle.Resumed += OnResumed;
         }
 
-        /// <summary>How long a launch waits for the app open ad to load; after that the launch shows none.</summary>
+        /// <summary>
+        /// How long a launch waits for the app open ad to load, counted from <see cref="AdsStarted"/> (consent and SDK
+        /// init come first and can take longer on a slow device); after that the launch shows none.
+        /// </summary>
         public float ColdStartWaitSeconds { get; set; } = 10f;
+
+        /// <summary>
+        /// True once the ad SDKs started (consent answered, SDK initialized), which starts the
+        /// <see cref="ColdStartWaitSeconds"/> deadline. Set from a <see cref="CompositeAdsService"/>; null = already started.
+        /// </summary>
+        public Func<bool> AdsStarted { get; set; }
+
+        /// <summary>
+        /// Latest point after the launch at which the launch ad may still show (ads starting and loading included), so it
+        /// never pops up in the middle of play.
+        /// </summary>
+        public float ColdStartMaxSeconds { get; set; } = 30f;
 
         /// <summary>Minimum time in the background before a return shows an ad. 0 = every return.</summary>
         public float MinBackgroundSeconds { get; set; }
@@ -114,9 +131,21 @@ namespace FlapGame.GameLib.Ads
 
         private async Task ColdStartAsync()
         {
-            float deadline = Time.realtimeSinceStartup + ColdStartWaitSeconds;
             try
             {
+                // The deadline covers the ad load only, not consent + SDK init before it.
+                float latest = Time.realtimeSinceStartup + ColdStartMaxSeconds;
+                while (AdsStarted != null && !AdsStarted())
+                {
+                    if (lifecycle.IsPaused) return; // left during startup: the return shows one instead
+                    if (Time.realtimeSinceStartup >= latest)
+                    {
+                        Debug.Log($"{LogPrefix} Ads not started {ColdStartMaxSeconds:0}s after launch - no launch app open ad.");
+                        return;
+                    }
+                    await Task.Delay(ColdStartPollMilliseconds, lifetime.Token);
+                }
+                float deadline = Math.Min(Time.realtimeSinceStartup + ColdStartWaitSeconds, latest);
                 while (!ads.IsPlacementReady(placementId))
                 {
                     if (Time.realtimeSinceStartup >= deadline)

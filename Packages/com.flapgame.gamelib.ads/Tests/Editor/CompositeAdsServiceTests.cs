@@ -200,10 +200,73 @@ namespace FlapGame.GameLib.Ads.Tests
         public void Banner_ForwardsToFirstInstalledRoute_EvenBeforeLoad()
         {
             using var ads = Create();
+            Init(ads);
             // Neither adapter has the banner loaded: desired-visibility semantics still hand it to MAX (first route).
             Await(ads.ShowBannerAsync("banner"));
 
             Assert.That(max.Shown, Is.EqualTo(new[] { "banner" }));
+            Assert.That(adMob.Shown, Is.Empty);
+        }
+
+        private static void Init(CompositeAdsService ads) => ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+
+        [Test]
+        public void Banner_RequestedBeforeInit_IsNotAFailure_AndShowsOnceTheRouteIsActive()
+        {
+            using var ads = Create();
+            var results = new List<(string, string, AdShowResult)>();
+            ads.ShowResult += (p, provider, r) => results.Add((p, provider, r));
+
+            Assert.That(Await(ads.ShowBannerAsync("banner")), Is.Not.EqualTo(AdShowResult.Failed), "accepted, pending init");
+            Assert.That(max.Shown, Is.Empty, "no adapter is asked before its route is active");
+
+            Init(ads);
+            Assert.That(max.Shown, Is.EqualTo(new[] { "banner" }), "replayed to the first route once active");
+            Assert.That(adMob.Shown, Is.Empty);
+            Assert.That(results, Is.EqualTo(new[] { ("banner", "max", AdShowResult.Completed) }));
+        }
+
+        [Test]
+        public void Banner_HiddenBeforeInit_IsNotShownAfterInit()
+        {
+            using var ads = Create();
+            Await(ads.ShowBannerAsync("banner"));
+            ads.HideBanner("banner");
+
+            Init(ads);
+            Assert.That(max.Shown, Is.Empty, "Hide cancels the pending show");
+            Assert.That(adMob.Shown, Is.Empty);
+        }
+
+        [Test]
+        public void Banner_FallbackRoute_IsShown_AndPrimaryTakesOverWhenItLoads()
+        {
+            using var ads = Create();
+            Init(ads);
+            Await(ads.ShowBannerAsync("banner"));
+            Assert.That(max.Shown, Is.EqualTo(new[] { "banner" }));
+
+            max.FailLoad("banner");
+            Assert.That(adMob.Active, Does.Contain("banner"), "fallback route opened");
+            Assert.That(adMob.Shown, Is.EqualTo(new[] { "banner" }), "the wanted banner is re-issued to the fallback");
+            Assert.That(max.Hidden, Does.Contain("banner"), "never on two providers at once");
+
+            max.MarkReady("banner");
+            Assert.That(adMob.Active, Has.No.Member("banner"), "primary loaded -> fallback closed");
+            Assert.That(max.Shown, Is.EqualTo(new[] { "banner", "banner" }), "and the primary shows it again");
+            Assert.That(adMob.Hidden, Does.Contain("banner"));
+        }
+
+        [Test]
+        public void Banner_FallbackAfterHide_IsNotShown()
+        {
+            using var ads = Create();
+            Init(ads);
+            Await(ads.ShowBannerAsync("banner"));
+            ads.HideBanner("banner");
+
+            max.FailLoad("banner");
+            Assert.That(adMob.Active, Does.Contain("banner"));
             Assert.That(adMob.Shown, Is.Empty);
         }
 

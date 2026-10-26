@@ -63,6 +63,8 @@ namespace FlapGame.GameLib.AppsFlyer
         [Tooltip("Game events sent to AppsFlyer, e.g. level_complete, tutorial_complete.")]
         public List<string> ForwardedEvents = new();
 
+        private static readonly TimeSpan BootstrapWait = TimeSpan.FromSeconds(30);
+
         public override int Order => GameLibModuleOrder.Analytics;
 
         public override ValueTask InstallAsync(IServiceRegistry services, CancellationToken cancellationToken = default)
@@ -88,14 +90,15 @@ namespace FlapGame.GameLib.AppsFlyer
             }
 
             var sink = new AppsFlyerSink(backend, purchaseMode, ForwardAllEvents, ForwardedEvents);
-            var buffer = new BufferedAnalyticsSink<AppsFlyerSink>(sink, LogTag);
+            // Only buffer the events AppsFlyer sends, so dropped game events never crowd out ad revenue and purchases.
+            var buffer = new BufferedAnalyticsSink<AppsFlyerSink>(sink, LogTag, bufferEvent: sink.Forwards);
             services.Resolve<IAnalyticsSinkRegistry>().AddSink(buffer);
 
             services.TryResolve(out IConsentState consent);
             if (consent != null && ConsentSource == AppsFlyerConsentSource.ConsentState)
             {
                 // Later changes (privacy options form); the first answer is sent by the startup before the start.
-                void Apply(ConsentState state) => buffer.Run(s => s.ApplyConsent(state));
+                void Apply(ConsentState state) => buffer.RunLatest("consent", s => s.ApplyConsent(state));
                 consent.Changed += Apply;
                 services.RegisterDisposable(Disposable.Create(() => consent.Changed -= Apply));
             }
@@ -106,7 +109,8 @@ namespace FlapGame.GameLib.AppsFlyer
             var startup = new AppsFlyerStartup(backend, consent, att, options, WaitForBootstrapAsync,
                                                () => services.IsRegistered<IConsentService>(),
                                                () => buffer.TryGetPendingUserId(out string userId) ? userId : null);
-            TimeSpan timeout = startup.MaxWait + TimeSpan.FromSeconds(30);
+            // Past this the buffer warns once and keeps waiting: a later start still sends everything buffered.
+            TimeSpan timeout = BootstrapWait + startup.MaxWait + TimeSpan.FromSeconds(30);
             Debug.Log($"{LogTag} Plugin {backend.Version}; starting after consent and ATT.");
             _ = buffer.InitializeAsync(startup.RunAsync, timeout, expectedFailure: Application.isEditor, cancellationToken);
             return default;
@@ -145,7 +149,7 @@ namespace FlapGame.GameLib.AppsFlyer
         {
             try
             {
-                await GameLibBootstrap.WhenReadyAsync(TimeSpan.FromSeconds(30));
+                await GameLibBootstrap.WhenReadyAsync(BootstrapWait);
             }
             catch (Exception)
             {

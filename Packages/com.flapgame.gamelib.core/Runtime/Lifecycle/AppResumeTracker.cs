@@ -8,9 +8,13 @@ namespace FlapGame.GameLib
     /// </summary>
     public sealed class AppResumeTracker
     {
+        /// <summary>A mark only counts for a pause that comes at most this many seconds after it.</summary>
+        public const double MarkLifetimeSeconds = 5;
+
         private int openScopes;
         private string scopeReason;
         private string pendingMark;
+        private double markedAt = double.NaN;
         private double pausedAt = double.NaN;
         private bool externalWhilePaused;
         private string externalReasonWhilePaused;
@@ -22,14 +26,27 @@ namespace FlapGame.GameLib
             return new Scope(this);
         }
 
-        public void MarkExternalActivity(string reason) => pendingMark = reason ?? "external";
+        /// <summary>
+        /// Marks the next pause as game-initiated if it comes within <see cref="MarkLifetimeSeconds"/> of
+        /// <paramref name="now"/>; a later pause (the click never left the app) is a real trip away.
+        /// </summary>
+        public void MarkExternalActivity(string reason, double now)
+        {
+            pendingMark = reason ?? "external";
+            markedAt = now;
+        }
+
+        /// <summary>Untimed mark: never expires, applies to the next pause whenever it comes. Prefer the timed overload.</summary>
+        public void MarkExternalActivity(string reason) => MarkExternalActivity(reason, double.NaN);
 
         public void OnPaused(double now)
         {
+            string mark = pendingMark != null && (double.IsNaN(markedAt) || now - markedAt <= MarkLifetimeSeconds) ? pendingMark : null;
             pausedAt = now;
-            externalWhilePaused = openScopes > 0 || pendingMark != null;
-            externalReasonWhilePaused = openScopes > 0 ? scopeReason : pendingMark;
+            externalWhilePaused = openScopes > 0 || mark != null;
+            externalReasonWhilePaused = openScopes > 0 ? scopeReason : mark;
             pendingMark = null;
+            markedAt = double.NaN;
         }
 
         /// <summary>Returns false when there was no matching pause (e.g. a resume delivered at startup).</summary>

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.0] - 2026-10-26
+- iOS: Control Center, Notification Center, an incoming-call banner or a system alert no longer raise IAppLifecycle.Resumed (Unity pauses for them on iOS, not on Android); only a real trip to the background does - so no app open ad after pulling Control Center down. Native observer in Plugins/iOS/GameLibLifecycle.mm.
+- BufferedAnalyticsSink.RunLatest(key, call): last call per key, never dropped, flushed before the queued calls - consent for Firebase and AppsFlyer uses it, so events never reach Firebase without consent mode. A full buffer of ad revenue / purchases drops a new plain event instead of revenue.
+- BufferedAnalyticsSink: a timeout no longer disables the sink. It logs one warning and keeps buffering; a start that lands later flushes everything ("late ready"), a later failure disables it then.
+- BufferedAnalyticsSink: a full buffer drops the oldest event first; ad revenue and purchases are dropped only when nothing else is left. New optional `bufferEvent` filter: events the SDK would not send are not buffered.
+
 ## [0.4.0] - 2026-10-26
 - IAttService contract (App Tracking Transparency status and prompt), implemented by the new ATT module.
 - IConsentState.WaitUntilResolvedAsync: wait for the CMP answer with a timeout.

@@ -90,7 +90,14 @@ namespace FlapGame.GameLib.Iap
         /// <summary>True when the purchase was made in an earlier session (approved later, or the app closed before granting).</summary>
         public bool IsRecovered { get; internal set; }
 
-        public override string ToString() => $"{ProductId} tx={TransactionId}{(IsRecovered ? " (recovered)" : string.Empty)}";
+        /// <summary>
+        /// True for a restored purchase or a subscription renewal (App Store: another transaction of an earlier one). It is
+        /// granted, but not reported as new revenue.
+        /// </summary>
+        public bool IsRestore { get; internal set; }
+
+        public override string ToString() =>
+            $"{ProductId} tx={TransactionId}{(IsRecovered ? " (recovered)" : string.Empty)}{(IsRestore ? " (restore)" : string.Empty)}";
     }
 
     public enum IapPurchaseStatus

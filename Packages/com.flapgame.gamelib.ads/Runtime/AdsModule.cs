@@ -223,8 +223,11 @@ namespace FlapGame.GameLib.Ads
             service.ApplyConsent(initial);
             if (forwarder == null)
                 consentState.Update(initial); // no CMP at all: publish "not required" so trackers do not wait
+            else
+                // A provider that timed out at init and joins later (MAX's CMP inside its init) answers only then.
+                service.ProviderJoinedLate += _ => forwarder.Push();
 
-            // 4. App open rule.
+            // 4. App open rule. Its cold-start deadline starts once the SDKs are up (AppOpenLauncher.AdsStarted).
             if (!string.IsNullOrEmpty(AppOpenPlacementId) && lifecycle != null)
             {
                 var launcher = new AppOpenLauncher(service, lifecycle, AppOpenPlacementId) { ColdStartWaitSeconds = AppOpenColdStartWaitSeconds };
@@ -233,9 +236,9 @@ namespace FlapGame.GameLib.Ads
             }
 
             if (InitializeInBackground)
-                _ = RunInBackgroundAsync(forwarder, service, cancellationToken);
+                _ = RunInBackgroundAsync(forwarder, service, lifecycle, cancellationToken);
             else
-                await InitializeAdsAsync(forwarder, service, cancellationToken);
+                await InitializeAdsAsync(forwarder, service, lifecycle, cancellationToken);
         }
 
         /// <summary>
@@ -369,11 +372,12 @@ namespace FlapGame.GameLib.Ads
             catch (Exception e) { Debug.LogWarning($"[Ads] ads_plan user property failed: {e.Message}"); }
         }
 
-        private async Task RunInBackgroundAsync(IConsentService consentService, CompositeAdsService service, CancellationToken cancellationToken)
+        private async Task RunInBackgroundAsync(IConsentService consentService, CompositeAdsService service, IAppLifecycle lifecycle,
+                                                CancellationToken cancellationToken)
         {
             try
             {
-                await InitializeAdsAsync(consentService, service, cancellationToken);
+                await InitializeAdsAsync(consentService, service, lifecycle, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -387,7 +391,8 @@ namespace FlapGame.GameLib.Ads
 
         // The consent platform runs BEFORE any SDK initializes or loads (required by Google UMP), and nothing starts
         // until it says CanRequestAds.
-        private async Task InitializeAdsAsync(IConsentService consentService, CompositeAdsService service, CancellationToken cancellationToken)
+        private async Task InitializeAdsAsync(IConsentService consentService, CompositeAdsService service, IAppLifecycle lifecycle,
+                                              CancellationToken cancellationToken)
         {
             if (consentService != null)
             {
@@ -397,13 +402,12 @@ namespace FlapGame.GameLib.Ads
                 {
                     if (answered)
                     {
-                        Debug.LogWarning("[Consent] CanRequestAds is false after the consent flow - ad SDKs stay uninitialized. " +
-                                         "Call IConsentService.RequestAsync then IAdsService.InitializeAsync to retry.");
+                        NoConsentYet(consentService, service, lifecycle, cancellationToken);
                         return;
                     }
                     // No answer yet and nothing stored from a previous session: start ads the moment the flow finishes.
                     Debug.LogWarning($"[Consent] No consent answer after {ConsentTimeoutSeconds:0}s - ads start once the consent flow completes.");
-                    _ = InitializeAfterConsentAsync(request, consentService, service, cancellationToken);
+                    _ = InitializeAfterConsentAsync(request, consentService, service, lifecycle, cancellationToken);
                     return;
                 }
                 if (!answered)
@@ -470,7 +474,8 @@ namespace FlapGame.GameLib.Ads
             }
         }
 
-        private static async Task InitializeAfterConsentAsync(Task request, IConsentService consentService, CompositeAdsService service, CancellationToken cancellationToken)
+        private async Task InitializeAfterConsentAsync(Task request, IConsentService consentService, CompositeAdsService service,
+                                                       IAppLifecycle lifecycle, CancellationToken cancellationToken)
         {
             try
             {
@@ -480,13 +485,78 @@ namespace FlapGame.GameLib.Ads
                     await service.InitializeAsync(cancellationToken);
                     PushConsentAfterInit(consentService);
                 }
-                else Debug.LogWarning("[Consent] Consent flow finished without permission to request ads - ad SDKs stay uninitialized.");
+                else NoConsentYet(consentService, service, lifecycle, cancellationToken);
             }
             catch (OperationCanceledException) { }
             catch (Exception e)
             {
                 Debug.LogError($"[Ads] Initialization after consent failed: {e.Message}");
             }
+        }
+
+        /// <summary>How many returns to the app re-run a consent flow that ended without permission to request ads.</summary>
+        public const int ConsentRetriesOnResume = 3;
+
+        // The consent flow ended without permission to request ads - typically UMP's update failing offline on the first
+        // launch. Retried on the next returns to the app (bounded); ads start as soon as a retry allows them.
+        private void NoConsentYet(IConsentService consentService, CompositeAdsService service, IAppLifecycle lifecycle,
+                                         CancellationToken cancellationToken)
+        {
+            if (lifecycle == null)
+            {
+                Debug.LogWarning("[Consent] CanRequestAds is false after the consent flow - ad SDKs stay uninitialized. " +
+                                 "Call IConsentService.RequestAsync then IAdsService.InitializeAsync to retry.");
+                return;
+            }
+            Debug.LogWarning($"[Consent] CanRequestAds is false after the consent flow - retried on the next {ConsentRetriesOnResume} returns to the app.");
+
+            int attempts = 0;
+            bool running = false;
+            void OnResumed(AppResumeInfo info)
+            {
+                if (running) return;
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    lifecycle.Resumed -= OnResumed;
+                    return;
+                }
+                running = true;
+                attempts++;
+                _ = RetryAsync();
+            }
+            async Task RetryAsync()
+            {
+                try
+                {
+                    // Bounded like the first request: a retry that never answers must not block the next resumes.
+                    await WaitForConsentAsync(RequestConsentSafeAsync(consentService, cancellationToken), consentService, cancellationToken);
+                    if (consentService.CanRequestAds)
+                    {
+                        lifecycle.Resumed -= OnResumed;
+                        Debug.Log("[Consent] Consent retry allows ads - starting the ad SDKs.");
+                        await service.InitializeAsync(cancellationToken);
+                        PushConsentAfterInit(consentService);
+                    }
+                    else if (attempts >= ConsentRetriesOnResume)
+                    {
+                        lifecycle.Resumed -= OnResumed;
+                        Debug.LogWarning("[Consent] CanRequestAds still false - ad SDKs stay uninitialized for this session.");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    lifecycle.Resumed -= OnResumed;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[Ads] Initialization after a consent retry failed: {e.Message}");
+                }
+                finally
+                {
+                    running = false;
+                }
+            }
+            lifecycle.Resumed += OnResumed;
         }
 
         /// <summary>

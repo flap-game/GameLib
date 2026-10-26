@@ -9,11 +9,13 @@ namespace FlapGame.GameLib.RemoteConfig
 {
     /// <summary>
     /// <see cref="IRemoteConfig"/> over a provider, with defaults, a disk cache of the last activation, a fetch timeout and
-    /// readiness. Reads never block and never throw: the provider's active value when it has one, otherwise the cached
-    /// value from the last session, otherwise the default from the module asset, otherwise the caller's default - so values
-    /// (the Ads plan, ...) are usable right at install.
+    /// readiness. Reads never block and never throw: the server value the provider has active, otherwise the cached
+    /// server value from the last session, otherwise the default from the module asset, otherwise the caller's default -
+    /// so values (the Ads plan, ...) are usable right at install. The cache holds server values only, so a changed default
+    /// reaches existing users and a key removed in the console falls back to its default on the next launch.
     /// <para><see cref="WhenReadyAsync"/> completes after the first fetch whatever happens (success, failure, timeout, no
-    /// provider). A fetch that lands after the timeout is still cached and raises <see cref="Activated"/>.</para>
+    /// provider). A fetch that lands after the timeout is still cached and raises <see cref="Activated"/>; until it ends,
+    /// further fetch calls join it instead of starting another.</para>
     /// </summary>
     public sealed class RemoteConfigService : IRemoteConfig
     {
@@ -22,7 +24,9 @@ namespace FlapGame.GameLib.RemoteConfig
         private readonly TimeSpan fetchTimeout;
         private readonly Dictionary<string, string> fallback;
         private readonly TaskCompletionSource<bool> ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // The real round trip (SetDefaults + fetch + activation) until it truly ends, past the caller's timeout too.
         private Task inFlight;
+        private bool inFlightTimedOut;
         private bool defaultsApplied;
 
         /// <param name="provider">Null = defaults and cache only (no SDK); ready after the first fetch call.</param>
@@ -33,7 +37,7 @@ namespace FlapGame.GameLib.RemoteConfig
             this.cache = cache;
             this.fetchTimeout = fetchTimeout;
 
-            // Defaults < cache: the last session's fetched values win.
+            // Defaults < cache: the last session's server values win.
             fallback = new Dictionary<string, string>(StringComparer.Ordinal);
             if (defaults != null)
                 foreach (KeyValuePair<string, string> kv in defaults)
@@ -52,19 +56,21 @@ namespace FlapGame.GameLib.RemoteConfig
 
         public ValueTask FetchAndActivateAsync(CancellationToken cancellationToken = default)
         {
-            // Coalesce concurrent callers (module background fetch + a gameplay refresh) into one round trip.
+            // Coalesce concurrent callers (module background fetch + a gameplay refresh) into one round trip, including a
+            // fetch still running after its timeout.
             if (inFlight == null || inFlight.IsCompleted)
-                inFlight = FetchInternalAsync(cancellationToken);
-            return new ValueTask(inFlight);
+            {
+                inFlightTimedOut = false;
+                inFlight = provider == null ? Task.CompletedTask : FetchInternalAsync(cancellationToken);
+            }
+            return new ValueTask(WaitAsync(inFlight, cancellationToken));
         }
 
-        private async Task FetchInternalAsync(CancellationToken cancellationToken)
+        // The caller's view of the round trip: done at the timeout, while the work itself goes on.
+        private async Task WaitAsync(Task work, CancellationToken cancellationToken)
         {
             try
             {
-                if (provider == null) return;
-
-                Task work = FetchCoreAsync(cancellationToken);
                 if (!work.IsCompleted && fetchTimeout > TimeSpan.Zero && fetchTimeout != Timeout.InfiniteTimeSpan)
                 {
                     using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -73,22 +79,12 @@ namespace FlapGame.GameLib.RemoteConfig
                     if (finished != work)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
+                        inFlightTimedOut = true;
                         Debug.LogWarning($"[RemoteConfig] Fetch timed out after {fetchTimeout.TotalSeconds:0.#}s - using cached/default values; a late result is still applied.");
-                        _ = CompleteLateAsync(work);
                         return;
                     }
                 }
-
-                try
-                {
-                    await work;
-                    OnActivated();
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"[RemoteConfig] Fetch failed - using cached/default values. {Describe(e)}");
-                }
+                await work;
             }
             finally
             {
@@ -96,38 +92,45 @@ namespace FlapGame.GameLib.RemoteConfig
             }
         }
 
+        // Never faults: a failure is logged here. Cancelled only through the token.
+        private async Task FetchInternalAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await FetchCoreAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception e)
+            {
+                Debug.LogWarning(inFlightTimedOut
+                    ? $"[RemoteConfig] Late fetch failed - keeping cached/default values. {Describe(e)}"
+                    : $"[RemoteConfig] Fetch failed - using cached/default values. {Describe(e)}");
+                return;
+            }
+
+            if (inFlightTimedOut) Debug.Log("[RemoteConfig] Late fetch activated.");
+            OnActivated();
+        }
+
         private async Task FetchCoreAsync(CancellationToken cancellationToken)
         {
             if (!defaultsApplied)
             {
-                // The provider serves the same defaults + cache, so a key the server does not set keeps its value.
+                // The provider serves the same defaults + cache (last server values) as the service reads.
                 await provider.SetDefaultsAsync(new Dictionary<string, string>(fallback, StringComparer.Ordinal), cancellationToken);
                 defaultsApplied = true;
             }
             await provider.FetchAndActivateAsync(cancellationToken);
         }
 
-        private async Task CompleteLateAsync(Task work)
-        {
-            try
-            {
-                await work;
-                Debug.Log("[RemoteConfig] Late fetch activated.");
-                OnActivated();
-            }
-            catch (OperationCanceledException) { }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[RemoteConfig] Late fetch failed - keeping cached/default values. {Describe(e)}");
-            }
-        }
-
         private void OnActivated()
         {
             try
             {
-                IReadOnlyDictionary<string, string> all = provider.GetAll();
-                if (all != null && all.Count > 0) cache?.Save(all);
+                // Server values only: a cached default would beat the module defaults on every later launch. Saved even
+                // when empty, so keys removed in the console fall back to the defaults next launch.
+                IReadOnlyDictionary<string, string> remote = provider.GetRemoteValues();
+                if (remote != null) cache?.Save(remote);
             }
             catch (Exception e)
             {
@@ -145,14 +148,14 @@ namespace FlapGame.GameLib.RemoteConfig
 
         // ── Reads ────────────────────────────────────────────────────────
 
-        /// <summary>The raw value: provider, then cache, then defaults. False when no source has the key.</summary>
+        /// <summary>The raw value: provider's server value, then cache, then defaults. False when no source has the key.</summary>
         public bool TryGetString(string key, out string value)
         {
             value = null;
             if (string.IsNullOrEmpty(key)) return false;
             try
             {
-                if (provider != null && provider.TryGetString(key, out value)) return true;
+                if (provider != null && provider.TryGetRemoteString(key, out value)) return true;
             }
             catch (Exception e)
             {

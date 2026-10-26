@@ -26,7 +26,11 @@ namespace FlapGame.GameLib
         /// <summary>Raised on OnApplicationFocus; the argument is true when focus was gained.</summary>
         event Action<bool> FocusChanged;
 
-        /// <summary>Raised when the app comes back from the background (after a PauseChanged(true) / PauseChanged(false) pair).</summary>
+        /// <summary>
+        /// Raised when the app comes back from the background (after a PauseChanged(true) / PauseChanged(false) pair). Only
+        /// a real trip to the background counts: on iOS, Control Center, Notification Center or a system alert pause Unity
+        /// too but raise no Resumed - the same as on Android, where they only change focus.
+        /// </summary>
         event Action<AppResumeInfo> Resumed;
 
         /// <summary>Raised once when the application is quitting.</summary>
@@ -39,7 +43,9 @@ namespace FlapGame.GameLib
         IDisposable BeginExternalActivity(string reason);
 
         /// <summary>One-shot variant of <see cref="BeginExternalActivity"/>: the next return from the background only.
-        /// Call right before opening a URL, the store page, a share sheet, ...</summary>
+        /// Call right before opening a URL, the store page, a share sheet, ... The mark expires: it is dropped when the
+        /// app does not go to the background within <see cref="AppResumeTracker.MarkLifetimeSeconds"/>, so a click that
+        /// never left the app cannot swallow the player's next real return.</summary>
         void MarkExternalActivity(string reason);
     }
 

@@ -20,6 +20,21 @@ namespace FlapGame.GameLib.Iap
         public const string PurchaseDeferredEvent = "iap_purchase_deferred";
         public const string RestoreEvent = "iap_restore";
 
+        /// <summary>Longest wait for the purchases a successful restore fetches, before <see cref="RestoreAsync"/> returns anyway.</summary>
+        public static readonly TimeSpan RestoreFetchTimeout = TimeSpan.FromSeconds(15);
+
+        /// <summary>Longest wait for the store's restore answer (it may ask for the Apple ID password); then false.</summary>
+        public static readonly TimeSpan RestoreTimeout = TimeSpan.FromSeconds(120);
+
+        private sealed class Restoring
+        {
+            public TaskCompletionSource<bool> Result;
+            public IDisposable ExternalActivity;
+            public bool WaitingForFetch;
+            // The store fetches before it answers the restore, and that fetch can complete first.
+            public bool? FetchSucceeded;
+        }
+
         private sealed class InFlight
         {
             public string ProductId;
@@ -39,11 +54,16 @@ namespace FlapGame.GameLib.Iap
         private readonly List<(IapStoreOrder Order, IapPurchase Purchase)> held = new();
         private Action<IapPurchase> grantedHandlers;
         private InFlight inFlight;
+        private Restoring restoring;
         private bool disposed;
 
+        private readonly Func<TimeSpan, Task> delay;
+
+        /// <param name="delay">Defaults to <see cref="Task.Delay(TimeSpan)"/>; replaced in tests.</param>
         public IapService(IIapStore store, IEnumerable<IapProductConfig> configs, IEntitlements entitlements, IAnalytics analytics,
-                          IAppLifecycle lifecycle = null, IIapTransactionLog grantedLog = null)
+                          IAppLifecycle lifecycle = null, IIapTransactionLog grantedLog = null, Func<TimeSpan, Task> delay = null)
         {
+            this.delay = delay ?? Task.Delay;
             this.store = store;
             this.entitlements = entitlements;
             this.analytics = analytics;
@@ -65,6 +85,7 @@ namespace FlapGame.GameLib.Iap
             store.PurchaseFailed += OnPurchaseFailed;
             store.PurchaseDeferred += OnPurchaseDeferred;
             store.PurchasesFetched += OnPurchasesFetched;
+            store.PurchasesFetchFailed += OnPurchasesFetchFailed;
         }
 
         public bool IsReady { get; private set; }
@@ -135,20 +156,80 @@ namespace FlapGame.GameLib.Iap
             return task;
         }
 
+        /// <summary>
+        /// Completes after the restored purchases were applied (<see cref="IsOwned"/> and entitlements are up to date), or with
+        /// false when the restore or the purchase fetch that follows it failed. Concurrent calls share one restore.
+        /// </summary>
         public Task<bool> RestoreAsync()
         {
             if (store == null || !IsReady) return Task.FromResult(false);
-            var result = new TaskCompletionSource<bool>();
-            IDisposable scope = lifecycle?.BeginExternalActivity("purchase");
-            store.Restore((success, error) =>
+            if (restoring != null) return restoring.Result.Task;
+            var current = new Restoring
             {
-                scope?.Dispose();
-                analytics?.Track(RestoreEvent, ("success", success), ("error", error ?? string.Empty));
-                if (success) store.FetchPurchases();
-                else Debug.LogWarning($"[IAP] Restore failed: {error}");
-                result.TrySetResult(success);
-            });
-            return result.Task;
+                Result = new TaskCompletionSource<bool>(),
+                ExternalActivity = lifecycle?.BeginExternalActivity("purchase"),
+            };
+            restoring = current;
+            _ = RestoreTimeoutAsync(current);
+            try
+            {
+                store.Restore((success, error) =>
+                {
+                    if (restoring != current) return;
+                    analytics?.Track(RestoreEvent, ("success", success), ("error", error ?? string.Empty));
+                    if (!success)
+                    {
+                        Debug.LogWarning($"[IAP] Restore failed: {error}");
+                        FinishRestore(current, false);
+                        return;
+                    }
+                    // The store fetches the purchases itself after a restore; the answer is applied in OnPurchasesFetched.
+                    if (current.FetchSucceeded.HasValue)
+                    {
+                        FinishRestore(current, current.FetchSucceeded.Value);
+                        return;
+                    }
+                    current.WaitingForFetch = true;
+                    _ = RestoreFetchTimeoutAsync(current);
+                });
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[IAP] Restore failed: {e.Message}");
+                FinishRestore(current, false);
+            }
+            return current.Result.Task;
+        }
+
+        private async Task RestoreTimeoutAsync(Restoring current)
+        {
+            await delay(RestoreTimeout);
+            if (restoring != current || current.WaitingForFetch) return;
+            Debug.LogWarning($"[IAP] Restore: no answer from the store after {RestoreTimeout.TotalSeconds:0}s.");
+            FinishRestore(current, false);
+        }
+
+        private async Task RestoreFetchTimeoutAsync(Restoring current)
+        {
+            await delay(RestoreFetchTimeout);
+            if (restoring != current) return;
+            Debug.LogWarning($"[IAP] Restore: no purchase list after {RestoreFetchTimeout.TotalSeconds:0}s - returning anyway.");
+            FinishRestore(current, true);
+        }
+
+        private void OnRestoreFetchResult(bool success)
+        {
+            if (restoring == null) return;
+            if (restoring.WaitingForFetch) FinishRestore(restoring, success);
+            else restoring.FetchSucceeded = success;
+        }
+
+        private void FinishRestore(Restoring current, bool success)
+        {
+            if (restoring == current) restoring = null;
+            current.ExternalActivity?.Dispose();
+            current.ExternalActivity = null;
+            current.Result.TrySetResult(success);
         }
 
         // ── Store callbacks ─────────────────────────────────────────────
@@ -174,12 +255,12 @@ namespace FlapGame.GameLib.Iap
 
         private void OnProductsFetchFailed(string reason) => Debug.LogWarning($"[IAP] Products could not be fetched: {reason}");
 
-        private void OnPurchasesFetched(IReadOnlyList<IapStoreOrder> confirmed)
+        private void OnPurchasesFetched(IReadOnlyList<IapStoreOrder> paid)
         {
             foreach (IapProduct p in products.Values)
             {
                 if (p.Kind == PurchaseProductKind.Consumable) continue;
-                bool isOwned = confirmed.Any(o => o.ProductId == p.Id && (p.Kind != PurchaseProductKind.Subscription || o.SubscriptionActive != false));
+                bool isOwned = paid.Any(o => o.ProductId == p.Id && (p.Kind != PurchaseProductKind.Subscription || o.SubscriptionActive != false));
                 if (isOwned)
                 {
                     owned.Add(p.Id);
@@ -192,7 +273,11 @@ namespace FlapGame.GameLib.Iap
                     if (p.Entitlement != null) entitlements?.Revoke(p.Entitlement);
                 }
             }
+
+            OnRestoreFetchResult(true);
         }
+
+        private void OnPurchasesFetchFailed(string reason) => OnRestoreFetchResult(false);
 
         private void OnPurchasePending(IapStoreOrder order)
         {
@@ -211,6 +296,7 @@ namespace FlapGame.GameLib.Iap
                 TransactionId = order.TransactionId,
                 Placement = fromThisPurchase ? inFlight.Placement : null,
                 IsRecovered = !fromThisPurchase,
+                IsRestore = !string.IsNullOrEmpty(order.OriginalTransactionId) && order.OriginalTransactionId != order.TransactionId,
             };
 
             if (!string.IsNullOrEmpty(order.TransactionId) && grantedLog.Contains(order.TransactionId))
@@ -238,6 +324,9 @@ namespace FlapGame.GameLib.Iap
             if (product.Kind != PurchaseProductKind.Consumable) owned.Add(product.Id);
             if (product.Entitlement != null) entitlements?.Grant(product.Entitlement);
 
+            // Logged before the handlers: a crash in between loses this grant rather than granting it twice on redelivery.
+            if (!string.IsNullOrEmpty(order.TransactionId)) grantedLog.Add(order.TransactionId);
+
             Action<IapPurchase> handlers = grantedHandlers;
             if (handlers != null)
                 foreach (Delegate handler in handlers.GetInvocationList())
@@ -246,7 +335,6 @@ namespace FlapGame.GameLib.Iap
                     catch (Exception e) { Debug.LogException(e); }
                 }
 
-            if (!string.IsNullOrEmpty(order.TransactionId)) grantedLog.Add(order.TransactionId);
             TrackSuccess(purchase, order);
             store.Confirm(order);
             Complete(product.Id, IapPurchaseStatus.Success, order.TransactionId, null);
@@ -300,16 +388,20 @@ namespace FlapGame.GameLib.Iap
         {
             if (analytics == null) return;
             IapProduct p = purchase.Product;
-            analytics.TrackPurchase(new PurchaseRecord
+            // Restores and renewals are not new revenue; the store / server reports renewals.
+            if (!purchase.IsRestore)
             {
-                ProductId = p.Id,
-                ProductKind = p.Kind,
-                Price = p.Price,
-                Currency = p.Currency,
-                TransactionId = order.TransactionId,
-                Placement = purchase.Placement,
-                Receipt = order.Receipt,
-            });
+                analytics.TrackPurchase(new PurchaseRecord
+                {
+                    ProductId = p.Id,
+                    ProductKind = p.Kind,
+                    Price = p.Price,
+                    Currency = p.Currency,
+                    TransactionId = order.TransactionId,
+                    Placement = purchase.Placement,
+                    Receipt = order.Receipt,
+                });
+            }
             analytics.Track(PurchaseSuccessEvent,
                             ("product_id", p.Id),
                             ("product_type", p.Kind.ToString()),
@@ -318,7 +410,8 @@ namespace FlapGame.GameLib.Iap
                             ("price_string", p.PriceString ?? string.Empty),
                             ("transaction_id", order.TransactionId ?? string.Empty),
                             ("placement", purchase.Placement ?? string.Empty),
-                            ("recovered", purchase.IsRecovered));
+                            ("recovered", purchase.IsRecovered),
+                            ("restore", purchase.IsRestore));
         }
 
         public void Dispose()
@@ -333,7 +426,9 @@ namespace FlapGame.GameLib.Iap
                 store.PurchaseFailed -= OnPurchaseFailed;
                 store.PurchaseDeferred -= OnPurchaseDeferred;
                 store.PurchasesFetched -= OnPurchasesFetched;
+                store.PurchasesFetchFailed -= OnPurchasesFetchFailed;
             }
+            if (restoring != null) FinishRestore(restoring, false);
             Complete(null, IapPurchaseStatus.Failed, null, "IAP shut down");
         }
     }

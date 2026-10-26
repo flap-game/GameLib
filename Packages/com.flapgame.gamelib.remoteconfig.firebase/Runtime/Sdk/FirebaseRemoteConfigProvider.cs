@@ -48,22 +48,23 @@ namespace FlapGame.GameLib.RemoteConfig
             await fetch;
         }
 
-        public bool TryGetString(string key, out string value)
+        public bool TryGetRemoteString(string key, out string value)
         {
             value = null;
             if (!available || string.IsNullOrEmpty(key)) return false;
             FRC.ConfigValue v = Config.GetValue(key);
-            if (v.Source == FRC.ValueSource.StaticValue) return false;
+            if (v.Source != FRC.ValueSource.RemoteValue) return false;
             value = v.StringValue;
             return true;
         }
 
-        public IReadOnlyDictionary<string, string> GetAll()
+        public IReadOnlyDictionary<string, string> GetRemoteValues()
         {
             var result = new Dictionary<string, string>(StringComparer.Ordinal);
             if (!available) return result;
+            // DefaultValue is what the service pushed (module defaults + cache): caching it would pin today's defaults.
             foreach (KeyValuePair<string, FRC.ConfigValue> kv in Config.AllValues)
-                if (kv.Value.Source != FRC.ValueSource.StaticValue)
+                if (kv.Value.Source == FRC.ValueSource.RemoteValue)
                     result[kv.Key] = kv.Value.StringValue;
             return result;
         }

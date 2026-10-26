@@ -60,6 +60,29 @@ namespace FlapGame.GameLib.Tests
         }
 
         [Test]
+        public void TimedMark_CountsForPauseRightAfter()
+        {
+            var tracker = new AppResumeTracker();
+            tracker.MarkExternalActivity("link", 10);
+            tracker.OnPaused(11);
+            tracker.TryResume(20, out AppResumeInfo info);
+            Assert.IsTrue(info.FromExternalActivity);
+            Assert.AreEqual("link", info.ExternalReason);
+        }
+
+        [Test]
+        public void TimedMark_ExpiresWhenAppDidNotLeave()
+        {
+            // Ad click that never backgrounded the app; the player's Home-button trip later is a real return.
+            var tracker = new AppResumeTracker();
+            tracker.MarkExternalActivity("ad_click", 10);
+            tracker.OnPaused(10 + AppResumeTracker.MarkLifetimeSeconds + 1);
+            tracker.TryResume(100, out AppResumeInfo info);
+            Assert.IsFalse(info.FromExternalActivity);
+            Assert.IsNull(info.ExternalReason);
+        }
+
+        [Test]
         public void ClosedScope_DoesNotLeak()
         {
             var tracker = new AppResumeTracker();

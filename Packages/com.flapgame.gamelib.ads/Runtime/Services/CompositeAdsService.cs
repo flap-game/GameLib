@@ -43,6 +43,9 @@ namespace FlapGame.GameLib.Ads
         private readonly Dictionary<string, string> showingProvider = new();
         private readonly Dictionary<string, int> showsThisSession = new();
         private readonly Dictionary<string, float> lastShownAt = new();
+        // Banners the game wants visible (ShowAsync until HideBanner / DestroyBanner), and the provider asked to show each.
+        private readonly HashSet<string> wantedBanners = new();
+        private readonly Dictionary<string, string> bannerProvider = new();
         private readonly Func<bool> noAdsOwned;
         private readonly Func<float> now;
         private readonly Func<IAdsProviderAdapter, AdsProviderContext> contextFactory;
@@ -78,6 +81,12 @@ namespace FlapGame.GameLib.Ads
 
         /// <summary>Every ad click of every adapter that reports clicks (<see cref="IAdClickSource"/>): placement id.</summary>
         public event Action<string> AdClicked;
+
+        /// <summary>
+        /// Raised with the provider id when an adapter that timed out at init finished later and its routes came back.
+        /// A CMP that runs inside that SDK's init (MAX) only answers now: the installer re-publishes consent on it.
+        /// </summary>
+        public event Action<string> ProviderJoinedLate;
 
         /// <param name="adapters">One adapter per provider id. A second adapter with the same id is ignored with a warning.</param>
         /// <param name="settings">Placement table, providers and policy. Null = no placements (every show fails with UnknownPlacement).</param>
@@ -281,6 +290,9 @@ namespace FlapGame.GameLib.Ads
             if (disposed || !droppedProviders.Remove(id)) return;
             initializedProviders.Add(id);
             Debug.Log($"{LogPrefix} {id} finished initializing late - its routes are back.");
+            // Consent first (the module republishes it), then the provider starts loading.
+            try { ProviderJoinedLate?.Invoke(id); }
+            catch (Exception e) { Debug.LogException(e); }
             ReconcileAll();
             foreach (string placementId in placements.Keys) RaiseReadyChanged(placementId);
         }
@@ -492,6 +504,15 @@ namespace FlapGame.GameLib.Ads
         public bool IsRouteActive(string placementId, string providerId) =>
             placementId != null && activeRoutes.Contains((placementId, AdProviderIds.Normalize(providerId)));
 
+        /// <summary>True when an initialized provider was told to keep the placement loaded (ads have started for it).</summary>
+        public bool HasActiveRoute(string placementId)
+        {
+            if (placementId == null) return false;
+            foreach ((string Placement, string Provider) route in activeRoutes)
+                if (route.Placement == placementId) return true;
+            return false;
+        }
+
         private List<string> EffectiveRoutes(AdPlacement p)
         {
             var list = new List<string>();
@@ -561,6 +582,76 @@ namespace FlapGame.GameLib.Ads
                 try { kv.Value.SetPlacementActive(placementId, want); }
                 catch (Exception e) { Debug.LogWarning($"{LogPrefix} {kv.Key} SetPlacementActive('{placementId}', {want}) threw: {e.Message}"); }
             }
+            SyncBanner(placementId);
+        }
+
+        // The provider that should display a wanted banner: the first active route with a loaded banner, else the
+        // newest fallback under Primary (earlier routes failed to load), else the first active route. Null = none active.
+        private bool NoAdsOwnedNow()
+        {
+            try { return noAdsOwned != null && noAdsOwned(); }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} no-ads check threw: {e.Message}");
+                return false;
+            }
+        }
+
+        private string ServingBannerProvider(AdPlacement p)
+        {
+            string fallback = null;
+            foreach (string id in EffectiveRoutes(p))
+            {
+                if (!activeRoutes.Contains((p.Id, id))) continue;
+                if (SafeReady(byId[id], p.Id)) return id;
+                if (fallback == null || loadStrategy == AdLoadStrategy.Primary) fallback = id;
+            }
+            return fallback;
+        }
+
+        // Re-issues a wanted banner to the provider now serving it: a show requested before init, or a fallback route
+        // opened by a load failure, would otherwise never display.
+        private void SyncBanner(string placementId)
+        {
+            if (!wantedBanners.Contains(placementId) || !placements.TryGetValue(placementId, out AdPlacement p) || !p.IsBannerLike)
+                return;
+            // Read live, not the cached suppression: a banner must never come back once no-ads is owned.
+            if (p.SuppressedByNoAds && NoAdsOwnedNow()) return;
+            string target = ServingBannerProvider(p);
+            bannerProvider.TryGetValue(placementId, out string current);
+            if (target == current) return;
+            bannerProvider.Remove(placementId);
+            // Hidden even when its route was deactivated: MAX keeps a banner unit alive while another placement uses it.
+            if (current != null) SafeHideBanner(byId[current], placementId);
+            if (target == null) return;
+            bannerProvider[placementId] = target;
+            _ = ShowBannerOnAsync(byId[target], placementId, CancellationToken.None);
+        }
+
+        private async Task<AdShowResult> ShowBannerOnAsync(IAdsProviderAdapter adapter, string placementId, CancellationToken cancellationToken)
+        {
+            string providerId = AdProviderIds.Normalize(adapter.ProviderId);
+            AdShowResult result;
+            try
+            {
+                result = await adapter.ShowAsync(placementId, cancellationToken);
+            }
+            catch (Exception e)
+            {
+                if (!(e is OperationCanceledException)) Debug.LogWarning($"{LogPrefix} {providerId} banner '{placementId}' threw: {e.Message}");
+                result = AdShowResult.Failed;
+            }
+            // A failed show is retried on the next route change.
+            if (result == AdShowResult.Failed && bannerProvider.TryGetValue(placementId, out string serving) && serving == providerId)
+                bannerProvider.Remove(placementId);
+            RaiseShowResult(placementId, providerId, result);
+            return result;
+        }
+
+        private static void SafeHideBanner(IAdsProviderAdapter adapter, string placementId)
+        {
+            try { adapter.HideBanner(placementId); }
+            catch (Exception e) { Debug.LogWarning($"{LogPrefix} {adapter.ProviderId} HideBanner('{placementId}') threw: {e.Message}"); }
         }
 
         /// <summary>
@@ -688,7 +779,6 @@ namespace FlapGame.GameLib.Ads
             return true;
         }
 
-        private static bool IsInterstitialLike(AdFormat format) => format == AdFormat.Interstitial || format == AdFormat.AppOpen;
 
         /// <inheritdoc />
         public async ValueTask<AdShowResult> ShowAsync(string placementId, CancellationToken cancellationToken = default)
@@ -696,6 +786,14 @@ namespace FlapGame.GameLib.Ads
             RefreshNoAds();
             if (!CanShow(placementId, out AdBlockReason reason))
             {
+                // Its providers were dropped by a slow init and may still join: accepted, shown when one does.
+                if (reason == AdBlockReason.NoProvider && droppedProviders.Count > 0
+                    && placements.TryGetValue(placementId, out AdPlacement dropped) && dropped.IsBannerLike)
+                {
+                    wantedBanners.Add(placementId);
+                    Debug.Log($"{LogPrefix} Banner '{placementId}': its providers are still initializing - shown once one is ready.");
+                    return AdShowResult.Completed;
+                }
                 Debug.LogWarning($"{LogPrefix} Placement '{placementId}' not shown: {reason}.");
                 return AdShowResult.Failed;
             }
@@ -704,16 +802,20 @@ namespace FlapGame.GameLib.Ads
             AdPlacement p = placements[placementId];
             if (p.IsBannerLike)
             {
-                // Desired visibility: the first route with a live adapter gets the request even before its banner
-                // loaded - the adapter shows it as soon as the load completes.
-                foreach (IAdsProviderAdapter adapter in RoutedAdapters(p))
+                // Desired visibility: remembered until HideBanner / DestroyBanner. The active route serving it gets the
+                // request even before its banner loaded (the adapter shows it once loaded); with no active route yet
+                // (SDK still initializing) it is replayed by Reconcile, so this is not a failure.
+                wantedBanners.Add(placementId);
+                string target = ServingBannerProvider(p);
+                if (target == null)
                 {
-                    AdShowResult r = await adapter.ShowAsync(placementId, cancellationToken);
-                    RaiseShowResult(placementId, adapter.ProviderId, r);
-                    return r;
+                    Debug.Log($"{LogPrefix} Banner '{placementId}': no route active yet - shown once its provider is ready.");
+                    return AdShowResult.Completed;
                 }
-                Debug.LogWarning($"{LogPrefix} Banner '{placementId}': no adapter installed for any of its routes.");
-                return AdShowResult.Failed;
+                if (bannerProvider.TryGetValue(placementId, out string current) && current != target)
+                    SafeHideBanner(byId[current], placementId);
+                bannerProvider[placementId] = target;
+                return await ShowBannerOnAsync(byId[target], placementId, cancellationToken);
             }
 
             // Claimed synchronously (before the first await) so a second ShowAsync in the same frame sees it.
@@ -743,7 +845,9 @@ namespace FlapGame.GameLib.Ads
                         float t = now();
                         showsThisSession[placementId] = showsThisSession.TryGetValue(placementId, out int n) ? n + 1 : 1;
                         lastShownAt[placementId] = t;
-                        if (IsInterstitialLike(p.Format)) lastInterstitialAt = t;
+                        // An app open only restarts the interstitial interval when it follows the interstitial rules.
+                        if (p.Format == AdFormat.Interstitial || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules))
+                            lastInterstitialAt = t;
                         if (p.Format == AdFormat.AppOpen) lastAppOpenAt = t;
                         else if (p.Format == AdFormat.Rewarded && result == AdShowResult.Completed
                                  && policy.RewardedResetsInterstitialTimer) lastInterstitialAt = t;
@@ -798,6 +902,8 @@ namespace FlapGame.GameLib.Ads
         public void HideBanner(string placementId)
         {
             if (string.IsNullOrEmpty(placementId)) return;
+            wantedBanners.Remove(placementId); // also cancels a show still waiting for its provider
+            bannerProvider.Remove(placementId);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.HideBanner(placementId);
         }
 
@@ -805,6 +911,8 @@ namespace FlapGame.GameLib.Ads
         public void DestroyBanner(string placementId)
         {
             if (string.IsNullOrEmpty(placementId)) return;
+            wantedBanners.Remove(placementId);
+            bannerProvider.Remove(placementId);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.DestroyBanner(placementId);
         }
 

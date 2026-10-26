@@ -10,7 +10,8 @@ namespace FlapGame.GameLib.Crashlytics
     /// keys and - when <see cref="BreadcrumbsFromAnalytics"/> is on - every event, ad revenue and purchase as one log line,
     /// so a report shows what the player did just before.
     /// <para>Crashlytics captures uncaught exceptions and native crashes by itself once Firebase is up. Until then every
-    /// call is buffered and flushed in order; if Firebase cannot start the reporter turns itself off with one log line.</para>
+    /// call is buffered and flushed in order (a slow start too); if Firebase cannot start the reporter turns itself off
+    /// with one log line.</para>
     /// </summary>
     public sealed class CrashlyticsReporter : ICrashReporter, IAnalyticsSink
     {
@@ -24,7 +25,8 @@ namespace FlapGame.GameLib.Crashlytics
             this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
             BreadcrumbsFromAnalytics = breadcrumbsFromAnalytics;
             ReportUncaughtExceptionsAsFatal = reportUncaughtExceptionsAsFatal;
-            buffer = new BufferedAnalyticsSink<Target>(new Target(backend, breadcrumbsFromAnalytics), LogTag);
+            // Without breadcrumbs the events do nothing here; they must not take the room of exceptions and logs.
+            buffer = new BufferedAnalyticsSink<Target>(new Target(backend, breadcrumbsFromAnalytics), LogTag, bufferEvent: _ => breadcrumbsFromAnalytics);
         }
 
         public bool BreadcrumbsFromAnalytics { get; }

@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -80,6 +81,27 @@ namespace FlapGame.GameLib.Ads.Tests
             launcher.Start();
             lifecycle.RaiseResumed(new AppResumeInfo(TimeSpan.FromSeconds(30), false, null));
             Assert.That(adapter.Shown, Is.Empty);
+        }
+
+        [Test]
+        public async Task ColdStartWait_StartsWhenAdsStarted_NotAtLaunch()
+        {
+            PlayerPrefs.SetInt(AppOpenLauncher.LaunchCountKey, 1);
+            var slow = new FakeAdsAdapter(AdProviderIds.Max) { InitGate = new TaskCompletionSource<bool>() };
+            using var slowAds = new CompositeAdsService(new IAdsProviderAdapter[] { slow }, settings);
+            using var launcher = new AppOpenLauncher(slowAds, lifecycle, "app_open") { IgnoreReturnsInEditor = false, ColdStartWaitSeconds = 0.2f };
+            launcher.Start();
+            ValueTask init = slowAds.InitializeAsync();
+
+            await Task.Delay(500); // consent + SDK init outlast the cold-start wait
+            Assert.That(slow.Shown, Is.Empty);
+
+            slow.InitGate.SetResult(true);
+            await init;
+            slow.MarkReady("app_open");
+            for (int i = 0; i < 100 && slow.Shown.Count == 0; i++) await Task.Delay(20);
+
+            Assert.That(slow.Shown, Is.EqualTo(new[] { "app_open" }), "the wait counts from SDK init, so the launch ad still shows");
         }
 
         private sealed class FakeLifecycle : IAppLifecycle

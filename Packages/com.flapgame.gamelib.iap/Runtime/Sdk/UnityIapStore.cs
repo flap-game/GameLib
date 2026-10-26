@@ -29,8 +29,15 @@ namespace FlapGame.GameLib.Iap
                     PurchaseFailed?.Invoke(ToOrder(failed), Map(failed.FailureReason), failed.Details);
             };
             controller.OnPurchaseDeferred += order => PurchaseDeferred?.Invoke(ToOrder(order));
-            controller.OnPurchasesFetched += orders => PurchasesFetched?.Invoke(orders.ConfirmedOrders.Select(ToOrder).ToList());
-            controller.OnPurchasesFetchFailed += failure => Debug.LogWarning($"[IAP] Fetching owned purchases failed: {failure.Message}");
+            // Google lists a paid order that is not acknowledged yet (e.g. the app was killed between grant and confirm)
+            // under PendingOrders; it is still owned. DeferredOrders are not paid.
+            controller.OnPurchasesFetched += orders =>
+                PurchasesFetched?.Invoke(orders.ConfirmedOrders.Cast<Order>().Concat(orders.PendingOrders).Select(ToOrder).ToList());
+            controller.OnPurchasesFetchFailed += failure =>
+            {
+                Debug.LogWarning($"[IAP] Fetching owned purchases failed: {failure.Message}");
+                PurchasesFetchFailed?.Invoke(failure.Message);
+            };
         }
 
         public event Action<IReadOnlyList<IapStoreProduct>> ProductsFetched;
@@ -39,6 +46,7 @@ namespace FlapGame.GameLib.Iap
         public event Action<IapStoreOrder, IapFailure, string> PurchaseFailed;
         public event Action<IapStoreOrder> PurchaseDeferred;
         public event Action<IReadOnlyList<IapStoreOrder>> PurchasesFetched;
+        public event Action<string> PurchasesFetchFailed;
 
         public Task ConnectAsync() => controller.Connect();
 
@@ -117,6 +125,7 @@ namespace FlapGame.GameLib.Iap
             {
                 ProductId = item?.Product?.definition?.id,
                 TransactionId = order.Info?.TransactionID,
+                OriginalTransactionId = order.Info?.Apple?.OriginalTransactionID,
                 Receipt = order.Info?.Receipt,
                 SubscriptionActive = subscribed == Result.True ? true : subscribed == Result.False ? false : null,
                 Native = order,

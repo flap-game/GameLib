@@ -20,6 +20,8 @@ namespace FlapGame.GameLib
         private static readonly object SyncRoot = new();
         private static Task<IServiceRegistry> initializationTask;
         private static TaskCompletionSource<IServiceRegistry> readySource;
+        // Last initialization failure; WhenReadyAsync() reports it until the next run starts or Reset() runs.
+        private static Exception lastFailure;
 
         /// <summary>The registry. Non-null while initializing and after; null before bootstrap and after <see cref="Reset"/>.</summary>
         public static IServiceRegistry Services { get; private set; }
@@ -69,6 +71,7 @@ namespace FlapGame.GameLib
                 }
                 else
                 {
+                    lastFailure = null;
                     var registry = new ServiceRegistry();
                     Services = registry;
                     RegisterCoreServices(registry, logAnalytics);
@@ -101,7 +104,8 @@ namespace FlapGame.GameLib
         /// <summary>
         /// Completes when bootstrap has finished (immediately if it already has). Safe to call before
         /// <see cref="InitializeAsync(CancellationToken)"/> has started - it waits for the first successful initialization.
-        /// Cancelled if <see cref="Reset"/> runs first; faulted if initialization throws.
+        /// Cancelled if <see cref="Reset"/> runs first; faulted if initialization throws - also for calls made after the
+        /// failure, until the next <see cref="InitializeAsync(CancellationToken)"/> starts or <see cref="Reset"/> runs.
         /// <para>
         /// <b>Never completes</b> if nothing ever bootstraps (<see cref="GameLibSettings.AutoInitialize"/> off and no
         /// <see cref="InitializeAsync(CancellationToken)"/> call). Prefer
@@ -114,6 +118,8 @@ namespace FlapGame.GameLib
             {
                 if (IsInitialized)
                     return Task.FromResult(Services);
+                if (lastFailure != null)
+                    return Task.FromException<IServiceRegistry>(lastFailure);
 
                 readySource ??= new TaskCompletionSource<IServiceRegistry>(TaskCreationOptions.RunContinuationsAsynchronously);
                 return readySource.Task;
@@ -230,6 +236,8 @@ namespace FlapGame.GameLib
                         initializationTask = null;
                         ready = readySource;
                         readySource = null;
+                        if (!(exception is OperationCanceledException))
+                            lastFailure = exception;
                     }
                 }
 
@@ -256,7 +264,8 @@ namespace FlapGame.GameLib
         /// <summary>
         /// Disposes every registered service and returns to the uninitialized state. Safe while initializing:
         /// the pending <see cref="InitializeAsync(CancellationToken)"/> and <see cref="WhenReadyAsync()"/> are cancelled
-        /// and the half-built registry is never published.
+        /// and the half-built registry is never published. Also drops every <see cref="Initialized"/> subscriber
+        /// (with domain reload off they would otherwise outlive their play session).
         /// </summary>
         public static void Reset()
         {
@@ -270,6 +279,8 @@ namespace FlapGame.GameLib
                 initializationTask = null;
                 ready = readySource;
                 readySource = null;
+                lastFailure = null;
+                Initialized = null;
             }
 
             ready?.TrySetCanceled();

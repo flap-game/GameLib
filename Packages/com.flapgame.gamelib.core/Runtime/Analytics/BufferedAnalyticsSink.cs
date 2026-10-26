@@ -11,10 +11,13 @@ namespace FlapGame.GameLib
     /// <summary>
     /// Holds calls for an SDK that initializes in the background (Firebase, AppsFlyer). Sinks are registered at once so
     /// nothing tracked during startup is lost: identity (last value wins) and every other call (in arrival order, capped
-    /// at <see cref="MaxQueuedCalls"/>, oldest dropped first) are replayed into <typeparamref name="TTarget"/> when
-    /// <see cref="InitializeAsync"/> succeeds. Any failure, timeout or cancellation drops the buffer and turns every later
-    /// call into a no-op, with one log line (a Warning when the failure is expected, e.g. no config file in the Editor).
-    /// <para><see cref="Run"/> queues SDK-specific calls (a Crashlytics log line) in the same order as the events.</para>
+    /// at <see cref="MaxQueuedCalls"/>) are replayed into <typeparamref name="TTarget"/> when <see cref="InitializeAsync"/>
+    /// succeeds. A full buffer drops its oldest event or <see cref="Run"/> call first; ad revenue and purchases go last.
+    /// Any failure or cancellation drops the buffer and turns every later call into a no-op, with one log line (a Warning
+    /// when the failure is expected, e.g. no config file in the Editor). A timeout is not a failure: it logs one warning
+    /// and the buffer still flushes when the start lands later.
+    /// <para><see cref="Run"/> queues SDK-specific calls (a Crashlytics log line) in the same order as the events;
+    /// <see cref="RunLatest"/> keeps only the last call per key (consent) and is never dropped.</para>
     /// </summary>
     public sealed class BufferedAnalyticsSink<TTarget> : IAnalyticsSink where TTarget : class, IAnalyticsSink
     {
@@ -23,18 +26,25 @@ namespace FlapGame.GameLib
         private readonly object gate = new();
         private readonly TTarget target;
         private readonly string logTag;
-        private readonly Queue<Action<TTarget>> pendingCalls = new();
+        private readonly Func<AnalyticsEvent, bool> bufferEvent;
+        // Revenue = ad revenue or purchase: evicted only when nothing else is left.
+        private readonly List<(Action<TTarget> Call, bool Revenue)> pendingCalls = new();
         private readonly Dictionary<string, string> pendingUserProperties = new();
+        // Last call per key, flushed before the queued calls in first-set order.
+        private readonly List<(string Key, Action<TTarget> Call)> pendingLatest = new();
         private string pendingUserId;
         private bool pendingUserIdSet;
         private bool warnedQueueFull;
         private BufferedSinkState state = BufferedSinkState.Pending;
 
-        public BufferedAnalyticsSink(TTarget target, string logTag, int maxQueuedCalls = DefaultMaxQueuedCalls)
+        /// <param name="bufferEvent">Which events are worth buffering (null = all), e.g. only those the SDK forwards, so
+        /// events it would drop anyway do not take the room of ad revenue and purchases. Live calls are not filtered.</param>
+        public BufferedAnalyticsSink(TTarget target, string logTag, int maxQueuedCalls = DefaultMaxQueuedCalls, Func<AnalyticsEvent, bool> bufferEvent = null)
         {
             this.target = target ?? throw new ArgumentNullException(nameof(target));
             this.logTag = string.IsNullOrEmpty(logTag) ? "[Analytics]" : logTag;
             MaxQueuedCalls = Math.Max(1, maxQueuedCalls);
+            this.bufferEvent = bufferEvent;
         }
 
         public int MaxQueuedCalls { get; }
@@ -47,8 +57,10 @@ namespace FlapGame.GameLib
         public string FailureReason { get; private set; }
 
         /// <summary>
-        /// Runs <paramref name="initialize"/> under <paramref name="timeout"/> (≤ 0 or infinite = none), then flushes.
-        /// Never throws. Continuations stay on the caller's context (Unity main thread), so the flush does too.
+        /// Runs <paramref name="initialize"/>, then flushes. Past <paramref name="timeout"/> (≤ 0 or infinite = none) it logs
+        /// one warning and keeps buffering: a late start still flushes, a late failure still disables. Completes once the
+        /// sink left <see cref="BufferedSinkState.Pending"/>. Never throws. Continuations stay on the caller's context
+        /// (Unity main thread), so the flush does too.
         /// </summary>
         public async Task InitializeAsync(Func<CancellationToken, Task> initialize, TimeSpan timeout, bool expectedFailure, CancellationToken cancellationToken = default)
         {
@@ -66,6 +78,7 @@ namespace FlapGame.GameLib
                 return;
             }
 
+            bool timedOut = false;
             if (!initTask.IsCompleted && timeout > TimeSpan.Zero && timeout != Timeout.InfiniteTimeSpan)
             {
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -77,11 +90,17 @@ namespace FlapGame.GameLib
 
                 if (winner != initTask)
                 {
-                    // Observe the abandoned task so a late fault is not reported as unobserved.
-                    _ = initTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
-                    if (cancellationToken.IsCancellationRequested) MarkFailed("initialization cancelled", expected: true);
-                    else MarkFailed($"initialization timed out after {timeout.TotalSeconds:0.#}s", expectedFailure);
-                    return;
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        // Observe the abandoned task so a late fault is not reported as unobserved.
+                        _ = initTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                        MarkFailed("initialization cancelled", expected: true);
+                        return;
+                    }
+
+                    // Not a failure: a slow start (Firebase's Android dependency check) is still flushed when it lands.
+                    timedOut = true;
+                    Debug.LogWarning($"{logTag} Initialization is taking longer than {timeout.TotalSeconds:0.#}s; still buffering, everything is sent if it finishes later.");
                 }
             }
 
@@ -107,7 +126,9 @@ namespace FlapGame.GameLib
                 return;
             }
 
-            MarkReady();
+            int buffered = QueuedCallCount;
+            if (MarkReady() && timedOut)
+                Debug.Log($"{logTag} Initialized after the timeout; sent {buffered} buffered call(s).");
         }
 
         /// <summary>Flushes the buffer and forwards everything live from now on. False when not pending.</summary>
@@ -122,8 +143,10 @@ namespace FlapGame.GameLib
                 if (pendingUserIdSet) Safe(t => t.SetUserId(pendingUserId));
                 foreach (KeyValuePair<string, string> kv in pendingUserProperties)
                     Safe(t => t.SetUserProperty(kv.Key, kv.Value));
-                while (pendingCalls.Count > 0)
-                    Safe(pendingCalls.Dequeue());
+                foreach ((string _, Action<TTarget> call) in pendingLatest)
+                    Safe(call);
+                for (int i = 0; i < pendingCalls.Count; i++)
+                    Safe(pendingCalls[i].Call);
 
                 ClearBuffer();
                 state = BufferedSinkState.Ready;
@@ -151,26 +174,40 @@ namespace FlapGame.GameLib
         }
 
         /// <summary>Queues (before init) or runs (after) an SDK-specific call, in order with the events.</summary>
-        public void Run(Action<TTarget> call)
+        public void Run(Action<TTarget> call) => Run(call, revenue: false);
+
+        /// <summary>
+        /// Like <see cref="Run"/>, but before init only the last call per <paramref name="key"/> is kept, it is never
+        /// dropped by a full buffer, and it runs before the queued calls - for state the SDK must have before any event
+        /// (consent).
+        /// </summary>
+        public void RunLatest(string key, Action<TTarget> call)
         {
             if (call == null) return;
+            if (string.IsNullOrEmpty(key)) throw new ArgumentException("A key is required.", nameof(key));
             lock (gate)
             {
                 if (state == BufferedSinkState.Failed) return;
                 if (state == BufferedSinkState.Pending)
                 {
-                    Enqueue(call);
+                    int index = pendingLatest.FindIndex(c => c.Key == key);
+                    if (index >= 0) pendingLatest[index] = (key, call);
+                    else pendingLatest.Add((key, call));
                     return;
                 }
             }
             call(target);
         }
 
-        public void Track(AnalyticsEvent analyticsEvent) => Run(t => t.Track(analyticsEvent));
+        public void Track(AnalyticsEvent analyticsEvent)
+        {
+            if (bufferEvent != null && State == BufferedSinkState.Pending && !bufferEvent(analyticsEvent)) return;
+            Run(t => t.Track(analyticsEvent), revenue: false);
+        }
 
-        public void TrackAdRevenue(AdRevenue revenue) => Run(t => t.TrackAdRevenue(revenue));
+        public void TrackAdRevenue(AdRevenue revenue) => Run(t => t.TrackAdRevenue(revenue), revenue: true);
 
-        public void TrackPurchase(PurchaseRecord purchase) => Run(t => t.TrackPurchase(purchase));
+        public void TrackPurchase(PurchaseRecord purchase) => Run(t => t.TrackPurchase(purchase), revenue: true);
 
         public void SetUserProperty(string name, string value)
         {
@@ -217,24 +254,50 @@ namespace FlapGame.GameLib
             }
         }
 
-        private void Enqueue(Action<TTarget> call)
+        private void Run(Action<TTarget> call, bool revenue)
+        {
+            if (call == null) return;
+            lock (gate)
+            {
+                if (state == BufferedSinkState.Failed) return;
+                if (state == BufferedSinkState.Pending)
+                {
+                    Enqueue(call, revenue);
+                    return;
+                }
+            }
+            call(target);
+        }
+
+        private void Enqueue(Action<TTarget> call, bool revenue)
         {
             if (pendingCalls.Count >= MaxQueuedCalls)
             {
-                pendingCalls.Dequeue();
-                if (!warnedQueueFull)
+                // Oldest event first; ad revenue and purchases only when nothing else is left - and never for an event.
+                int victim = pendingCalls.FindIndex(c => !c.Revenue);
+                if (victim < 0 && !revenue)
                 {
-                    warnedQueueFull = true;
-                    Debug.LogWarning($"{logTag} More than {MaxQueuedCalls} calls made before initialization finished; dropping the oldest.");
+                    WarnQueueFull();
+                    return;
                 }
+                pendingCalls.RemoveAt(victim >= 0 ? victim : 0);
+                WarnQueueFull();
             }
-            pendingCalls.Enqueue(call);
+            pendingCalls.Add((call, revenue));
+        }
+
+        private void WarnQueueFull()
+        {
+            if (warnedQueueFull) return;
+            warnedQueueFull = true;
+            Debug.LogWarning($"{logTag} More than {MaxQueuedCalls} calls made before initialization finished; dropping the oldest (ad revenue and purchases last).");
         }
 
         private void ClearBuffer()
         {
             pendingCalls.Clear();
             pendingUserProperties.Clear();
+            pendingLatest.Clear();
             pendingUserId = null;
             pendingUserIdSet = false;
         }

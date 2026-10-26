@@ -93,8 +93,8 @@ namespace FlapGame.GameLib.Ads
         /// Unlike interstitial and rewarded, this returns as soon as the banner is visible —
         /// it does NOT await the banner's dismissal because banners persist on screen until
         /// explicitly hidden via <see cref="IAdsService.HideBanner"/> or removed via
-        /// <see cref="IAdsService.DestroyBanner"/>. Check the return value to confirm the
-        /// banner was successfully shown.
+        /// <see cref="IAdsService.DestroyBanner"/>. Completed = accepted: a banner requested before
+        /// the ad SDKs are up is shown once its provider is ready. Failed = it cannot be shown.
         /// </para>
         /// </summary>
         public static ValueTask<AdShowResult> ShowBannerAsync(

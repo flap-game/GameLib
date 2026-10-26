@@ -17,6 +17,23 @@ namespace FlapGame.GameLib
             GameLibBootstrap.Reset();
         }
 
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+        private static void HookPlayModeExit()
+        {
+            UnityEditor.EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            UnityEditor.EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        // Without domain reload the last session's registry (and its handlers) would live on until the next Play. Reset
+        // once back in Edit mode: at ExitingPlayMode the scene's OnDisable/OnDestroy and Quitting handlers have not run yet.
+        private static void OnPlayModeStateChanged(UnityEditor.PlayModeStateChange state)
+        {
+            if (state == UnityEditor.PlayModeStateChange.EnteredEditMode)
+                GameLibBootstrap.Reset();
+        }
+#endif
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static async void Start()
         {

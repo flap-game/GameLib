@@ -5,7 +5,7 @@ Foundation package of GameLib. Every other `com.flapgame.gamelib.*` package depe
 Install:
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.4.0
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.5.0
 ```
 
 Then open **GameLib > Setup**, create the settings asset (Core), and add modules one by one.

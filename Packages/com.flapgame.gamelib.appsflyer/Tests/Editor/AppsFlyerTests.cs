@@ -99,6 +99,43 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
         }
 
         [Test]
+        public void Purchase_WithoutValidCurrencyOrPrice_LogsAfPurchaseWithoutRevenue()
+        {
+            var backend = new FakeBackend();
+            var sink = new AppsFlyerSink(backend, AppsFlyerPurchaseMode.Manual, false, null);
+
+            LogAssert.Expect(LogType.Warning, new Regex("'gems' has no valid price/currency"));
+            sink.TrackPurchase(new PurchaseRecord { ProductId = "gems", Price = 1.99m, Currency = "" });
+            LogAssert.Expect(LogType.Warning, new Regex("'coins' has no valid price/currency"));
+            sink.TrackPurchase(new PurchaseRecord { ProductId = "coins", Price = 0m, Currency = "USD" });
+
+            Assert.That(backend.Events, Has.Count.EqualTo(2));
+            foreach (var (name, v) in backend.Events)
+            {
+                Assert.That(name, Is.EqualTo("af_purchase"));
+                Assert.That(v.ContainsKey("af_revenue"), Is.False);
+                Assert.That(v.ContainsKey("af_currency"), Is.False);
+                Assert.That(v.ContainsKey("af_content_id"), Is.True);
+            }
+        }
+
+        [Test]
+        public void Buffer_KeepsOnlyForwardedEvents_SoRevenueIsNotEvicted()
+        {
+            var backend = new FakeBackend();
+            var sink = new AppsFlyerSink(backend, AppsFlyerPurchaseMode.Manual, false, new[] { "level_complete" });
+            var buffer = new BufferedAnalyticsSink<AppsFlyerSink>(sink, "[Test]", maxQueuedCalls: 2, bufferEvent: sink.Forwards);
+
+            buffer.TrackAdRevenue(new AdRevenue { Network = "n", Value = 0.01, Currency = "USD" });
+            for (int i = 0; i < 10; i++) buffer.Track(new AnalyticsEvent("level_start"));
+            buffer.Track(new AnalyticsEvent("level_complete"));
+            buffer.MarkReady();
+
+            Assert.That(backend.Calls, Is.EqualTo(new[] { "revenue", "event:level_complete" }));
+            Assert.That(new AppsFlyerSink(backend, AppsFlyerPurchaseMode.Manual, true, null).Forwards(new AnalyticsEvent("any")), Is.True);
+        }
+
+        [Test]
         public void Events_OnlyListedOnes_AsInvariantStrings()
         {
             var backend = new FakeBackend();

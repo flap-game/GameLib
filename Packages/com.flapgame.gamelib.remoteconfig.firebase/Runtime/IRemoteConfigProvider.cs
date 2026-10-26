@@ -17,11 +17,17 @@ namespace FlapGame.GameLib.RemoteConfig
 
         Task FetchAndActivateAsync(CancellationToken cancellationToken);
 
-        /// <summary>The active value; false while the provider is not started or has no value for <paramref name="key"/>.</summary>
-        bool TryGetString(string key, out string value);
+        /// <summary>
+        /// The active value the server sent; false while the provider is not started or the server does not set
+        /// <paramref name="key"/> (defaults are the service's job, so a value from <see cref="SetDefaultsAsync"/> is not one).
+        /// </summary>
+        bool TryGetRemoteString(string key, out string value);
 
-        /// <summary>Every active key and value (fetched and defaults), saved to the disk cache after each activation.</summary>
-        IReadOnlyDictionary<string, string> GetAll();
+        /// <summary>
+        /// Every active key and value the server sent - never defaults - saved to the disk cache after each activation, so
+        /// a default changed in an app update and a key removed in the console fall back to the in-app default next launch.
+        /// </summary>
+        IReadOnlyDictionary<string, string> GetRemoteValues();
     }
 
     public static class FirebaseRemoteConfigBackend

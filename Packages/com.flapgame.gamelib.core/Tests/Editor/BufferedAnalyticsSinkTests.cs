@@ -80,6 +80,55 @@ namespace FlapGame.GameLib.Tests
         }
 
         [Test]
+        public void FullQueue_DropsEventsBeforeRevenueAndPurchases()
+        {
+            var target = new RecordingSink();
+            var sink = new BufferedAnalyticsSink<RecordingSink>(target, "[Test]", maxQueuedCalls: 3);
+
+            LogAssert.Expect(LogType.Warning, new Regex("More than 3 calls"));
+            sink.TrackAdRevenue(new AdRevenue { Placement = "inter" });
+            sink.Track(new AnalyticsEvent("1"));
+            sink.TrackPurchase(new PurchaseRecord { ProductId = "gems" });
+            sink.Track(new AnalyticsEvent("2"));
+            sink.Track(new AnalyticsEvent("3"));
+            sink.MarkReady();
+
+            Assert.That(target.Calls, Is.EqualTo(new[] { "revenue:inter", "purchase:gems", "event:3" }));
+        }
+
+        [Test]
+        public void FullQueue_OfRevenueOnly_DropsTheOldestRevenue()
+        {
+            var target = new RecordingSink();
+            var sink = new BufferedAnalyticsSink<RecordingSink>(target, "[Test]", maxQueuedCalls: 2);
+
+            LogAssert.Expect(LogType.Warning, new Regex("More than 2 calls"));
+            sink.TrackAdRevenue(new AdRevenue { Placement = "1" });
+            sink.TrackAdRevenue(new AdRevenue { Placement = "2" });
+            sink.TrackPurchase(new PurchaseRecord { ProductId = "3" });
+            sink.MarkReady();
+
+            Assert.That(target.Calls, Is.EqualTo(new[] { "revenue:2", "purchase:3" }));
+        }
+
+        [Test]
+        public void BufferFilter_SkipsUnwantedEventsWhilePending_NotLive()
+        {
+            var target = new RecordingSink();
+            var sink = new BufferedAnalyticsSink<RecordingSink>(target, "[Test]", bufferEvent: e => e.Name == "level_complete");
+
+            sink.Track(new AnalyticsEvent("level_start"));
+            sink.Track(new AnalyticsEvent("level_complete"));
+            sink.TrackAdRevenue(new AdRevenue { Placement = "inter" });
+            Assert.That(sink.QueuedCallCount, Is.EqualTo(2));
+
+            sink.MarkReady();
+            sink.Track(new AnalyticsEvent("level_start"));
+
+            Assert.That(target.Calls, Is.EqualTo(new[] { "event:level_complete", "revenue:inter", "event:level_start" }));
+        }
+
+        [Test]
         public async Task InitializeAsync_Success_Flushes()
         {
             var target = new RecordingSink();
@@ -105,16 +154,50 @@ namespace FlapGame.GameLib.Tests
         }
 
         [Test]
-        public async Task InitializeAsync_Hanging_TimesOut()
+        public async Task InitializeAsync_Hanging_TimesOut_ThenFlushesWhenItLandsLate()
+        {
+            var target = new RecordingSink();
+            var sink = new BufferedAnalyticsSink<RecordingSink>(target, "[Test]");
+            var late = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            sink.Track(new AnalyticsEvent("a"));
+
+            LogAssert.Expect(LogType.Warning, new Regex("taking longer than"));
+            CancellationToken initToken = default;
+            Task init = sink.InitializeAsync(ct => { initToken = ct; return late.Task; }, TimeSpan.FromMilliseconds(50), expectedFailure: true);
+            Assert.That(await CompletesWithin(init, 300), Is.False, "still waiting for the SDK after the timeout");
+
+            Assert.That(sink.State, Is.EqualTo(BufferedSinkState.Pending), "a timeout is not a failure");
+            Assert.That(initToken.IsCancellationRequested, Is.False, "the slow SDK start is left to finish");
+            sink.Track(new AnalyticsEvent("b"));
+
+            LogAssert.Expect(LogType.Log, new Regex("Initialized after the timeout; sent 2"));
+            late.SetResult(true);
+            Assert.That(await CompletesWithin(init, 2000), Is.True);
+
+            Assert.That(sink.State, Is.EqualTo(BufferedSinkState.Ready));
+            Assert.That(target.Calls, Is.EqualTo(new[] { "event:a", "event:b" }));
+        }
+
+        [Test]
+        public async Task InitializeAsync_Hanging_ThenFaultingLate_Fails()
         {
             var sink = new BufferedAnalyticsSink<RecordingSink>(new RecordingSink(), "[Test]");
-            var never = new TaskCompletionSource<bool>();
+            var late = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            sink.Track(new AnalyticsEvent("a"));
 
-            LogAssert.Expect(LogType.Warning, new Regex("timed out"));
-            await sink.InitializeAsync(_ => never.Task, TimeSpan.FromMilliseconds(50), expectedFailure: true);
+            LogAssert.Expect(LogType.Warning, new Regex("taking longer than"));
+            Task init = sink.InitializeAsync(_ => late.Task, TimeSpan.FromMilliseconds(50), expectedFailure: true);
+            Assert.That(await CompletesWithin(init, 300), Is.False);
+            Assert.That(sink.State, Is.EqualTo(BufferedSinkState.Pending));
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"Disabled for this session: InvalidOperationException: dependency check failed\. Dropped 1"));
+            late.SetException(new InvalidOperationException("dependency check failed"));
+            Assert.That(await CompletesWithin(init, 2000), Is.True);
 
             Assert.That(sink.State, Is.EqualTo(BufferedSinkState.Failed));
         }
+
+        private static async Task<bool> CompletesWithin(Task task, int ms) => await Task.WhenAny(task, Task.Delay(ms)) == task;
 
         [Test]
         public async Task InitializeAsync_Cancelled_IsAnExpectedFailure()

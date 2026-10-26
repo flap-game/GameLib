@@ -8,7 +8,9 @@ namespace FlapGame.GameLib.RemoteConfig
     /// <summary>The values of the last activated fetch, on disk, so the next launch starts with them before any network.</summary>
     public sealed class RemoteConfigCache
     {
-        public const string DefaultFileName = "gamelib_remote_config.json";
+        // v2 holds server values only; the 0.3/0.4 file also held the in-app defaults, which would override new defaults.
+        public const string DefaultFileName = "gamelib_remote_config_v2.json";
+        public const string LegacyFileName = "gamelib_remote_config.json";
 
         [Serializable]
         private sealed class CacheData
@@ -26,8 +28,23 @@ namespace FlapGame.GameLib.RemoteConfig
 
         public RemoteConfigCache(string filePath) => FilePath = filePath;
 
-        /// <summary>The cache under <c>Application.persistentDataPath</c>.</summary>
-        public static RemoteConfigCache Default => new(Path.Combine(Application.persistentDataPath, DefaultFileName));
+        /// <summary>The cache under <c>Application.persistentDataPath</c>; removes the legacy file.</summary>
+        public static RemoteConfigCache Default
+        {
+            get
+            {
+                try
+                {
+                    string legacy = Path.Combine(Application.persistentDataPath, LegacyFileName);
+                    if (File.Exists(legacy)) File.Delete(legacy);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[RemoteConfig] Could not remove the old cache: {e.Message}");
+                }
+                return new RemoteConfigCache(Path.Combine(Application.persistentDataPath, DefaultFileName));
+            }
+        }
 
         public string FilePath { get; }
 

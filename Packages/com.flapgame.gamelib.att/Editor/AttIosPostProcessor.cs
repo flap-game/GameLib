@@ -12,6 +12,7 @@ namespace FlapGame.GameLib.Att.Editor
     /// <summary>
     /// iOS builds: links AppTrackingTransparency.framework weakly (GameLibAtt.mm; devices before iOS 14 still launch) and
     /// writes the ATT module's NSUserTrackingUsageDescription into Info.plist - iOS kills an app that asks without it.
+    /// Only when the module is listed in GameLibSettings: App Review questions a usage text for a prompt that never shows.
     /// A description already in Info.plist (e.g. from MAX's settings) is kept.
     /// </summary>
     public sealed class AttIosPostProcessor : IPostprocessBuildWithReport
@@ -32,10 +33,12 @@ namespace FlapGame.GameLib.Att.Editor
             project.AddFrameworkToProject(project.GetUnityFrameworkTargetGuid(), "AppTrackingTransparency.framework", true);
             project.WriteToFile(projectPath);
 
-            AttModule module = FindModule();
-            string description = module != null && !string.IsNullOrWhiteSpace(module.UsageDescription)
-                ? module.UsageDescription.Trim()
-                : AttModule.DefaultUsageDescription;
+            AttModule module = FindListedModule();
+            if (module == null)
+                return;
+            string description = string.IsNullOrWhiteSpace(module.UsageDescription)
+                ? AttModule.DefaultUsageDescription
+                : module.UsageDescription.Trim();
             string plistPath = Path.Combine(output, "Info.plist");
             var plist = new PlistDocument();
             plist.ReadFromFile(plistPath);
@@ -45,16 +48,11 @@ namespace FlapGame.GameLib.Att.Editor
 #endif
         }
 
-        /// <summary>The module listed in GameLibSettings, else any AttModule asset; null when the game has none.</summary>
-        public static AttModule FindModule()
+        /// <summary>The AttModule listed in GameLibSettings (the one that runs); null when the game does not use it.</summary>
+        public static AttModule FindListedModule()
         {
             GameLibSettings settings = GameLibSettings.Load();
-            AttModule listed = settings != null ? settings.Modules.OfType<AttModule>().FirstOrDefault() : null;
-            if (listed != null)
-                return listed;
-
-            string guid = AssetDatabase.FindAssets("t:" + nameof(AttModule)).FirstOrDefault();
-            return guid != null ? AssetDatabase.LoadAssetAtPath<AttModule>(AssetDatabase.GUIDToAssetPath(guid)) : null;
+            return settings != null ? settings.Modules.OfType<AttModule>().FirstOrDefault() : null;
         }
     }
 }

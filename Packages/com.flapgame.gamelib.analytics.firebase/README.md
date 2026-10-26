@@ -22,8 +22,9 @@ start with a letter and lose reserved prefixes (`firebase_`, `google_`, `ga_`); 
 ## Startup
 
 The sink is added at once and Firebase starts in the background, so bootstrap never waits for it. Events tracked
-meanwhile are buffered (up to 200, identity first) and sent once Firebase is up. If Firebase cannot start within
-**Init Timeout Seconds** (default 30) or at all, the sink turns itself off for the session with one log line.
+meanwhile are buffered (up to 200, identity first) and sent once Firebase is up. Past **Init Timeout Seconds**
+(default 30) it logs one warning and keeps buffering; if Firebase cannot start at all, the sink turns itself off for the
+session with one log line.
 
 ## Purchases
 

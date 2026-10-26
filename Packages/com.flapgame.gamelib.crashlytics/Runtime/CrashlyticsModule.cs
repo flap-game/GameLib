@@ -14,7 +14,7 @@ namespace FlapGame.GameLib.Crashlytics
     [CreateAssetMenu(menuName = "GameLib/Modules/Crashlytics", fileName = "CrashlyticsModule")]
     public sealed class CrashlyticsModule : GameLibModule
     {
-        [Tooltip("Seconds Firebase may take to start before crash reporting is turned off for the session (0 = wait forever).")]
+        [Tooltip("Seconds Firebase may take to start before a warning (0 = never warn). Calls stay buffered and are sent when it starts later.")]
         [Min(0f)] public float InitTimeoutSeconds = 30f;
 
         [Tooltip("Log every analytics event, ad revenue and purchase as a Crashlytics breadcrumb, so a report shows what the player did just before.")]

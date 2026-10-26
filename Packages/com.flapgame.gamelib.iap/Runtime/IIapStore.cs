@@ -32,11 +32,18 @@ namespace FlapGame.GameLib.Iap
 
         event Action<IapStoreOrder> PurchaseDeferred;
 
-        /// <summary>Asks for the purchases the store already confirmed (owned non-consumables, subscriptions).</summary>
+        /// <summary>Asks for the purchases the store holds as paid (owned non-consumables, subscriptions).</summary>
         void FetchPurchases();
 
+        /// <summary>
+        /// Every paid order the store holds: confirmed ones and paid-but-not-yet-confirmed ones (a purchase granted while
+        /// its confirmation is still on the way is owned). Deferred (not yet paid) orders are not included.
+        /// </summary>
         event Action<IReadOnlyList<IapStoreOrder>> PurchasesFetched;
 
+        event Action<string> PurchasesFetchFailed;
+
+        /// <summary>Asks the store to restore purchases; on success it also fetches them (<see cref="PurchasesFetched"/> follows).</summary>
         void Restore(Action<bool, string> callback);
     }
 
@@ -74,6 +81,11 @@ namespace FlapGame.GameLib.Iap
     {
         public string ProductId;
         public string TransactionId;
+
+        /// <summary>App Store: the first transaction of this purchase; another value than <see cref="TransactionId"/> means a
+        /// restore or a subscription renewal. Null elsewhere.</summary>
+        public string OriginalTransactionId;
+
         public string Receipt;
 
         /// <summary>For subscriptions: false when the store says it is not active; null when it cannot tell.</summary>

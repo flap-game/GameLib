@@ -28,8 +28,8 @@ namespace FlapGame.GameLib.Ads
         [Min(0f)] public float AppOpenMinIntervalSeconds = 90f;
 
         [Tooltip("When false (default) app open ads ignore FirstInterstitialDelaySeconds and InterstitialMinIntervalSeconds: " +
-                 "an app open ad shows at launch and on every return, limited only by AppOpenMinIntervalSeconds. A shown " +
-                 "app open ad still restarts the interstitial interval.")]
+                 "an app open ad shows at launch and on every return, limited only by AppOpenMinIntervalSeconds, and does " +
+                 "not restart the interstitial interval. True: it follows both and also restarts the interval.")]
         public bool AppOpenFollowsInterstitialRules;
 
         public AdsPolicy Clone() => (AdsPolicy)MemberwiseClone();

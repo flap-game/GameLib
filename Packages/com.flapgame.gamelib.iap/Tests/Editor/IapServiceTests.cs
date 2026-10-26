@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine.TestTools;
+using UnityEngine;
 
 namespace FlapGame.GameLib.Iap.Tests
 {
@@ -21,6 +24,7 @@ namespace FlapGame.GameLib.Iap.Tests
             public event Action<IapStoreOrder, IapFailure, string> PurchaseFailed;
             public event Action<IapStoreOrder> PurchaseDeferred;
             public event Action<IReadOnlyList<IapStoreOrder>> PurchasesFetched;
+            public event Action<string> PurchasesFetchFailed;
 
             public Task ConnectAsync() => Task.CompletedTask;
 
@@ -41,10 +45,12 @@ namespace FlapGame.GameLib.Iap.Tests
             public void Restore(Action<bool, string> callback) => RestoreCallback = callback;
 
             public void Pending(string productId, string tx) => PurchasePending?.Invoke(new IapStoreOrder { ProductId = productId, TransactionId = tx, Receipt = "r" });
+            public void PendingOrder(IapStoreOrder order) => PurchasePending?.Invoke(order);
             public void Fail(string productId, IapFailure failure) => PurchaseFailed?.Invoke(new IapStoreOrder { ProductId = productId }, failure, "details");
             public void Defer(string productId) => PurchaseDeferred?.Invoke(new IapStoreOrder { ProductId = productId });
             public void Owned(params IapStoreOrder[] orders) => PurchasesFetched?.Invoke(orders);
             public void FailFetch() => ProductsFetchFailed?.Invoke("x");
+            public void FailPurchasesFetch() => PurchasesFetchFailed?.Invoke("offline");
         }
 
         private sealed class MemoryEntitlements : IEntitlements
@@ -152,6 +158,34 @@ namespace FlapGame.GameLib.Iap.Tests
         }
 
         [Test]
+        public async Task RestoreOrRenewal_IsGranted_ButNotNewRevenue()
+        {
+            await service.InitializeAsync();
+
+            // App Store: a renewal / StoreKit 1 restore is a new transaction of an earlier purchase.
+            store.PendingOrder(new IapStoreOrder { ProductId = "vip", TransactionId = "tx-renew", OriginalTransactionId = "tx-first", Receipt = "r" });
+            Assert.That(entitlements.Has("vip"), Is.True);
+            Assert.That(sink.Purchases, Is.Empty, "not new revenue");
+            AnalyticsEvent success = sink.Events.Single(e => e.Name == IapService.PurchaseSuccessEvent);
+            Assert.That(success.Parameters["restore"], Is.EqualTo(true));
+
+            store.PendingOrder(new IapStoreOrder { ProductId = "no_ads", TransactionId = "tx-new", OriginalTransactionId = "tx-new", Receipt = "r" });
+            Assert.That(sink.Purchases.Single().ProductId, Is.EqualTo("no_ads"), "a first purchase is revenue");
+        }
+
+        [Test]
+        public async Task GrantIsLoggedBeforeTheHandlerRuns_SoARedeliveryNeverGrantsTwice()
+        {
+            await service.InitializeAsync();
+            bool loggedDuringHandler = false;
+            service.PurchaseGranted += p => loggedDuringHandler = log.Contains(p.TransactionId);
+
+            store.Pending("gems_100", "tx-log");
+
+            Assert.That(loggedDuringHandler, Is.True);
+        }
+
+        [Test]
         public async Task PurchaseArrivingBeforeAnyHandler_IsHeld_UntilTheGameSubscribes()
         {
             await service.InitializeAsync();
@@ -234,17 +268,117 @@ namespace FlapGame.GameLib.Iap.Tests
         }
 
         [Test]
-        public async Task Restore_RefreshesOwnedPurchases_AndIsTracked()
+        public async Task Restore_CompletesAfterTheRestoredPurchasesAreApplied()
         {
             await service.InitializeAsync();
             int before = store.FetchPurchasesCalls;
 
             Task<bool> restore = service.RestoreAsync();
             store.RestoreCallback(true, null);
+            Assert.That(restore.IsCompleted, Is.False, "waits for the purchase list the store fetches after a restore");
+            store.Owned(new IapStoreOrder { ProductId = "no_ads", TransactionId = "a" });
 
             Assert.That(await restore, Is.True);
-            Assert.That(store.FetchPurchasesCalls, Is.EqualTo(before + 1));
+            Assert.That(service.IsOwned("no_ads"), Is.True, "owned as soon as the restore returns");
+            Assert.That(store.FetchPurchasesCalls, Is.EqualTo(before), "the store already fetches after a restore");
             Assert.That(sink.Events.Last().Name, Is.EqualTo(IapService.RestoreEvent));
+        }
+
+        [Test]
+        public async Task Restore_FailedOrFetchFailed_ReturnsFalse_AndEndsTheExternalActivity()
+        {
+            var lifecycle = new FakeLifecycle();
+            using var withLifecycle = new IapService(store, Catalog, entitlements, null, lifecycle, new MemoryTransactionLog());
+            await withLifecycle.InitializeAsync();
+
+            Task<bool> failed = withLifecycle.RestoreAsync();
+            Assert.That(lifecycle.Open, Is.EqualTo(1));
+            LogAssert.Expect(LogType.Warning, new Regex("Restore failed"));
+            store.RestoreCallback(false, "cancelled");
+            Assert.That(await failed, Is.False);
+            Assert.That(lifecycle.Open, Is.EqualTo(0));
+
+            Task<bool> fetchFailed = withLifecycle.RestoreAsync();
+            store.RestoreCallback(true, null);
+            store.FailPurchasesFetch();
+            Assert.That(await fetchFailed, Is.False);
+            Assert.That(lifecycle.Open, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Restore_FetchLandingBeforeTheRestoreAnswer_IsNotMissed()
+        {
+            await service.InitializeAsync();
+
+            Task<bool> restore = service.RestoreAsync();
+            store.FailPurchasesFetch(); // Unity IAP fetches before it calls the restore back; that fetch can finish first
+            store.RestoreCallback(true, null);
+
+            Assert.That(restore.IsCompleted, Is.True);
+            Assert.That(await restore, Is.False);
+        }
+
+        [Test]
+        public async Task Restore_StoreThrows_ReturnsFalse_AndAllowsANewRestore()
+        {
+            var throwing = new ThrowingRestoreStore();
+            using var withThrowing = new IapService(throwing, Catalog, entitlements, null, null, new MemoryTransactionLog());
+            await withThrowing.InitializeAsync();
+
+            LogAssert.Expect(LogType.Warning, new Regex("Restore failed"));
+            Assert.That(await withThrowing.RestoreAsync(), Is.False);
+            LogAssert.Expect(LogType.Warning, new Regex("Restore failed"));
+            Assert.That(await withThrowing.RestoreAsync(), Is.False, "a new restore, not the stuck one");
+        }
+
+        private sealed class ThrowingRestoreStore : IIapStore
+        {
+            private readonly FakeStore inner = new();
+            public event Action<IReadOnlyList<IapStoreProduct>> ProductsFetched { add => inner.ProductsFetched += value; remove => inner.ProductsFetched -= value; }
+            public event Action<string> ProductsFetchFailed { add { } remove { } }
+            public event Action<IapStoreOrder> PurchasePending { add { } remove { } }
+            public event Action<IapStoreOrder, IapFailure, string> PurchaseFailed { add { } remove { } }
+            public event Action<IapStoreOrder> PurchaseDeferred { add { } remove { } }
+            public event Action<IReadOnlyList<IapStoreOrder>> PurchasesFetched { add { } remove { } }
+            public event Action<string> PurchasesFetchFailed { add { } remove { } }
+            public Task ConnectAsync() => Task.CompletedTask;
+            public void FetchProducts(IReadOnlyList<IapProductConfig> products) => inner.FetchProducts(products);
+            public bool Purchase(string productId) => false;
+            public void Confirm(IapStoreOrder order) { }
+            public void FetchPurchases() { }
+            public void Restore(Action<bool, string> callback) => throw new InvalidOperationException("store gone");
+        }
+
+        [Test]
+        public async Task Restore_NoPurchaseList_ReturnsAfterTheTimeout()
+        {
+            var timeout = new TaskCompletionSource<bool>();
+            using var withTimer = new IapService(store, Catalog, entitlements, null, null, new MemoryTransactionLog(), _ => timeout.Task);
+            await withTimer.InitializeAsync();
+
+            Task<bool> restore = withTimer.RestoreAsync();
+            Assert.That(withTimer.RestoreAsync(), Is.SameAs(restore), "one restore at a time");
+            store.RestoreCallback(true, null);
+            Assert.That(restore.IsCompleted, Is.False);
+
+            LogAssert.Expect(LogType.Warning, new Regex("no purchase list"));
+            timeout.SetResult(true);
+            Assert.That(await restore, Is.True);
+        }
+
+        [Test]
+        public async Task PaidButUnconfirmedSubscription_RecoveredAtStartup_StaysOwned()
+        {
+            // Unity IAP 5 on Google: an order never acknowledged (app killed between grant and confirm) is fetched as a
+            // pending order - routed to PurchasePending first, then listed with the paid orders.
+            await service.InitializeAsync();
+            var order = new IapStoreOrder { ProductId = "vip", TransactionId = "tx-sub", Receipt = "r" };
+
+            store.Pending(order.ProductId, order.TransactionId);
+            store.Owned(order);
+
+            Assert.That(entitlements.Has("vip"), Is.True);
+            Assert.That(service.IsOwned("vip"), Is.True);
         }
 
         [Test]

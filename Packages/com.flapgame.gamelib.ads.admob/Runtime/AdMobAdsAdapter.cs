@@ -308,7 +308,9 @@ namespace FlapGame.GameLib.Ads
 
         private void RegisterUnits(AdsProviderContext context)
         {
+            // A retried init (after a faulted / cancelled run) rebuilds both: stale slots would keep the old run's units.
             units.Clear();
+            slots.Clear();
             foreach (AdUnitAssignment assignment in context.Units)
             {
                 AdPlacement placement = assignment.Placement;
