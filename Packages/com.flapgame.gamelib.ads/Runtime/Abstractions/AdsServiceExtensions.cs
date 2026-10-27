@@ -93,6 +93,40 @@ namespace FlapGame.GameLib.Ads
         }
 
         /// <summary>
+        /// <see cref="ShowRewardedAsync(IAdsService,string,Action,CancellationToken)"/> with <paramref name="customData"/> for
+        /// server-side reward verification: the ad network passes it to the game's server with the reward (AdMob SSV callback,
+        /// MAX S2S reward callback; MAX: at most 8 KB). Set the user id once with <see cref="SetRewardUserId"/>.
+        /// </summary>
+        public static async ValueTask<bool> ShowRewardedAsync(
+            this IAdsService ads,
+            string placementId,
+            string customData,
+            Action onRewarded,
+            CancellationToken cancellationToken = default)
+        {
+            AdShowResult result = await ShowWithRewardDataAsync(ads, placementId, customData, -1f, cancellationToken);
+            if (result == AdShowResult.Completed)
+                onRewarded?.Invoke();
+            return result == AdShowResult.Completed;
+        }
+
+        /// <summary>
+        /// The user id sent with server-side reward verification (AdMob SSV, MAX S2S reward callback): the game's own account
+        /// / player id, which its server matches the callback to. Set it once it is known; null = none.
+        /// </summary>
+        public static void SetRewardUserId(this IAdsService ads, string userId)
+        {
+            if (ads is CompositeAdsService composite) composite.RewardUserId = userId;
+            else Debug.LogWarning($"[Ads] SetRewardUserId needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+        }
+
+        private static ValueTask<AdShowResult> ShowWithRewardDataAsync(IAdsService ads, string placementId, string customData,
+                                                                       float waitForFillSeconds, CancellationToken cancellationToken)
+            => ads is CompositeAdsService composite
+                ? composite.ShowRewardedAsync(placementId, customData, waitForFillSeconds, cancellationToken)
+                : ads.ShowAsync(placementId, cancellationToken);
+
+        /// <summary>
         /// Shows a rewarded ad using a drag-drop placement reference.
         /// </summary>
         public static ValueTask<bool> ShowRewardedAsync(
@@ -107,13 +141,16 @@ namespace FlapGame.GameLib.Ads
         /// when the ad can show right now, <paramref name="askUser"/> runs the game's intro screen (the reward, and a way to
         /// say no; Google asks for a few seconds' countdown) and the ad opens only on true. <paramref name="onRewarded"/> runs
         /// when the reward was earned. Returns true if it was. Nothing ready = no intro, false; a "no" = no show, false.
+        /// <paramref name="customData"/>: for server-side reward verification, as in
+        /// <see cref="ShowRewardedAsync(IAdsService,string,string,Action,CancellationToken)"/>.
         /// </summary>
         public static async ValueTask<bool> ShowRewardedInterstitialAsync(
             this IAdsService ads,
             string placementId,
             Func<CancellationToken, Task<bool>> askUser,
             Action onRewarded,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string customData = null)
         {
             if (askUser == null) throw new ArgumentNullException(nameof(askUser));
             if (!ads.CanShow(placementId, out _))
@@ -123,7 +160,7 @@ namespace FlapGame.GameLib.Ads
                 return false;
             }
             if (!await askUser(cancellationToken) || cancellationToken.IsCancellationRequested) return false;
-            AdShowResult result = await ads.ShowAsync(placementId, 0f, cancellationToken);
+            AdShowResult result = await ShowWithRewardDataAsync(ads, placementId, customData, 0f, cancellationToken);
             if (result == AdShowResult.Completed)
                 onRewarded?.Invoke();
             return result == AdShowResult.Completed;

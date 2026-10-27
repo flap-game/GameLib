@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.7] - 2026-10-27
+- `IRewardVerification`: `ServerSideVerificationOptions` (user id, custom data) on each rewarded / rewarded interstitial ad.
+
 ## [0.8.6] - 2026-10-27
 - Rewarded interstitial (`RewardedInterstitialAd`), with Google's demo units in test mode.
 

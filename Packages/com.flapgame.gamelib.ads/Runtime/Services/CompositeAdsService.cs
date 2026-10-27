@@ -69,6 +69,12 @@ namespace FlapGame.GameLib.Ads
         private AdLoadStrategy loadStrategy;
         private ConsentState consent = new();
         private (float Volume, bool Muted)? adAudio; // null = never set: the SDK defaults stay
+
+        /// <summary>
+        /// The user id sent with server-side reward verification (<see cref="IRewardVerification"/>): the game's own
+        /// account / player id, which its server matches the callback to. Null = none.
+        /// </summary>
+        public string RewardUserId { get; set; }
         private Task initializationTask;
         private string showingFullscreen;
         private float lastFullscreenClosedAt = float.NegativeInfinity;
@@ -1108,7 +1114,20 @@ namespace FlapGame.GameLib.Ads
         /// <see cref="ShowAsync(string, CancellationToken)"/> that waits up to <paramref name="waitForFillSeconds"/> for the
         /// ad to load when nothing else blocks the show, instead of <c>AdPlacement.WaitForFillSeconds</c> (negative = use it).
         /// </summary>
-        public async ValueTask<AdShowResult> ShowAsync(string placementId, float waitForFillSeconds, CancellationToken cancellationToken = default)
+        public ValueTask<AdShowResult> ShowAsync(string placementId, float waitForFillSeconds, CancellationToken cancellationToken = default)
+            => ShowCoreAsync(placementId, waitForFillSeconds, null, cancellationToken);
+
+        /// <summary>
+        /// Shows a rewarded / rewarded interstitial placement with <paramref name="customData"/> for server-side reward
+        /// verification (<see cref="IRewardVerification"/>; MAX: at most 8 KB). Otherwise as
+        /// <see cref="ShowAsync(string, float, CancellationToken)"/> (negative wait = the placement's).
+        /// </summary>
+        public ValueTask<AdShowResult> ShowRewardedAsync(string placementId, string customData, float waitForFillSeconds = -1f,
+                                                         CancellationToken cancellationToken = default)
+            => ShowCoreAsync(placementId, waitForFillSeconds, customData, cancellationToken);
+
+        private async ValueTask<AdShowResult> ShowCoreAsync(string placementId, float waitForFillSeconds, string rewardCustomData,
+                                                            CancellationToken cancellationToken)
         {
             RefreshNoAds();
             bool allowed = CanShow(placementId, out AdBlockReason reason);
@@ -1173,6 +1192,12 @@ namespace FlapGame.GameLib.Ads
                     if (!adapter.IsPlacementReady(placementId)) continue;
                     string providerId = routeId;
                     showingProvider[placementId] = providerId;
+                    if (p.Format is AdFormat.Rewarded or AdFormat.RewardedInterstitial && adapter is IRewardVerification verification)
+                    {
+                        // Every rewarded show sets both, so one show's custom data never carries over to the next.
+                        try { verification.SetRewardVerification(RewardUserId, rewardCustomData); }
+                        catch (Exception e) { Debug.LogWarning($"{LogPrefix} {providerId} SetRewardVerification threw: {e.Message}"); }
+                    }
                     AdShowResult result;
                     try
                     {

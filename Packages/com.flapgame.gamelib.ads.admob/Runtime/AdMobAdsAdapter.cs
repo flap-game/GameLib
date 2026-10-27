@@ -32,7 +32,7 @@ namespace FlapGame.GameLib.Ads
     /// outcome is awaited, so the composite never opens a second ad on top of it.
     /// </para>
     /// </summary>
-    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio
+    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification
     {
         private const string LogPrefix = "[Ads/AdMob]";
 
@@ -54,6 +54,7 @@ namespace FlapGame.GameLib.Ads
         private ConsentState consent = new();
         private bool initialized;
         private bool disposed;
+        private string rewardUserId, rewardCustomData; // SSV of the next rewarded show (SetRewardVerification)
 
         /// <summary>Creates the adapter. Call on the main thread: it captures the main-thread context for SDK callbacks.</summary>
         public AdMobAdsAdapter()
@@ -275,6 +276,24 @@ namespace FlapGame.GameLib.Ads
 #endif
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Consent applied: {consent} (personalisation follows the TCF string written by UMP).");
         }
+
+        /// <summary>Google's SSV options for the next rewarded / rewarded interstitial show (AdMob console: the ad unit's SSV callback URL).</summary>
+        public void SetRewardVerification(string userId, string customData)
+        {
+            rewardUserId     = userId;
+            rewardCustomData = customData;
+        }
+
+#if GAMELIB_ADMOB
+        // One show's: taken (and cleared) by the show that uses it. Null = nothing to verify.
+        private ServerSideVerificationOptions TakeRewardVerification()
+        {
+            string userId = rewardUserId, customData = rewardCustomData;
+            rewardUserId = rewardCustomData = null;
+            if (string.IsNullOrEmpty(userId) && string.IsNullOrEmpty(customData)) return null;
+            return new ServerSideVerificationOptions { UserId = userId, CustomData = customData };
+        }
+#endif
 
         /// <summary>Google's app volume and mute: video ads start at this volume (Google: only for an app with its own volume control).</summary>
         public void ApplyAdAudio(float volume, bool muted)
@@ -720,6 +739,8 @@ namespace FlapGame.GameLib.Ads
             ad.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(ad.GetResponseInfo)));
             ad.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
 
+            ServerSideVerificationOptions verification = TakeRewardVerification();
+            if (verification != null) ad.SetServerSideVerificationOptions(verification);
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing rewarded {unit.Id}.");
             unit.Slot.Rewarded = null; // consumed, for every placement on the slot
             RaiseReadyChanged(unit.Slot);
@@ -756,6 +777,8 @@ namespace FlapGame.GameLib.Ads
             ad.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(ad.GetResponseInfo)));
             ad.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
 
+            ServerSideVerificationOptions verification = TakeRewardVerification();
+            if (verification != null) ad.SetServerSideVerificationOptions(verification);
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing rewarded interstitial {unit.Id}.");
             unit.Slot.RewardedInterstitial = null; // consumed, for every placement on the slot
             RaiseReadyChanged(unit.Slot);

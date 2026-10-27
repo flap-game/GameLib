@@ -12,13 +12,15 @@ using FlapGame.GameLib.Ads.Editor;
 namespace FlapGame.GameLib.Ads.Tests
 {
     /// <summary>Scriptable <see cref="IAdsProviderAdapter"/> shared by the ads tests.</summary>
-    internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio
+    internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification
     {
         public int DebuggerOpened;
         public bool DebuggerResult = true;
         public Task<bool> OpenDebuggerAsync() { DebuggerOpened++; return Task.FromResult(DebuggerResult); }
         public readonly List<(float, bool)> AdAudio = new();
         public void ApplyAdAudio(float volume, bool muted) => AdAudio.Add((volume, muted));
+        public readonly List<(string userId, string customData)> RewardVerifications = new();
+        public void SetRewardVerification(string userId, string customData) => RewardVerifications.Add((userId, customData));
 
         public readonly HashSet<string> Ready = new();
         public readonly HashSet<string> Active = new();

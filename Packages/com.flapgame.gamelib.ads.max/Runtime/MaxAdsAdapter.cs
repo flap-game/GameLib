@@ -30,7 +30,7 @@ namespace FlapGame.GameLib.Ads
     /// </para>
     /// </summary>
     [Preserve]
-    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdsDebugger, IAdsAudio
+    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdsDebugger, IAdsAudio, IRewardVerification
     {
         private const string LogPrefix = "[Ads/MAX]";
         private const double MaxRetryDelaySeconds = 60d;
@@ -64,6 +64,7 @@ namespace FlapGame.GameLib.Ads
         private ConsentState consent = new();
         private bool initialized;
         private bool disposed;
+        private string appliedUserId, rewardCustomData; // S2S reward callback (SetRewardVerification)
 
         /// <summary>Creates the adapter and subscribes to the static MAX callbacks (released by <see cref="Dispose"/>).</summary>
         [Preserve]
@@ -282,6 +283,28 @@ namespace FlapGame.GameLib.Ads
             return Task.FromResult(true);
         }
 
+        /// <summary>
+        /// MAX's S2S reward callback (AppLovin dashboard): the user id goes to <c>MaxSdk.SetUserId</c> - SDK-wide, it stays
+        /// until another one is set - and the custom data to the next rewarded show (at most 8 KB).
+        /// </summary>
+        public void SetRewardVerification(string userId, string customData)
+        {
+            if (disposed) return;
+            if (!string.IsNullOrEmpty(userId) && userId != appliedUserId)
+            {
+                MaxSdk.SetUserId(userId);
+                appliedUserId = userId;
+            }
+            rewardCustomData = customData;
+        }
+
+        private string TakeRewardCustomData()
+        {
+            string data = rewardCustomData;
+            rewardCustomData = null;
+            return data;
+        }
+
         /// <summary>MAX has no volume, only "video ads start muted" (<c>MaxSdk.SetMuted</c>, after init): muted or volume 0.</summary>
         public void ApplyAdAudio(float volume, bool muted)
         {
@@ -480,7 +503,7 @@ namespace FlapGame.GameLib.Ads
                 switch (p.Format)
                 {
                     case AdFormat.Interstitial: MaxSdk.ShowInterstitial(unit, p.Id); break;
-                    case AdFormat.Rewarded:     MaxSdk.ShowRewardedAd(unit, p.Id);   break;
+                    case AdFormat.Rewarded:     MaxSdk.ShowRewardedAd(unit, p.Id, TakeRewardCustomData()); break;
                     default:                    MaxSdk.ShowAppOpenAd(unit, p.Id);    break;
                 }
 

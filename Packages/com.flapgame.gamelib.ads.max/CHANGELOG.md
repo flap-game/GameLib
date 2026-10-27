@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.7] - 2026-10-27
+- `IRewardVerification`: `MaxSdk.SetUserId` and the rewarded show's `customData` (S2S reward callback).
+
 ## [0.8.6] - 2026-10-27
 - A rewarded interstitial placement on MAX fails with a warning (MAX has no such format).
 

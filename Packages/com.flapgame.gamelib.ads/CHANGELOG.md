@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.7] - 2026-10-27
+- Server-side reward verification: `ads.SetRewardUserId(id)` and `ads.ShowRewardedAsync(id, customData, onRewarded)`
+  (`ShowRewardedInterstitialAsync` takes `customData` too) reach the showing provider before each rewarded show
+  (`IRewardVerification`, implemented by the AdMob and MAX adapters).
+
 ## [0.8.6] - 2026-10-27
 - Format `AdFormat.RewardedInterstitial` (AdMob only): follows the interstitial pacing rules and restarts their timer.
   `ads.ShowRewardedInterstitialAsync(placement, askUser, onRewarded)` runs the game's intro screen Google requires - only

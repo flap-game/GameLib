@@ -86,6 +86,24 @@ bool earned = await ads.ShowRewardedInterstitialAsync("level_end_bonus",
 
 A "no" shows nothing and restarts no timer. Never call `ShowAsync` on this placement directly: that opens it unannounced.
 
+## Server-side reward verification (SSV)
+
+For a game whose server grants rewards (currency kept server-side): the ad network calls the game's server, signed, for
+every earned reward, so a hacked client cannot fake one. Only useful with such a server; a game without one needs nothing.
+
+- Set the callback URL in the network's console: AdMob > the ad unit > Server-side verification; AppLovin MAX > the ad
+  unit's S2S reward callback. The server checks the signature (Google's / AppLovin's docs) and grants the reward.
+- In the game, the id the server knows the player by, once it is known, and optional data per show:
+
+```csharp
+ads.SetRewardUserId(account.PlayerId);
+bool earned = await ads.ShowRewardedAsync("revive", customData: "level=7", onRewarded: ShowRevivedUi);
+```
+
+`ShowRewardedInterstitialAsync(..., customData: "...")` takes it too. MAX keeps the user id SDK-wide (also for its other
+postbacks) and takes at most 8 KB of custom data. `onRewarded` still fires from the client at once; it does not wait for
+the server - the server's grant is what counts.
+
 ## While a fullscreen ad is up
 
 Turn on `Pause Game During Fullscreen Ads` (`Time.timeScale = 0`) and / or `Mute Audio During Fullscreen Ads`

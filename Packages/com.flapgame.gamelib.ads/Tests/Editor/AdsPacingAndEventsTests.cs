@@ -33,6 +33,11 @@ namespace FlapGame.GameLib.Ads.Tests
             });
             settings.Placements.Add(new AdPlacement
             {
+                Id = "rw", Format = AdFormat.Rewarded,
+                Routes = { new AdRoute("max", "m4", "mi4") },
+            });
+            settings.Placements.Add(new AdPlacement
+            {
                 Id = "banner", Format = AdFormat.Banner,
                 Routes = { new AdRoute("max", "m2", "mi2") },
             });
@@ -274,6 +279,26 @@ namespace FlapGame.GameLib.Ads.Tests
             adMob.NextResult = AdShowResult.Skipped; // closed before the reward
             Assert.That(Await(ads.ShowRewardedInterstitialAsync("ri", intro, () => rewarded++)), Is.False);
             Assert.That(rewarded, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RewardVerification_ReachesTheShowingProvider_OncePerRewardedShow()
+        {
+            using var ads = Create();
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            max.MarkReady("rw");
+            max.MarkReady("inter");
+            adMob.MarkReady("ri");
+            ads.SetRewardUserId("player-42");
+
+            Assert.That(Await(ads.ShowRewardedAsync("rw", "level=7", () => { })), Is.True);
+            Await(ads.ShowAsync("inter"));
+            Assert.That(Await(ads.ShowRewardedAsync("rw", () => { })), Is.True);
+            Assert.That(max.RewardVerifications, Is.EqualTo(new[] { ("player-42", "level=7"), ("player-42", (string)null) }),
+                        "an interstitial gets none; one show's data never carries over");
+
+            Assert.That(Await(ads.ShowRewardedInterstitialAsync("ri", _ => Task.FromResult(true), null, default, "bonus")), Is.True);
+            Assert.That(adMob.RewardVerifications, Is.EqualTo(new[] { ("player-42", "bonus") }));
         }
 
         [Test]
