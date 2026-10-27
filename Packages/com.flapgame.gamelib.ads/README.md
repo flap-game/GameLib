@@ -108,6 +108,17 @@ Sizes: `Standard` (320x50), `Adaptive` (full width, the SDK picks the height), `
 `Preload Banner` creates the banner hidden as soon as its SDK is ready, so the first screen with a banner shows an ad
 instead of an empty slot (not for collapsible banners). A hidden MAX banner stops refreshing until it is shown again.
 
+## Ad sound
+
+`ads.SetAdAudio(volume, muted)` tells the SDKs the game's own sound setting, so video ads start at that volume or muted.
+Call it at start and on every change of the game's volume slider / sound toggle; SDKs that initialize later get the last
+value. Never called = the SDK defaults (ads play with sound).
+
+- AdMob takes both (`SetApplicationVolume`, `SetApplicationMuted`). MAX only has "start muted": muted, or volume 0.
+- Call it **only when the game has its own sound setting**. Google warns that a low or muted app volume makes fewer video
+  ads eligible, which can lower revenue.
+- This is about the ad's sound. `AdsModule > Mute Audio During Fullscreen Ads` is the game's sound while an ad is up.
+
 ## Debugging mediation
 
 `await ads.OpenDebuggerAsync()` opens the ad SDK's own debug screen - every mediated network, whether its adapter is

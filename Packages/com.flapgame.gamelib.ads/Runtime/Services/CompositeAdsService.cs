@@ -68,6 +68,7 @@ namespace FlapGame.GameLib.Ads
         private AdsPolicy policy;
         private AdLoadStrategy loadStrategy;
         private ConsentState consent = new();
+        private (float Volume, bool Muted)? adAudio; // null = never set: the SDK defaults stay
         private Task initializationTask;
         private string showingFullscreen;
         private float lastFullscreenClosedAt = float.NegativeInfinity;
@@ -296,6 +297,25 @@ namespace FlapGame.GameLib.Ads
             return false;
         }
 
+        /// <summary>
+        /// Tells every SDK the game's sound setting (<see cref="IAdsAudio"/>), now and for SDKs that initialize later. Call
+        /// it at start and on every change of the game's own volume / sound toggle - only when the game has one: Google
+        /// warns a low or muted app volume makes fewer video ads eligible, which can lower revenue.
+        /// </summary>
+        public void SetAdAudio(float volume, bool muted)
+        {
+            adAudio = (Mathf.Clamp01(volume), muted);
+            foreach (IAdsProviderAdapter adapter in adapters)
+                if (adapter.IsInitialized) SafeApplyAdAudio(adapter);
+        }
+
+        private void SafeApplyAdAudio(IAdsProviderAdapter adapter)
+        {
+            if (adAudio is not { } audio || adapter is not IAdsAudio target) return;
+            try { target.ApplyAdAudio(audio.Volume, audio.Muted); }
+            catch (Exception e) { Debug.LogWarning($"{LogPrefix} {adapter.ProviderId} ApplyAdAudio threw: {e.Message}"); }
+        }
+
         /// <summary>Removes a rule added with <see cref="AddRule"/>.</summary>
         public bool RemoveRule(AdShowRule rule)
         {
@@ -443,6 +463,7 @@ namespace FlapGame.GameLib.Ads
 
             if (disposed) return;
             initializedProviders.Add(id);
+            SafeApplyAdAudio(adapter);
             ReconcileAll();
         }
 
@@ -468,6 +489,8 @@ namespace FlapGame.GameLib.Ads
                 return;
             }
             if (disposed || !droppedProviders.Remove(id)) return;
+            foreach (IAdsProviderAdapter adapter in adapters)
+                if (AdProviderIds.Normalize(adapter.ProviderId) == id) SafeApplyAdAudio(adapter);
             InvalidateRoutes();
             initializedProviders.Add(id);
             Debug.Log($"{LogPrefix} {id} finished initializing late - its routes are back.");

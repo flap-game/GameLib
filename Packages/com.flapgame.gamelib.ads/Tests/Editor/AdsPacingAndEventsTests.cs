@@ -197,6 +197,29 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void SetAdAudio_ReachesEverySdkOnceInitialized_AndOnEveryChange()
+        {
+            using (CompositeAdsService untouched = Create())
+            {
+                untouched.InitializeAsync().AsTask().GetAwaiter().GetResult();
+                Assert.That(max.AdAudio, Is.Empty, "never set: the SDK defaults stay");
+            }
+
+            max = new FakeAdsAdapter(AdProviderIds.Max);
+            adMob = new FakeAdsAdapter(AdProviderIds.AdMob);
+            using var ads = Create();
+            ads.SetAdAudio(0.5f, false);
+            Assert.That(max.AdAudio, Is.Empty, "not before the SDK initialized");
+
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            Assert.That(max.AdAudio, Is.EqualTo(new[] { (0.5f, false) }), "applied when it initializes");
+
+            ads.SetAdAudio(1.5f, true);
+            Assert.That(max.AdAudio[^1], Is.EqualTo((1f, true)), "clamped to 0..1");
+            Assert.That(adMob.AdAudio, Is.EqualTo(max.AdAudio));
+        }
+
+        [Test]
         public void Validate_WarnsWhenMaxServesASmallBanner()
         {
             settings.Placements.Find(p => p.Id == "banner").Size = BannerSize.SmallFullWidth;

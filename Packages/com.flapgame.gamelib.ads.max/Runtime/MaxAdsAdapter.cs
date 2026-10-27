@@ -30,7 +30,7 @@ namespace FlapGame.GameLib.Ads
     /// </para>
     /// </summary>
     [Preserve]
-    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdsDebugger
+    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdsDebugger, IAdsAudio
     {
         private const string LogPrefix = "[Ads/MAX]";
         private const double MaxRetryDelaySeconds = 60d;
@@ -271,7 +271,6 @@ namespace FlapGame.GameLib.Ads
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Consent applied: {consent}.");
         }
 
-        /// <summary>Stops every reload, resolves pending shows as Failed, destroys banners and unsubscribes from MAX.</summary>
         /// <summary>AppLovin's Mediation Debugger. MAX reports no close, so this completes once it is opened.</summary>
         public Task<bool> OpenDebuggerAsync()
         {
@@ -280,6 +279,16 @@ namespace FlapGame.GameLib.Ads
             return Task.FromResult(true);
         }
 
+        /// <summary>MAX has no volume, only "video ads start muted" (<c>MaxSdk.SetMuted</c>, after init): muted or volume 0.</summary>
+        public void ApplyAdAudio(float volume, bool muted)
+        {
+            if (disposed || !initialized) return;
+            bool mute = muted || volume <= 0f;
+            MaxSdk.SetMuted(mute);
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Video ads start muted: {mute}.");
+        }
+
+        /// <summary>Stops every reload, resolves pending shows as Failed, destroys banners and unsubscribes from MAX.</summary>
         public void Dispose()
         {
             if (disposed) return;

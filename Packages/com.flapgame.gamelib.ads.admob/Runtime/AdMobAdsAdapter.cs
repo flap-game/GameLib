@@ -32,7 +32,7 @@ namespace FlapGame.GameLib.Ads
     /// outcome is awaited, so the composite never opens a second ad on top of it.
     /// </para>
     /// </summary>
-    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger
+    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio
     {
         private const string LogPrefix = "[Ads/AdMob]";
 
@@ -274,7 +274,17 @@ namespace FlapGame.GameLib.Ads
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Consent applied: {consent} (personalisation follows the TCF string written by UMP).");
         }
 
-        /// <inheritdoc />
+        /// <summary>Google's app volume and mute: video ads start at this volume (Google: only for an app with its own volume control).</summary>
+        public void ApplyAdAudio(float volume, bool muted)
+        {
+            if (disposed) return;
+#if GAMELIB_ADMOB
+            MobileAds.SetApplicationVolume(volume);
+            MobileAds.SetApplicationMuted(muted);
+#endif
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} App volume {volume:0.##}, muted {muted}.");
+        }
+
         /// <summary>
         /// Google's Ad Inspector. It opens on test devices only (added in the AdMob console > Settings > Test devices, or
         /// in AdsModule > AdMob Test Device Ids with Test Mode on); elsewhere it closes at once with an error.

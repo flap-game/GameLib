@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.5] - 2026-10-27
+- `IAdsAudio`: `MaxSdk.SetMuted` (muted, or volume 0; MAX has no volume).
+
 ## [0.8.4] - 2026-10-27
 - `IAdsDebugger`: AppLovin's Mediation Debugger (`MaxSdk.ShowMediationDebugger`).
 

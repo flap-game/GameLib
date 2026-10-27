@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.5] - 2026-10-27
+- `IAdsAudio`: `MobileAds.SetApplicationVolume` / `SetApplicationMuted`.
+
 ## [0.8.4] - 2026-10-27
 - `IAdsDebugger`: Google's Ad Inspector (`MobileAds.OpenAdInspector`), on AdMob test devices.
 

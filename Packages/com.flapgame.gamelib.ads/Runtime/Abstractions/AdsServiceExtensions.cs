@@ -61,6 +61,17 @@ namespace FlapGame.GameLib.Ads
             return Task.FromResult(false);
         }
 
+        /// <summary>
+        /// Tells the ad SDKs the game's sound setting, so video ads start at that volume or muted (AdMob: volume and mute,
+        /// MAX: mute only). Call at start and on every change - only when the game has its own sound setting: Google warns a
+        /// low or muted app volume makes fewer video ads eligible. <paramref name="volume"/> 0..1.
+        /// </summary>
+        public static void SetAdAudio(this IAdsService ads, float volume, bool muted)
+        {
+            if (ads is CompositeAdsService composite) composite.SetAdAudio(volume, muted);
+            else Debug.LogWarning($"[Ads] SetAdAudio needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+        }
+
         /// <summary>True while an interstitial, rewarded or app open ad is on screen (false for another service).</summary>
         public static bool IsShowingFullscreen(this IAdsService ads) =>
             ads is CompositeAdsService composite && composite.IsShowingFullscreen;

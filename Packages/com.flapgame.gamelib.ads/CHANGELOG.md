@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.5] - 2026-10-27
+- `ads.SetAdAudio(volume, muted)`: video ads start at the game's volume or muted (`IAdsAudio`, implemented by the AdMob
+  and MAX adapters); applied once each SDK initialized and on every change.
+
 ## [0.8.4] - 2026-10-27
 - `ads.OpenDebuggerAsync(providerId = null)`: opens the SDK's debug screen (`IAdsDebugger`, implemented by the AdMob and
   MAX adapters). The trip to it is marked as game-initiated, so the return shows no app open ad
