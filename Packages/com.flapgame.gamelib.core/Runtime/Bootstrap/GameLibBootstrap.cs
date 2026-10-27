@@ -93,6 +93,7 @@ namespace FlapGame.GameLib
             registry.Register<IAppLifecycle>(AppLifecycleBehaviour.Create());
             registry.Register<IConsentState>(new ConsentStateStore());
             registry.Register<IEntitlements>(new PlayerPrefsEntitlements());
+            registry.Register<ITrackerIds>(new PlayerPrefsTrackerIds());
 
             var analytics = new AnalyticsService();
             registry.Register<IAnalytics>(analytics);

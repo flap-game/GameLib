@@ -23,6 +23,9 @@ namespace FlapGame.GameLib.Analytics.Firebase
         void SetUserId(string userId);
 
         void SetConsent(FirebaseConsent consent);
+
+        /// <summary>The app instance id (GA4 <c>user_pseudo_id</c>); null when Firebase has none (analytics storage denied).</summary>
+        Task<string> GetAppInstanceIdAsync();
     }
 
     public static class FirebaseAnalyticsBackend

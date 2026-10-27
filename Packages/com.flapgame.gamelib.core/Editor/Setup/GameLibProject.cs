@@ -102,6 +102,37 @@ namespace FlapGame.GameLib.Editor
         }
 
         /// <summary>Everything that is wrong with the GameLib setup of this project.</summary>
+        /// <summary>
+        /// The installed Firebase packages (<c>com.google.firebase.*</c>): an error when they are on different versions (the
+        /// native libraries must match), a warning on a major version GameLib is not checked against.
+        /// </summary>
+        public static List<GameLibIssue> CheckFirebaseVersions(IEnumerable<(string Name, string Version)> packages)
+        {
+            var issues = new List<GameLibIssue>();
+            List<(string Name, string Version)> firebase = packages
+                .Where(p => p.Name != null && p.Name.StartsWith("com.google.firebase.", StringComparison.Ordinal))
+                .OrderBy(p => p.Name, StringComparer.Ordinal)
+                .ToList();
+            if (firebase.Count == 0) return issues;
+
+            List<string> versions = firebase.Select(p => p.Version).Distinct().ToList();
+            if (versions.Count > 1)
+            {
+                issues.Add(GameLibIssue.Error("Firebase packages are on different versions (" +
+                                              string.Join(", ", firebase.Select(p => $"{p.Name} {p.Version}")) +
+                                              "). Put every com.google.firebase.* package on the same version."));
+                return issues;
+            }
+
+            string version = versions[0];
+            string majorText = version?.Split('.')[0];
+            if (!int.TryParse(majorText, out int major) || Array.IndexOf(GameLibModuleCatalog.SupportedFirebaseMajors, major) < 0)
+                issues.Add(GameLibIssue.Warning($"Firebase {version}: GameLib is checked against " +
+                                                string.Join(" and ", GameLibModuleCatalog.SupportedFirebaseMajors.Select(m => m + ".x")) +
+                                                $" (new installs get {GameLibModuleCatalog.FirebaseVersion})."));
+            return issues;
+        }
+
         public static List<GameLibIssue> Diagnose()
         {
             var issues = new List<GameLibIssue>();
@@ -134,6 +165,8 @@ namespace FlapGame.GameLib.Editor
                         issues.Add(GameLibIssue.Error($"{module.DisplayName} needs {sdk.DisplayName} ({sdk.PackageName}), which is not installed."));
                 }
             }
+
+            issues.AddRange(CheckFirebaseVersions(installed.Values.Select(p => (p.name, p.version))));
 
             for (int i = 0; i < settings.Modules.Count; i++)
             {

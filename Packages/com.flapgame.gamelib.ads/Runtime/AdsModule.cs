@@ -71,6 +71,14 @@ namespace FlapGame.GameLib.Ads
                  "(e.g. GameAds_LaunchCount) so its players keep their count.")]
         public string AppOpenLaunchCountKey;
 
+        [Header("While A Fullscreen Ad Is Up")]
+        [Tooltip("Time.timeScale = 0 while an interstitial, rewarded or app open ad is on screen; put back when it closes. " +
+                 "Leave off when the game already pauses on FullscreenShowingChanged.")]
+        public bool PauseGameDuringFullscreenAds;
+
+        [Tooltip("AudioListener.pause while a fullscreen ad is on screen, so game music does not play under the ad's sound.")]
+        public bool MuteAudioDuringFullscreenAds;
+
         [Header("Startup")]
         [Tooltip("Run consent + SDK initialization in the background so bootstrap is not blocked by network round-trips.")]
         public bool InitializeInBackground = true;
@@ -155,6 +163,9 @@ namespace FlapGame.GameLib.Ads
                             issues.Add(GameLibIssue.Warning($"Placement '{p.Id}' route '{r.EffectiveProviderId}' has no Android ad unit id."));
                         if (string.IsNullOrEmpty(r.IosAdUnitId) && string.IsNullOrEmpty(r.AdUnitId))
                             issues.Add(GameLibIssue.Warning($"Placement '{p.Id}' route '{r.EffectiveProviderId}' has no iOS ad unit id."));
+                        if (p.Format == AdFormat.Banner && p.Size is BannerSize.SmallFullWidth or BannerSize.Collapsible
+                            && r.EffectiveProviderId == AdProviderIds.Max)
+                            issues.Add(GameLibIssue.Warning($"Placement '{p.Id}': MAX has no {p.Size} banner - its route '{r.EffectiveProviderId}' shows a Standard 320x50 one."));
                     }
             }
 
@@ -229,6 +240,8 @@ namespace FlapGame.GameLib.Ads
             if (plan != null) SetPlanProperty(analytics, plan);
 
             services.RegisterDisposable(new Wiring(service, entitlements, lifecycle, planSource, analytics));
+            if (PauseGameDuringFullscreenAds || MuteAudioDuringFullscreenAds)
+                services.RegisterDisposable(new FullscreenAdPause(service, PauseGameDuringFullscreenAds, MuteAudioDuringFullscreenAds));
 
             // 3. Consent platform of the highest-priority selected provider, wrapped so every change reaches the SDKs
             //    and the shared IConsentState (Firebase, AppsFlyer).

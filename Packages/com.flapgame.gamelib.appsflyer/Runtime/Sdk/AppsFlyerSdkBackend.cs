@@ -27,6 +27,8 @@ namespace FlapGame.GameLib.AppsFlyer
 
         public async Task StartAsync() => await AF.start();
 
+        public async Task<string> GetAppsFlyerIdAsync() => await AF.getAppsFlyerUID();
+
         public void SetCustomerUserId(string userId) => Run(() => AF.setCustomerUserId(userId));
 
         public void LogEvent(string name, Dictionary<string, string> values) => Run(() => AF.logEvent(name, values));
@@ -57,6 +59,8 @@ namespace FlapGame.GameLib.AppsFlyer
             AF.startSDK();
             return Task.CompletedTask;
         }
+
+        public Task<string> GetAppsFlyerIdAsync() => Task.FromResult(AF.getAppsFlyerId());
 
         public void SetCustomerUserId(string userId) => AF.setCustomerUserId(userId);
 

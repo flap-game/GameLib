@@ -63,10 +63,22 @@ namespace FlapGame.GameLib.Editor
             RegistryScopes = new[] { "com.google.external-dependency-manager" },
         };
 
-        /// <summary>Firebase Unity SDK version every Firebase module installs (all Firebase packages must match).</summary>
-        public const string FirebaseVersion = "14.1.0";
+        /// <summary>
+        /// Firebase Unity SDK version a new install gets (all Firebase packages must match). The GameLib Firebase code
+        /// compiles against 13.16.0 and 14.1.0; Doctor checks the installed version (<see cref="SupportedFirebaseMajors"/>).
+        /// </summary>
+        public const string FirebaseVersion = "13.16.0";
 
-        /// <summary>A Firebase package from Google's tarball archive, e.g. <c>analytics</c> -> com.google.firebase.analytics.</summary>
+        /// <summary>Firebase major versions GameLib is checked against.</summary>
+        public static readonly int[] SupportedFirebaseMajors = { 13, 14 };
+
+        /// <summary>
+        /// A Firebase package from the GameWorkstore git mirror of Google's packages, e.g. <c>analytics</c> ->
+        /// <c>https://github.com/GameWorkstore/com.google.firebase.analytics.git#13.16.0</c> - the source CoreGame games use.
+        /// Nothing to commit (Google's tarballs are about 60 MB per game), but the mirror trails Google: 13.16.0 is its
+        /// newest tag. For 14.x take the tarballs from https://developers.google.com/unity/archive yourself
+        /// (<see cref="FirebaseTarballSdk"/>); Setup leaves Firebase entries already in the manifest alone.
+        /// </summary>
         public static SdkRequirement FirebaseSdk(string displayName, string product)
         {
             string package = "com.google.firebase." + product;
@@ -74,8 +86,21 @@ namespace FlapGame.GameLib.Editor
             {
                 DisplayName = displayName,
                 PackageName = package,
+                Source = SdkSource.Git,
+                Location = $"https://github.com/GameWorkstore/{package}.git#{FirebaseVersion}",
+            };
+        }
+
+        /// <summary>The same package from Google's tarball archive (downloaded into Packages/GoogleTgz and committed).</summary>
+        public static SdkRequirement FirebaseTarballSdk(string displayName, string product, string version)
+        {
+            string package = "com.google.firebase." + product;
+            return new SdkRequirement
+            {
+                DisplayName = displayName,
+                PackageName = package,
                 Source = SdkSource.Tarball,
-                Location = $"https://dl.google.com/games/registry/unity/{package}/{package}-{FirebaseVersion}.tgz",
+                Location = $"https://dl.google.com/games/registry/unity/{package}/{package}-{version}.tgz",
             };
         }
 

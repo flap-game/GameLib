@@ -5,7 +5,7 @@ Foundation package of GameLib. Every other `com.flapgame.gamelib.*` package depe
 Install:
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.8.1
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.8.2
 ```
 
 Then open **GameLib > Setup**, create the settings asset (Core), and add modules one by one.
@@ -34,6 +34,7 @@ A module that throws during startup is logged and skipped; tick **Required** on 
 | `IAppLifecycle` | Pause / focus / quit events, plus `Resumed` with `FromExternalActivity`: wrap ad shows and purchases in `BeginExternalActivity(...)` (or call `MarkExternalActivity(...)` before opening a link) so coming back from them is not counted as the player returning. |
 | `IConsentState` | The privacy state (GDPR, CCPA, COPPA, ATT) written by the module that owns the CMP and read by every SDK module. |
 | `IEntitlements` | Durable owned keys. IAP grants `Entitlements.NoAds`, Ads reads it; games can add their own. |
+| `ITrackerIds` | The ids the trackers gave this install: `FirebaseAppInstanceId()`, `AppsFlyerId()` (null until the SDK answered once; kept on the device for later launches), `Changed`. For an `af_firebase_id`-style parameter. |
 | `IAnalytics` | Events, user id / properties, `TrackAdRevenue`, `TrackPurchase`, fanned out to every installed sink. Logs to the Console in the Editor and development builds. |
 
 ## Checks

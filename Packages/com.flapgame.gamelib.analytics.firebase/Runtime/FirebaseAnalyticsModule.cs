@@ -12,7 +12,8 @@ namespace FlapGame.GameLib.Analytics.Firebase
     /// bootstrap never waits on the dependency check. Everything tracked meanwhile is buffered and flushed in order; if
     /// Firebase cannot start (no config file) the sink turns itself off for the session with one log line; a slow start
     /// only warns and still flushes.
-    /// Consent mode follows <see cref="IConsentState"/>.
+    /// Consent mode follows <see cref="IConsentState"/>. Once Firebase is up its app instance id goes to
+    /// <see cref="ITrackerIds"/> (<see cref="TrackerIds.Firebase"/>).
     /// </summary>
     [CreateAssetMenu(menuName = "GameLib/Modules/Firebase Analytics", fileName = "FirebaseAnalyticsModule")]
     public sealed class FirebaseAnalyticsModule : GameLibModule
@@ -52,8 +53,28 @@ namespace FlapGame.GameLib.Analytics.Firebase
             }
 
             TimeSpan timeout = InitTimeoutSeconds > 0f ? TimeSpan.FromSeconds(InitTimeoutSeconds) : Timeout.InfiniteTimeSpan;
-            _ = buffer.InitializeAsync(backend.InitializeAsync, timeout, expectedFailure: Application.isEditor, cancellationToken);
+            services.TryResolve(out ITrackerIds ids);
+            async Task Initialize(CancellationToken ct)
+            {
+                await backend.InitializeAsync(ct);
+                if (ids != null) _ = PublishInstanceIdAsync(backend, ids);
+            }
+            _ = buffer.InitializeAsync(Initialize, timeout, expectedFailure: Application.isEditor, cancellationToken);
             return default;
+        }
+
+        /// <summary>Reads the app instance id once Firebase runs and hands it to <paramref name="ids"/>; a failure only logs.</summary>
+        public static async Task PublishInstanceIdAsync(IFirebaseAnalyticsBackend backend, ITrackerIds ids)
+        {
+            try
+            {
+                string id = await backend.GetAppInstanceIdAsync();
+                if (!string.IsNullOrEmpty(id)) ids.Set(TrackerIds.Firebase, id);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogTag} App instance id unavailable: {e.Message}");
+            }
         }
 
         public override void Validate(ICollection<GameLibIssue> issues)

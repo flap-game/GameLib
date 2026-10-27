@@ -22,6 +22,21 @@ namespace FlapGame.GameLib.Ads
         /// <summary>Raised with the placement id whenever an ad for it finishes loading or is consumed.</summary>
         event Action<string> PlacementReadyChanged;
 
+        /// <summary>
+        /// Raised once per <see cref="ShowAsync"/> of any placement: placement id and why it is not shown, or
+        /// <see cref="AdBlockReason.None"/> when it goes to the ad SDK. For "ad requested" analytics.
+        /// </summary>
+        event Action<string, AdBlockReason> ShowRequested;
+
+        /// <summary>An ad finished loading: placement id, provider id (<c>admob</c>, <c>max</c>...).</summary>
+        event Action<string, string> PlacementLoaded;
+
+        /// <summary>
+        /// An ad failed to load: placement id, provider id, the SDK's error message. The adapter retries by itself; this
+        /// is for "load failed" analytics, not something to act on.
+        /// </summary>
+        event Action<string, string, string> PlacementLoadFailed;
+
         /// <summary>Raised for every paid impression (impression-level revenue) from any provider. <c>AdsModule</c> forwards it to <c>IAnalytics.TrackAdRevenue</c>.</summary>
         event Action<AdImpression> ImpressionPaid;
 

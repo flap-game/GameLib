@@ -27,6 +27,10 @@ namespace FlapGame.GameLib.Ads
                  "blocked by another rule still counts, so the next one shows. 0 or 1 = every request. Ignored for banners.")]
         [Min(0)] public int ShowEveryNthRequest;
 
+        [Tooltip("ShowEveryNthRequest keeps counting across sessions (saved on the device), so the 3rd request can be in " +
+                 "the next session. Off = the count starts again every session.")]
+        public bool PersistRequestCount;
+
         [Tooltip("ShowAsync waits up to this many seconds for the ad to load when it is the only thing missing (every " +
                  "rule allows the show). 0 = fail at once when nothing is loaded. Ignored for banners.")]
         [Min(0f)] public float WaitForFillSeconds;

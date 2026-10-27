@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.2] - 2026-10-27
+- The Firebase app instance id goes to `ITrackerIds` (`TrackerIds.Firebase`) once Firebase runs.
+  `IFirebaseAnalyticsBackend.GetAppInstanceIdAsync`.
+
 ## [0.7.1] - 2026-10-26
 - An event that already fits Firebase limits (valid names, plain values, at most 25 parameters) is passed on without a copy and without building strings; renamed events are cached, so their rename and warning are built once. FirebaseAnalyticsSanitizer.IsValidName.
 - Parameters are built straight into the array LogEvent takes (no List + ToArray).

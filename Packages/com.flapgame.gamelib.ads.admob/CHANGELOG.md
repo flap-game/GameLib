@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.2] - 2026-10-27
+- `BannerSize.SmallFullWidth`: a custom `AdSize(AdSize.FullWidth, 32)` banner (full width of the safe area on iOS).
+
 ## [0.8.0] - 2026-10-27
 - `BannerPosition.Custom` (MREC or banner at `AdPlacement.CustomCenter`; not for collapsible banners).
 - `AdPlacement.PreloadBanner` (not for collapsible banners).

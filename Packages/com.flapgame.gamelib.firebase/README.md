@@ -11,12 +11,19 @@ What it does:
 
 ## Install the SDK
 
-GameLib Setup installs Firebase **14.1.0** from Google's tarball archive: it downloads each `.tgz` into
-`Packages/GoogleTgz/` and references it as `file:GoogleTgz/<file>.tgz`. External Dependency Manager comes from OpenUPM.
+GameLib Setup installs Firebase **13.16.0** from the GameWorkstore git mirror of Google's packages, the source CoreGame
+games use: `https://github.com/GameWorkstore/com.google.firebase.<app|analytics|crashlytics|remote-config>.git#13.16.0`.
+Nothing to commit, and a CI build such as Unity Cloud Build fetches it like any git package. External Dependency
+Manager comes from OpenUPM.
 
-- **Commit `Packages/GoogleTgz/`** (Git LFS is a good idea: Firebase App alone is about 60 MB). A CI build such as
-  Unity Cloud Build gets the SDK from there.
-- Every Firebase package must have the same version.
+- **Supported: Firebase 13.x and 14.x.** The GameLib Firebase code compiles against 13.16.0 and 14.1.0. Doctor and
+  Setup warn on another major version.
+- **Every Firebase package must have the same version** - Doctor reports an error otherwise.
+- **Firebase 14.x:** the mirror stops at 13.16.0 (its newest tag). For 14.x download the `.tgz` files from
+  [Google's archive](https://developers.google.com/unity/archive), put them in `Packages/GoogleTgz/`, reference them as
+  `file:GoogleTgz/<file>.tgz` and commit that folder (Git LFS is a good idea: Firebase App alone is about 60 MB).
+  Setup leaves Firebase entries already in the manifest alone, so a project on tarballs stays on them.
+- The mirror is a third-party copy of Google's packages: pin a tag (never a branch) as Setup does.
 
 ## Config files
 

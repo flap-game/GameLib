@@ -851,9 +851,13 @@ namespace FlapGame.GameLib.Ads
             }
         }
 
+        private const int SmallBannerHeightDp = 32;
+
         private static AdSize GetAdSize(AdPlacement p) => p.Format == AdFormat.Mrec ? AdSize.MediumRectangle : p.Size switch
         {
             BannerSize.MediumRectangle                    => AdSize.MediumRectangle,
+            // A custom size: full width (FullWidth = -1, the safe area on iOS) at a fixed 32 dp.
+            BannerSize.SmallFullWidth                     => new AdSize(AdSize.FullWidth, SmallBannerHeightDp),
             BannerSize.Adaptive or BannerSize.Collapsible =>
                 AdSize.GetCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(AdSize.FullWidth),
             _                                             => AdSize.Banner,

@@ -35,7 +35,7 @@ Modules never reference each other directly; they talk through contracts in `cor
 
 Third-party SDK calls live in separate `*.Sdk` assemblies that compile only when the SDK package is present
 (`versionDefines`). A module's asset therefore never turns into a missing script, and its logic is unit tested without
-the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, Firebase 14.1.0, AppsFlyer 6.17.900 and 7.0.3, Unity IAP 5.4.4.
+the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, Firebase 13.16.0 and 14.1.0, AppsFlyer 6.17.900 and 7.0.3, Unity IAP 5.4.4.
 
 ## How the pieces connect
 
@@ -54,7 +54,7 @@ the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, 
 Add `core` to `Packages/manifest.json`, then open **GameLib > Setup** to add further modules and their SDKs step by step:
 
 ```json
-"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.8.1"
+"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.8.2"
 ```
 
 Unity does not resolve git dependencies between packages, so when installing by hand add every package

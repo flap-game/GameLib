@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.2] - 2026-10-27
+- `ITrackerIds` (always registered): the Firebase app instance id and the AppsFlyer id of this install, for joining
+  rows across tools (`ids.FirebaseAppInstanceId()`, `ids.AppsFlyerId()`, `Changed`). Kept on the device, so the last
+  known ids are there from the first frame of later launches.
+- Setup installs Firebase **13.16.0** from the GameWorkstore git mirrors (`https://github.com/GameWorkstore/
+  com.google.firebase.<x>.git#13.16.0`, as CoreGame games do) instead of Google's tarballs: nothing to commit. 13.x and
+  14.x are supported; a project on tarballs keeps them. `GameLibModuleCatalog.FirebaseTarballSdk` for the old source.
+- Doctor / Setup: an error when the `com.google.firebase.*` packages are on different versions, a warning on a Firebase
+  major version GameLib is not checked against (`GameLibProject.CheckFirebaseVersions`).
+
 ## [0.8.1] - 2026-10-27
 - Setup lists the new Extensions package.
 

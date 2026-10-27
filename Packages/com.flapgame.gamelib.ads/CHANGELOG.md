@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.2] - 2026-10-27
+- Events for the game's own ad analytics on `IAdsService`: `ShowRequested (placement, reason)` once per `ShowAsync`
+  (`AdBlockReason.None` = sent to the SDK), `PlacementLoaded (placement, provider)`, `PlacementLoadFailed (placement,
+  provider, error)`.
+- `ads.ResetPacing()`: forgets the interstitial / app open intervals (also the saved one), cooldowns, session counts and
+  every-Nth counts, for a QA button or a remote config switch.
+- `AdPlacement.PersistRequestCount` (also in the remote plan): `ShowEveryNthRequest` keeps counting across sessions
+  (PlayerPrefs `gamelib.ads.requests.<placement>`).
+- `AdsModule.PauseGameDuringFullscreenAds` / `MuteAudioDuringFullscreenAds` (off by default): `Time.timeScale = 0` /
+  `AudioListener.pause` while a fullscreen ad is up, put back when it closes unless the game changed them meanwhile.
+  `ads.IsShowingFullscreen()`.
+- `BannerSize.SmallFullWidth`: full width, 32 dp high (AdMob; a Standard banner on MAX - Validate warns, as for Collapsible).
+- Depends on `com.unity.modules.audio`.
+
 ## [0.8.0] - 2026-10-27
 - Interstitial rules shared by every game, all off by default (set per game on the AdsModule asset or from the remote plan): `Policy.InterstitialFromLevel` (no interstitial below that level; the game reports it with `ads.SetPlayerLevel(n)`, new `AdBlockReason.BelowLevel`), `Policy.InterstitialIntervalAcrossSessions` (the interval also counts the last interstitial of the previous session), `AdPlacement.ShowEveryNthRequest` (shows on every Nth request; a blocked request still counts; `AdBlockReason.RequestCount`).
 - A game's own rule on top: `ads.AddRule(AdShowRule)` / `AdShowRule.From(placement => ...)`, asked by `CanShow` after the shared rules (`AdBlockReason.GameRule`), told about every request (`OnRequested`) and show (`OnShown`).

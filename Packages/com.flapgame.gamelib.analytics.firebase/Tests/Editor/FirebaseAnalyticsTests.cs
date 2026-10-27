@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,33 @@ namespace FlapGame.GameLib.Analytics.Firebase.Tests
             public void SetUserProperty(string name, string value) => UserProperties[name] = value;
             public void SetUserId(string userId) => UserId = userId;
             public void SetConsent(FirebaseConsent consent) => Consent = consent;
+            public string InstanceId;
+            public Task<string> GetAppInstanceIdAsync() =>
+                InstanceId == "throw" ? Task.FromException<string>(new InvalidOperationException("no id")) : Task.FromResult(InstanceId);
+        }
+
+        private sealed class MemoryTrackerIds : ITrackerIds
+        {
+            public readonly Dictionary<string, string> Ids = new();
+            public event Action<string, string> Changed;
+            public string Get(string tracker) => Ids.TryGetValue(tracker, out string id) ? id : null;
+            public void Set(string tracker, string id) { Ids[tracker] = id; Changed?.Invoke(tracker, id); }
+        }
+
+        [Test]
+        public void InstanceId_GoesToTrackerIds_AndAFailureOnlyLogs()
+        {
+            var ids = new MemoryTrackerIds();
+            FirebaseAnalyticsModule.PublishInstanceIdAsync(new FakeBackend { InstanceId = "abc123" }, ids).Wait();
+            Assert.That(ids.FirebaseAppInstanceId(), Is.EqualTo("abc123"));
+
+            var none = new MemoryTrackerIds();
+            FirebaseAnalyticsModule.PublishInstanceIdAsync(new FakeBackend { InstanceId = null }, none).Wait();
+            Assert.That(none.Ids, Is.Empty, "no id (analytics storage denied): nothing set");
+
+            UnityEngine.TestTools.LogAssert.Expect(UnityEngine.LogType.Warning, new System.Text.RegularExpressions.Regex("App instance id unavailable"));
+            FirebaseAnalyticsModule.PublishInstanceIdAsync(new FakeBackend { InstanceId = "throw" }, none).Wait();
+            Assert.That(none.Ids, Is.Empty);
         }
 
         private readonly List<string> warnings = new();

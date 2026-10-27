@@ -46,7 +46,8 @@ namespace FlapGame.GameLib.Ads
         private readonly Dictionary<string, string> showingProvider = new();
         private readonly Dictionary<string, int> showsThisSession = new();
         private readonly Dictionary<string, float> lastShownAt = new();
-        // ShowAsync requests since the last show, per placement (AdPlacement.ShowEveryNthRequest).
+        // ShowAsync requests since the last show, per placement (AdPlacement.ShowEveryNthRequest). A placement with
+        // PersistRequestCount reads its count from PlayerPrefs the first time and writes every change back.
         private readonly Dictionary<string, int> requestsSinceShow = new();
         private readonly List<AdShowRule> rules = new();
         // Read by CanShow (polled by UI) and the notifications: a rule may add / remove rules while it runs.
@@ -92,7 +93,19 @@ namespace FlapGame.GameLib.Ads
         /// </summary>
         public event Action<string, float> BannerHeightChanged;
 
-        /// <summary>Raised when a fullscreen ad starts (true) or ends (false). Pause audio / gameplay on it.</summary>
+        /// <inheritdoc />
+        public event Action<string, AdBlockReason> ShowRequested;
+
+        /// <inheritdoc />
+        public event Action<string, string> PlacementLoaded;
+
+        /// <inheritdoc />
+        public event Action<string, string, string> PlacementLoadFailed;
+
+        /// <summary>
+        /// Raised when a fullscreen ad starts (true) or ends (false). Pause audio / gameplay on it, or turn on
+        /// <c>AdsModule.PauseGameDuringFullscreenAds</c> / <c>MuteAudioDuringFullscreenAds</c>.
+        /// </summary>
         public event Action<bool> FullscreenShowingChanged;
 
         /// <summary>Every paid impression of every adapter (impression-level revenue).</summary>
@@ -192,6 +205,9 @@ namespace FlapGame.GameLib.Ads
         /// <summary>PlayerPrefs key of the last interstitial's UTC time (unix seconds), for <c>InterstitialIntervalAcrossSessions</c>.</summary>
         public const string LastInterstitialKey = "gamelib.ads.last_interstitial_utc";
 
+        /// <summary>PlayerPrefs key prefix (+ placement id) of the saved request count, for <c>AdPlacement.PersistRequestCount</c>.</summary>
+        public const string RequestCountKeyPrefix = "gamelib.ads.requests.";
+
         /// <summary>The player's level for <c>AdsPolicy.InterstitialFromLevel</c>. The game sets it (<c>SetPlayerLevel</c>).</summary>
         public int PlayerLevel
         {
@@ -211,6 +227,37 @@ namespace FlapGame.GameLib.Ads
             if (rules.Contains(rule)) return;
             rules.Add(rule);
             ruleSnapshot = rules.ToArray();
+            RaiseReadyChangedForFullscreen();
+        }
+
+        /// <summary>
+        /// Forgets every pacing record, as if no fullscreen ad had been shown yet: the interstitial interval (also the one
+        /// saved for <c>InterstitialIntervalAcrossSessions</c>), the app open interval and its block after a fullscreen
+        /// ad, every placement's cooldown and session count, and the every-Nth request counts (saved ones too).
+        /// Not reset: the session start grace (<c>FirstInterstitialDelaySeconds</c>) and the game's own rules.
+        /// For a QA / cheat button, or when remote config says so.
+        /// </summary>
+        public void ResetPacing()
+        {
+            lastInterstitialAt = float.NegativeInfinity;
+            previousSessionInterstitialAt = float.NegativeInfinity;
+            lastAppOpenAt = float.NegativeInfinity;
+            lastFullscreenClosedAt = float.NegativeInfinity;
+            lastShownAt.Clear();
+            showsThisSession.Clear();
+            try
+            {
+                PlayerPrefs.DeleteKey(LastInterstitialKey);
+                foreach (AdPlacement p in placements.Values)
+                    if (p.PersistRequestCount) PlayerPrefs.DeleteKey(RequestCountKeyPrefix + p.Id);
+                PlayerPrefs.Save();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Saved pacing not cleared ({e.Message}).");
+            }
+            requestsSinceShow.Clear();
+            Debug.Log($"{LogPrefix} Pacing reset.");
             RaiseReadyChangedForFullscreen();
         }
 
@@ -527,6 +574,7 @@ namespace FlapGame.GameLib.Ads
                     if (rule.CooldownSeconds.HasValue)      p.CooldownSeconds    = Mathf.Max(0f, rule.CooldownSeconds.Value);
                     if (rule.MaxShowsPerSession.HasValue)   p.MaxShowsPerSession = Math.Max(0, rule.MaxShowsPerSession.Value);
                     if (rule.ShowEveryNthRequest.HasValue)  p.ShowEveryNthRequest = Math.Max(0, rule.ShowEveryNthRequest.Value);
+                    if (rule.PersistRequestCount.HasValue)  p.PersistRequestCount = rule.PersistRequestCount.Value;
                     if (rule.WaitForFillSeconds.HasValue)   p.WaitForFillSeconds = Mathf.Max(0f, rule.WaitForFillSeconds.Value);
                     if (rule.SuppressedByNoAds.HasValue)    p.SuppressedByNoAds  = rule.SuppressedByNoAds.Value;
                     if (rule.Routes != null && rule.Routes.Count > 0) p.Routes = OrderRoutes(p, rule.Routes, logPlan);
@@ -895,8 +943,7 @@ namespace FlapGame.GameLib.Ads
                     return false;
                 }
                 // This request would be the Nth: the counter only moves in ShowAsync, so CanShow stays side-effect free.
-                if (p.ShowEveryNthRequest > 1
-                    && (requestsSinceShow.TryGetValue(placementId, out int requests) ? requests : 0) + 1 < p.ShowEveryNthRequest)
+                if (p.ShowEveryNthRequest > 1 && RequestsSinceShow(p) + 1 < p.ShowEveryNthRequest)
                 {
                     reason = AdBlockReason.RequestCount;
                     return false;
@@ -938,8 +985,8 @@ namespace FlapGame.GameLib.Ads
                 return;
             if (p.ShowEveryNthRequest > 1)
             {
-                int requests = requestsSinceShow.TryGetValue(placementId, out int n) ? n + 1 : 1;
-                requestsSinceShow[placementId] = requests;
+                int requests = RequestsSinceShow(p) + 1;
+                SetRequestsSinceShow(p, requests);
                 if (requests == p.ShowEveryNthRequest - 1) RaiseReadyChanged(placementId); // the next request may show
             }
             foreach (AdShowRule rule in ruleSnapshot)
@@ -949,9 +996,39 @@ namespace FlapGame.GameLib.Ads
             }
         }
 
+        private int RequestsSinceShow(AdPlacement p)
+        {
+            if (requestsSinceShow.TryGetValue(p.Id, out int n)) return n;
+            n = 0;
+            if (p.PersistRequestCount)
+            {
+                try { n = Math.Max(0, PlayerPrefs.GetInt(RequestCountKeyPrefix + p.Id, 0)); }
+                catch (Exception e) { Debug.LogWarning($"{LogPrefix} Saved request count of '{p.Id}' unavailable ({e.Message})."); }
+            }
+            requestsSinceShow[p.Id] = n;
+            return n;
+        }
+
+        private void SetRequestsSinceShow(AdPlacement p, int requests)
+        {
+            requestsSinceShow[p.Id] = requests;
+            if (!p.PersistRequestCount) return;
+            try
+            {
+                // Saved now (an app swiped away gets no OnApplicationQuit); requests are player actions, not per frame.
+                if (requests > 0) PlayerPrefs.SetInt(RequestCountKeyPrefix + p.Id, requests);
+                else PlayerPrefs.DeleteKey(RequestCountKeyPrefix + p.Id);
+                PlayerPrefs.Save();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Request count of '{p.Id}' not saved ({e.Message}).");
+            }
+        }
+
         private void NoteShown(AdPlacement p, AdShowResult result)
         {
-            requestsSinceShow.Remove(p.Id);
+            SetRequestsSinceShow(p, 0);
             foreach (AdShowRule rule in ruleSnapshot)
             {
                 try { rule.OnShown(p, result); }
@@ -979,6 +1056,7 @@ namespace FlapGame.GameLib.Ads
             if (!allowed)
             {
                 NoteRequest(placementId, reason);
+                RaiseShowRequested(placementId, reason);
                 // Its providers were dropped by a slow init and may still join: accepted, shown when one does.
                 if (reason == AdBlockReason.NoProvider && droppedProviders.Count > 0
                     && placements.TryGetValue(placementId, out AdPlacement dropped) && dropped.IsBannerLike)
@@ -1001,6 +1079,7 @@ namespace FlapGame.GameLib.Ads
                 // request even before its banner loaded (the adapter shows it once loaded); with no active route yet
                 // (SDK still initializing) it is replayed by Reconcile, so this is not a failure.
                 wantedBanners.Add(placementId);
+                RaiseShowRequested(placementId, AdBlockReason.None);
                 string target = ServingBannerProvider(p);
                 if (target == null)
                 {
@@ -1020,6 +1099,7 @@ namespace FlapGame.GameLib.Ads
             // started by a rule's OnRequested below.
             SetShowingFullscreen(placementId);
             NoteRequest(placementId, AdBlockReason.None);
+            RaiseShowRequested(placementId, AdBlockReason.None);
             bool displayed = false;
             try
             {
@@ -1234,6 +1314,12 @@ namespace FlapGame.GameLib.Ads
             catch (Exception e) { Debug.LogException(e); }
         }
 
+        private void RaiseShowRequested(string placementId, AdBlockReason reason)
+        {
+            try { ShowRequested?.Invoke(placementId, reason); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+
         private void RaiseShowResult(string placementId, string providerId, AdShowResult result)
         {
             try { ShowResult?.Invoke(placementId, AdProviderIds.Normalize(providerId), result); }
@@ -1279,6 +1365,11 @@ namespace FlapGame.GameLib.Ads
             if (disposed) return;
             // A load landing after the IAP service initialized is a cheap moment to notice an owned no-ads product.
             RefreshNoAds();
+            if (SafeReady(adapter, placementId))
+            {
+                try { PlacementLoaded?.Invoke(placementId, AdProviderIds.Normalize(adapter.ProviderId)); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
             if (loadStrategy == AdLoadStrategy.Primary)
             {
                 int index = RouteIndex(placementId, adapter, out _);
@@ -1295,7 +1386,10 @@ namespace FlapGame.GameLib.Ads
 
         private void OnAdapterLoadFailed(IAdsProviderAdapter adapter, string placementId, string error)
         {
-            if (disposed || loadStrategy != AdLoadStrategy.Primary) return;
+            if (disposed) return;
+            try { PlacementLoadFailed?.Invoke(placementId, AdProviderIds.Normalize(adapter.ProviderId), error); }
+            catch (Exception e) { Debug.LogException(e); }
+            if (loadStrategy != AdLoadStrategy.Primary) return;
             int index = RouteIndex(placementId, adapter, out int count);
             if (index < 0 || index + 1 >= count) return;
             int depth = primaryDepth.TryGetValue(placementId, out int d) ? d : 1;

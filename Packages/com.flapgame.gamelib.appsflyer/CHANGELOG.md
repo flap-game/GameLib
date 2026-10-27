@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.2] - 2026-10-27
+- The AppsFlyer id goes to `ITrackerIds` (`TrackerIds.AppsFlyer`) once the SDK started (`getAppsFlyerId` on 6.17,
+  `getAppsFlyerUID` on 7.x). `IAppsFlyerBackend.GetAppsFlyerIdAsync`.
+
 ## [0.5.0] - 2026-10-26
 - README: a consent change mid-session applies from the next launch (AppsFlyer applies DMA consent at start).
 - The startup timeout counts the bootstrap wait. Past it the buffer only warns: a later start still sends everything buffered (it used to start with revenue events dropped).

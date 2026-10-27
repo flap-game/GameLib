@@ -91,7 +91,9 @@ var report = FlapGame.GameLib.Editor.GameLibCli.InstallModules(new[] { "ads.max"
 
 Wait for Unity to resolve and compile, then call it again until `Status` is `Done`.
 
-The Firebase SDK is downloaded into `Packages/GoogleTgz/`, which must be committed (about 60 MB for Firebase App).
+Firebase comes from the GameWorkstore git mirrors at 13.16.0 (nothing to commit). 13.x and 14.x both work; a project
+already on Google's tarballs in `Packages/GoogleTgz/` (14.x) keeps them - Install never replaces an existing Firebase
+entry. All `com.google.firebase.*` packages must be on one version: Doctor reports an error otherwise.
 `com.unity.purchasing`, the MAX package and EDM come from registries.
 
 ## 3. Configure
@@ -180,6 +182,10 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 | Vibration | `IHapticsService.Play(HapticType...)` | [Haptics](../../com.flapgame.gamelib.haptics/README.md) |
 | Rate us | `if (rate.NotifyTrigger()) popup.Show();` then `RequestReviewAsync()` / `StopPrompting()` | [Rate](../../com.flapgame.gamelib.rate/README.md) |
 | Alternate app icon (iOS) | `IAppIconService.SetIconAsync(name)`, icons listed on the AppIconModule asset | [App Icon](../../com.flapgame.gamelib.appicon/README.md) |
+| Ad events for the game's sheet (request, loaded, load fail) | `ads.ShowRequested`, `ads.PlacementLoaded`, `ads.PlacementLoadFailed`. Revenue and show results are already tracked: never log them by hand. | [Ads](../../com.flapgame.gamelib.ads/README.md) |
+| Pause during fullscreen ads | AdsModule `Pause Game During Fullscreen Ads` / `Mute Audio During Fullscreen Ads`, not a hand-written handler as well | [Ads](../../com.flapgame.gamelib.ads/README.md) |
+| Every-Nth across sessions, QA reset | placement `Persist Request Count`; `ads.ResetPacing()` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
+| Firebase / AppsFlyer id in game events (`af_firebase_id`) | `services.Resolve<ITrackerIds>().FirebaseAppInstanceId()` / `.AppsFlyerId()` (null until known) | [Core](../README.md) |
 | Game's own interstitial rule | `ads.AddRule(AdShowRule.From(p => ...))`, level gate `ads.SetPlayerLevel(n)` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 
 ## 5. Verify

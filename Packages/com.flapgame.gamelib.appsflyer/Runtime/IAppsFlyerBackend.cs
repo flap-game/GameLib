@@ -21,6 +21,9 @@ namespace FlapGame.GameLib.AppsFlyer
 
         void SetCustomerUserId(string userId);
 
+        /// <summary>The AppsFlyer id of this install (known after <see cref="InitializeAsync"/>).</summary>
+        Task<string> GetAppsFlyerIdAsync();
+
         void LogEvent(string name, Dictionary<string, string> values);
 
         void LogAdRevenue(string network, AdMediation mediation, string currency, double revenue, Dictionary<string, string> values);

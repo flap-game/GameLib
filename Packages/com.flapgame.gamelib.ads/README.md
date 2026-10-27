@@ -53,7 +53,7 @@ The shared rules are all off by default; each game sets its values on the AdsMod
 | ... also across app restarts | `Policy.InterstitialIntervalAcrossSessions` | `GlobalInterval` |
 | None in the first seconds of a session | `Policy.FirstInterstitialDelaySeconds` | `SessionStartGrace` |
 | None below a level | `Policy.InterstitialFromLevel` + `ads.SetPlayerLevel(level)` | `BelowLevel` |
-| Every Nth request of a placement | placement `Show Every Nth Request` (a blocked request still counts) | `RequestCount` |
+| Every Nth request of a placement | placement `Show Every Nth Request` (a blocked request still counts; `Persist Request Count` keeps the count across sessions) | `RequestCount` |
 | Seconds between two shows / per session cap | placement `Cooldown Seconds` / `Max Shows Per Session` | `Cooldown` / `SessionCap` |
 
 Anything else is the game's own rule, asked after the shared ones:
@@ -64,6 +64,15 @@ ads.AddRule(AdShowRule.From(p => p.Format != AdFormat.Interstitial || !tutorial.
 
 Subclass `AdShowRule` to count requests (`OnRequested`) or shows (`OnShown`) yourself. Keep `Allows` cheap: `CanShow`
 calls it, and UI may poll that every frame.
+
+`ads.ResetPacing()` forgets the intervals, cooldowns, session counts and every-Nth counts (saved ones too), as if no ad
+had been shown yet - for a QA button or a remote config switch. The session start grace and the game's own rules stay.
+
+## While a fullscreen ad is up
+
+Turn on `Pause Game During Fullscreen Ads` (`Time.timeScale = 0`) and / or `Mute Audio During Fullscreen Ads`
+(`AudioListener.pause`) on the AdsModule asset: both are put back when the ad closes, unless the game changed them during
+the ad. A game with its own pause listens to `((CompositeAdsService)ads).FullscreenShowingChanged` instead - not both.
 
 ## App open rule
 
@@ -93,6 +102,9 @@ A game moving to GameLib keeps its players' launch count by setting `AppOpenLaun
 `((CompositeAdsService)ads).BannerHeightChanged += (id, px) => ...` tells when it changes. `Position = Custom` centres a
 banner / MREC at `Custom Center` (fraction of the safe area, (0, 0) = top-left).
 
+Sizes: `Standard` (320x50), `Adaptive` (full width, the SDK picks the height), `MediumRectangle`, `Collapsible` and
+`SmallFullWidth` (full width, 32 dp). The last two are AdMob only: on MAX they show a Standard banner (Doctor warns).
+
 `Preload Banner` creates the banner hidden as soon as its SDK is ready, so the first screen with a banner shows an ad
 instead of an empty slot (not for collapsible banners). A hidden MAX banner stops refreshing until it is shown again.
 
@@ -104,7 +116,9 @@ instead of an empty slot (not for collapsible banners). A hidden MAX banner stop
   the shared `IConsentState`, so tracking modules follow it. For a "Privacy settings" button resolve `IConsentService`
   and show the button when `IsPrivacyOptionsRequired`.
 - **Tracking**: every paid impression goes to `IAnalytics.TrackAdRevenue` (Firebase `ad_impression`, AppsFlyer ad
-  revenue); every show logs `ads_show_result {placement_id, provider, result}`.
+  revenue); every show logs `ads_show_result {placement_id, provider, result}`. For the game's own ad events:
+  `ads.ShowRequested (placement, reason)` once per `ShowAsync` (`None` = sent to the SDK), `ads.PlacementLoaded
+  (placement, provider)` and `ads.PlacementLoadFailed (placement, provider, error)`. Load failures retry by themselves.
 
 ## Remote plan
 

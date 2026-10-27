@@ -31,6 +31,33 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
             public void SetConsent(AppsFlyerConsentData consent) => Calls.Add($"consent:{consent.IsUserSubjectToGdpr}:{consent.HasConsentForDataUsage}");
             public void EnableTcfDataCollection(bool enabled) => Calls.Add("tcf:" + enabled);
             public void StartPurchaseConnector(bool sandbox, bool storeKit2) => Calls.Add("connector");
+            public string AppsFlyerId = "af-1";
+            public Task<string> GetAppsFlyerIdAsync() => Task.FromResult(AppsFlyerId);
+        }
+
+        [Test]
+        public void AppsFlyerId_GoesToTrackerIds()
+        {
+            var ids = new PlayerPrefsTrackerIds();
+            UnityEngine.PlayerPrefs.DeleteKey("GameLib.TrackerId." + TrackerIds.AppsFlyer);
+            try
+            {
+                string changed = null;
+                ids.Changed += (tracker, id) => changed = tracker + "=" + id;
+                AppsFlyerModule.PublishAppsFlyerIdAsync(new FakeBackend(), ids).Wait();
+                Assert.That(ids.AppsFlyerId(), Is.EqualTo("af-1"));
+                Assert.That(changed, Is.EqualTo("appsflyer=af-1"));
+                Assert.That(new PlayerPrefsTrackerIds().AppsFlyerId(), Is.EqualTo("af-1"), "kept for the next launch");
+
+                changed = null;
+                AppsFlyerModule.PublishAppsFlyerIdAsync(new FakeBackend { AppsFlyerId = "" }, ids).Wait();
+                AppsFlyerModule.PublishAppsFlyerIdAsync(new FakeBackend(), ids).Wait();
+                Assert.That(changed, Is.Null, "empty and unchanged ids raise nothing");
+            }
+            finally
+            {
+                UnityEngine.PlayerPrefs.DeleteKey("GameLib.TrackerId." + TrackerIds.AppsFlyer);
+            }
         }
 
         private sealed class FakeAtt : IAttService

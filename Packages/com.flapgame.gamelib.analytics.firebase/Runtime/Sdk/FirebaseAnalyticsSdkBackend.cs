@@ -48,6 +48,8 @@ namespace FlapGame.GameLib.Analytics.Firebase
             });
         }
 
+        public Task<string> GetAppInstanceIdAsync() => FA.FirebaseAnalytics.GetAnalyticsInstanceIdAsync();
+
         private static FA.ConsentStatus Status(bool granted) => granted ? FA.ConsentStatus.Granted : FA.ConsentStatus.Denied;
 
         // Values were already normalised by FirebaseAnalyticsSanitizer.SanitizeValue.

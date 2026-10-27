@@ -112,8 +112,28 @@ namespace FlapGame.GameLib.AppsFlyer
             // Past this the buffer warns once and keeps waiting: a later start still sends everything buffered.
             TimeSpan timeout = BootstrapWait + startup.MaxWait + TimeSpan.FromSeconds(30);
             Debug.Log($"{LogTag} Plugin {backend.Version}; starting after consent and ATT.");
-            _ = buffer.InitializeAsync(startup.RunAsync, timeout, expectedFailure: Application.isEditor, cancellationToken);
+            services.TryResolve(out ITrackerIds ids);
+            async Task Run(CancellationToken ct)
+            {
+                await startup.RunAsync(ct);
+                if (ids != null) _ = PublishAppsFlyerIdAsync(backend, ids);
+            }
+            _ = buffer.InitializeAsync(Run, timeout, expectedFailure: Application.isEditor, cancellationToken);
             return default;
+        }
+
+        /// <summary>Reads the AppsFlyer id once the SDK started and hands it to <paramref name="ids"/> (<see cref="TrackerIds.AppsFlyer"/>); a failure only logs.</summary>
+        public static async Task PublishAppsFlyerIdAsync(IAppsFlyerBackend backend, ITrackerIds ids)
+        {
+            try
+            {
+                string id = await backend.GetAppsFlyerIdAsync();
+                if (!string.IsNullOrEmpty(id)) ids.Set(TrackerIds.AppsFlyer, id);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogTag} AppsFlyer id unavailable: {e.Message}");
+            }
         }
 
         public AppsFlyerStartup.Options BuildOptions() => new()

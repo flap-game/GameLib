@@ -42,6 +42,17 @@ namespace FlapGame.GameLib.Ads
         public static bool RemoveRule(this IAdsService ads, AdShowRule rule) =>
             ads is CompositeAdsService composite && composite.RemoveRule(rule);
 
+        /// <summary>Forgets intervals, cooldowns and request counts (see <c>CompositeAdsService.ResetPacing</c>).</summary>
+        public static void ResetPacing(this IAdsService ads)
+        {
+            if (ads is CompositeAdsService composite) composite.ResetPacing();
+            else Debug.LogWarning($"[Ads] ResetPacing needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+        }
+
+        /// <summary>True while an interstitial, rewarded or app open ad is on screen (false for another service).</summary>
+        public static bool IsShowingFullscreen(this IAdsService ads) =>
+            ads is CompositeAdsService composite && composite.IsShowingFullscreen;
+
         /// <summary>
         /// Shows a rewarded ad and invokes <paramref name="onRewarded"/> only when the user earns the reward.
         /// Returns true if the reward was granted.

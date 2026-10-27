@@ -62,6 +62,7 @@ namespace FlapGame.GameLib.Ads
         public float? CooldownSeconds;
         public int?   MaxShowsPerSession;
         public int?   ShowEveryNthRequest;
+        public bool?  PersistRequestCount;
         public float? WaitForFillSeconds;
         public bool?  SuppressedByNoAds;
 
