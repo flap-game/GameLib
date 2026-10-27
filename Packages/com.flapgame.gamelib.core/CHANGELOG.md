@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.9] - 2026-10-27
+- Setup: optional SDKs per module (`GameLibModuleInfo.OptionalSdks`), installed / removed one by one; CLI
+  `-gamelibOptional key,key` (`InstallModules(ids, optional)`), and the Doctor report lists the installed ones. Ads -
+  AdMob offers Google's 19 mediation adapters (`com.google.ads.mobile.mediation.*`, OpenUPM).
+
 ## [0.8.6] - 2026-10-27
 - `AdFormatKind.RewardedInterstitial`.
 

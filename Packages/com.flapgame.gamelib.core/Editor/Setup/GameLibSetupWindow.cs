@@ -196,6 +196,8 @@ namespace FlapGame.GameLib.Editor
                     return;
             }
 
+            DrawOptionalSdks(module);
+
             int assetStep = sdks.Count > 0 ? 3 : 2;
             if (module.ModuleTypeName == null)
             {
@@ -275,6 +277,38 @@ namespace FlapGame.GameLib.Editor
                 default:
                     EditorGUILayout.HelpBox($"Install {sdk.DisplayName} following the module README.", MessageType.Warning);
                     break;
+            }
+        }
+
+        // Optional: nothing blocks the next step; each row installs or removes one package.
+        private void DrawOptionalSdks(GameLibModuleInfo module)
+        {
+            if (module.OptionalSdks.Length == 0)
+                return;
+            EditorGUILayout.Space(6);
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField($"Optional: {module.OptionalSdksTitle}", EditorStyles.boldLabel);
+                foreach (SdkRequirement sdk in module.OptionalSdks)
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        bool has = installed.TryGetValue(sdk.PackageName, out PackageInfo info);
+                        EditorGUILayout.LabelField($"{(has ? "✔" : "○")}  {sdk.DisplayName}", has ? $"{info.version}" : $"{sdk.Location}");
+                        using (new EditorGUI.DisabledScope(pendingRequest != null))
+                        {
+                            if (!has && GUILayout.Button("Install", GUILayout.Width(70)))
+                            {
+                                var manifest = new ManifestManager();
+                                manifest.EnsureScopedRegistry(sdk.RegistryName, sdk.RegistryUrl, sdk.RegistryScopes);
+                                manifest.Save();
+                                StartRequest(Client.Add($"{sdk.PackageName}@{sdk.Location}"), $"Installing {sdk.DisplayName}...");
+                            }
+                            if (has && GUILayout.Button("Remove", GUILayout.Width(70)))
+                                StartRequest(Client.Remove(sdk.PackageName), $"Removing {sdk.DisplayName}...");
+                        }
+                    }
+                }
             }
         }
 

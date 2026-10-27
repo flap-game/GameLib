@@ -63,7 +63,8 @@ Add core to `Packages/manifest.json`. Use the tag the human names, else the newe
 ```
 
 Then run Install with the modules. Dependencies are added on their own: `appsflyer` brings `att`, and the Firebase
-modules bring `firebase`.
+modules bring `firebase`. AdMob mediation adapters are optional: add `-gamelibOptional pangle,unity,...` (the networks
+of the AdMob mediation groups; an unknown name lists the valid ones).
 
 ```sh
 Unity -batchmode -quit -projectPath <project> -buildTarget Android \

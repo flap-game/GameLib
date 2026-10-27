@@ -40,6 +40,13 @@ namespace FlapGame.GameLib.Editor
         /// <summary>Full name of the module's <see cref="GameLibModule"/> subclass, or null when it has no asset.</summary>
         public string ModuleTypeName { get; set; }
         public SdkRequirement[] Sdks { get; set; } = Array.Empty<SdkRequirement>();
+        /// <summary>
+        /// SDKs the game picks from (AdMob's mediation adapters): Setup installs and removes each one, Doctor never asks for
+        /// them. CLI: <c>-gamelibOptional</c> with <see cref="GameLibModuleCatalog.OptionalKey"/>s.
+        /// </summary>
+        public SdkRequirement[] OptionalSdks { get; set; } = Array.Empty<SdkRequirement>();
+        /// <summary>Heading of <see cref="OptionalSdks"/> in Setup.</summary>
+        public string OptionalSdksTitle { get; set; }
         /// <summary>False while the module is planned but not released yet.</summary>
         public bool Available { get; set; } = true;
 
@@ -103,6 +110,25 @@ namespace FlapGame.GameLib.Editor
                 Location = $"https://dl.google.com/games/registry/unity/{package}/{package}-{version}.tgz",
             };
         }
+
+        /// <summary>
+        /// Google's mediation adapter for one network, from OpenUPM (<c>com.google.ads.mobile.mediation.&lt;network&gt;</c>,
+        /// under the <c>com.google.ads.mobile</c> scope). Versions pinned 2026-10-27: the newest, each needing Google Mobile Ads
+        /// 11.0.0 or later (Verve 11.2.0) - GameLib installs 11.6.0.
+        /// </summary>
+        public static SdkRequirement AdMobMediation(string network, string displayName, string version) => new()
+        {
+            DisplayName = displayName,
+            PackageName = "com.google.ads.mobile.mediation." + network,
+            Source = SdkSource.ScopedRegistry,
+            Location = version,
+            RegistryName = "package.openupm.com",
+            RegistryUrl = "https://package.openupm.com",
+            RegistryScopes = new[] { "com.google.ads.mobile" },
+        };
+
+        /// <summary>The short name of an optional SDK for the CLI: the last part of its package name (<c>pangle</c>).</summary>
+        public static string OptionalKey(SdkRequirement sdk) => sdk.PackageName.Substring(sdk.PackageName.LastIndexOf('.') + 1);
 
         public static IReadOnlyList<GameLibModuleInfo> All { get; } = new[]
         {
@@ -177,6 +203,29 @@ namespace FlapGame.GameLib.Editor
                         RegistryUrl = "https://package.openupm.com",
                         RegistryScopes = new[] { "com.google.ads.mobile" },
                     },
+                },
+                OptionalSdksTitle = "Mediation adapters (one per network in the AdMob mediation groups)",
+                OptionalSdks = new[]
+                {
+                    AdMobMediation("applovin", "AppLovin", "8.7.7"),
+                    AdMobMediation("bidmachine", "BidMachine", "1.5.1"),
+                    AdMobMediation("bigo", "Bigo", "3.1.0"),
+                    AdMobMediation("chartboost", "Chartboost", "4.15.2"),
+                    AdMobMediation("dtexchange", "DT Exchange", "3.6.0"),
+                    AdMobMediation("imobile", "i-mobile", "1.3.16"),
+                    AdMobMediation("inmobi", "InMobi", "5.4.0"),
+                    AdMobMediation("ironsource", "ironSource", "4.8.1"),
+                    AdMobMediation("liftoffmonetize", "Liftoff Monetize", "5.7.10"),
+                    AdMobMediation("line", "LINE", "2.2.1"),
+                    AdMobMediation("maio", "maio", "3.1.11"),
+                    AdMobMediation("metaaudiencenetwork", "Meta Audience Network", "3.20.1"),
+                    AdMobMediation("mintegral", "Mintegral", "2.2.6"),
+                    AdMobMediation("moloco", "Moloco", "3.10.1"),
+                    AdMobMediation("mytarget", "myTarget", "3.42.0"),
+                    AdMobMediation("pangle", "Pangle", "7.2.2"),
+                    AdMobMediation("pubmatic", "PubMatic", "2.4.1"),
+                    AdMobMediation("unity", "Unity Ads", "3.22.0"),
+                    AdMobMediation("verve", "Verve", "3.38.0"),
                 },
             },
             new GameLibModuleInfo

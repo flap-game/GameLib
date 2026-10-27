@@ -17,6 +17,7 @@ namespace FlapGame.GameLib.Editor
     /// GameLib Setup without the window, for scripts and agents. Batch mode:
     /// <code>
     /// Unity -batchmode -quit -projectPath P -executeMethod FlapGame.GameLib.Editor.GameLibCli.Install -gamelibModules ads.max,iap
+    /// Unity -batchmode -quit -projectPath P -executeMethod FlapGame.GameLib.Editor.GameLibCli.Install -gamelibModules ads.admob -gamelibOptional pangle,unity
     /// Unity -batchmode -quit -projectPath P -executeMethod FlapGame.GameLib.Editor.GameLibCli.Doctor
     /// </code>
     /// Each command writes a JSON report (<c>-gamelibReport &lt;path&gt;</c>, default <c>Logs/gamelib-&lt;command&gt;.json</c>),
@@ -33,6 +34,7 @@ namespace FlapGame.GameLib.Editor
         public const string ReportMarker = "[GameLib] report: ";
         public const string ModulesArgument = "-gamelibModules";
         public const string ReportArgument = "-gamelibReport";
+        public const string OptionalArgument = "-gamelibOptional";
 
         private static readonly TimeSpan PackageSearchTimeout = TimeSpan.FromMinutes(2);
 
@@ -40,10 +42,11 @@ namespace FlapGame.GameLib.Editor
         public static void Install()
         {
             string[] ids = (Argument(ModulesArgument) ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] optional = (Argument(OptionalArgument) ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
             GameLibInstallReport report;
             try
             {
-                report = InstallModules(ids);
+                report = InstallModules(ids, optional);
             }
             catch (Exception e)
             {
@@ -78,9 +81,10 @@ namespace FlapGame.GameLib.Editor
         /// Installs the modules, the GameLib modules they need and their SDKs, then creates their module assets and lists
         /// them in GameLibSettings. Idempotent: run it until it returns <see cref="GameLibInstallStatus.Done"/>. A run that
         /// edits the manifest returns <see cref="GameLibInstallStatus.RunAgain"/>, because the module types only exist after
-        /// Unity resolves and compiles the new packages.
+        /// Unity resolves and compiles the new packages. <paramref name="optionalSdks"/>: keys of the chain's
+        /// <see cref="GameLibModuleInfo.OptionalSdks"/> to install as well (<c>pangle</c>).
         /// </summary>
-        public static GameLibInstallReport InstallModules(IEnumerable<string> moduleIds)
+        public static GameLibInstallReport InstallModules(IEnumerable<string> moduleIds, IEnumerable<string> optionalSdks = null)
         {
             var report = new GameLibInstallReport();
             var requested = new List<GameLibModuleInfo>();
@@ -102,7 +106,19 @@ namespace FlapGame.GameLib.Editor
             List<GameLibModuleInfo> chain = requested.SelectMany(GameLibModuleCatalog.WithDependencies).Distinct().ToList();
             report.Modules.AddRange(chain.Select(m => m.Id));
 
-            if (EditManifest(chain, report))
+            var extras = new List<SdkRequirement>();
+            List<SdkRequirement> offered = chain.SelectMany(m => m.OptionalSdks).ToList();
+            foreach (string key in (optionalSdks ?? Enumerable.Empty<string>()).Select(k => k.Trim()).Where(k => k.Length > 0).Distinct())
+            {
+                SdkRequirement sdk = offered.FirstOrDefault(s => GameLibModuleCatalog.OptionalKey(s) == key || s.PackageName == key);
+                if (sdk != null) extras.Add(sdk);
+                else report.Errors.Add($"Unknown optional SDK '{key}' for {string.Join(", ", requested.Select(m => m.Id))}. " +
+                                       $"Optional: {(offered.Count > 0 ? string.Join(", ", offered.Select(GameLibModuleCatalog.OptionalKey)) : "none")}.");
+            }
+            if (report.Errors.Count > 0)
+                return Done(report, GameLibInstallStatus.Error);
+
+            if (EditManifest(chain, extras, report))
             {
                 if (!Application.isBatchMode)
                     Client.Resolve();
@@ -161,6 +177,8 @@ namespace FlapGame.GameLib.Editor
                     state.MissingSdks.AddRange(GameLibModuleCatalog.WithDependencies(module).SelectMany(m => m.Sdks).Distinct()
                                                                    .Where(s => !installed.ContainsKey(s.PackageName))
                                                                    .Select(s => s.PackageName));
+                    state.OptionalSdks.AddRange(module.OptionalSdks.Where(s => installed.ContainsKey(s.PackageName))
+                                                      .Select(s => $"{s.PackageName}@{installed[s.PackageName].version}"));
                     if (module.ModuleTypeName != null)
                     {
                         GameLibModule asset = GameLibProject.FindModuleAsset(module, settings);
@@ -187,7 +205,7 @@ namespace FlapGame.GameLib.Editor
         }
 
         /// <returns>True when the manifest changed.</returns>
-        private static bool EditManifest(List<GameLibModuleInfo> chain, GameLibInstallReport report)
+        private static bool EditManifest(List<GameLibModuleInfo> chain, List<SdkRequirement> extras, GameLibInstallReport report)
         {
             var manifest = new ManifestManager();
             bool changed = false;
@@ -202,7 +220,7 @@ namespace FlapGame.GameLib.Editor
                 changed = true;
             }
 
-            List<SdkRequirement> sdks = chain.SelectMany(m => m.Sdks).Distinct().ToList();
+            List<SdkRequirement> sdks = chain.SelectMany(m => m.Sdks).Concat(extras).Distinct().ToList();
             List<SdkRequirement> missing = sdks.Where(s => !manifest.HasDependency(s.PackageName) && !installed.ContainsKey(s.PackageName)).ToList();
             // Registries Unity loaded at start: only their packages can be looked up in this run.
             var knownRegistries = new HashSet<string>(sdks.Where(s => s.Source == SdkSource.ScopedRegistry && manifest.HasScopedRegistry(s.RegistryUrl))
@@ -351,6 +369,8 @@ namespace FlapGame.GameLib.Editor
         public bool Installed { get; set; }
         public string Version { get; set; }
         public List<string> MissingSdks { get; } = new();
+        /// <summary>Installed <see cref="GameLibModuleInfo.OptionalSdks"/>, as <c>package@version</c>.</summary>
+        public List<string> OptionalSdks { get; } = new();
         /// <summary>Path of the module asset, null when there is none or the module has no asset.</summary>
         public string Asset { get; set; }
         public bool AssetListed { get; set; }

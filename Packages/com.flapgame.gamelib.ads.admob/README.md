@@ -21,6 +21,22 @@ Test mode: tick *Test Mode* on `AdsModule` and add the hashed device id AdMob pr
 
 Revenue is reported per impression (`OnAdPaid`) with the currency AdMob gives and the network from the response info.
 
+## Mediation adapters
+
+AdMob mediation (other networks bidding or in a waterfall inside an AdMob mediation group) needs Google's adapter for
+each network in the app. **GameLib > Setup > Ads - AdMob > Optional** lists them - AppLovin, BidMachine, Bigo,
+Chartboost, DT Exchange, i-mobile, InMobi, ironSource, Liftoff Monetize, LINE, maio, Meta Audience Network, Mintegral,
+Moloco, myTarget, Pangle, PubMatic, Unity Ads, Verve - with Install / Remove per network. They are
+`com.google.ads.mobile.mediation.<network>` from OpenUPM (the same registry and scope as Google Mobile Ads), pinned to
+versions that need GMA 11.x. From the command line: `-gamelibOptional pangle,unity` next to `-gamelibModules ads.admob`.
+
+Install only the networks the AdMob console's mediation groups use: each adapter adds that network's SDK to the build.
+The network's own ids (app id, placement ids) go into the AdMob console's mediation setup, not into GameLib. Ad Inspector
+(`ads.OpenDebuggerAsync()`) shows whether each adapter initialized.
+
+A game that also uses MAX installs MAX's adapters through AppLovin's Integration Manager (**AppLovin > Integration
+Manager**), not here. Both kinds for the same network bring that network's SDK twice; keep their versions compatible.
+
 ## External Dependency Manager
 
 Google Mobile Ads 11.x depends on Unity's `com.unity.external-dependency-manager`, while MAX, Firebase and AppsFlyer

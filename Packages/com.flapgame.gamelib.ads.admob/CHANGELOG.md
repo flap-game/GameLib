@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.9] - 2026-10-27
+- Mediation adapters for 19 networks, from GameLib > Setup > Ads - AdMob > Optional (README: Mediation adapters).
+
 ## [0.8.8] - 2026-10-27
 - `RequestConfiguration.MaxAdContentRating` from `AdsModule.MaxAdContentRating`.
 

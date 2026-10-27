@@ -21,6 +21,35 @@ namespace FlapGame.GameLib.Tests
         }
 
         [Test]
+        public void Install_UnknownOptionalSdk_IsAnErrorAndTouchesNothing()
+        {
+            string before = File.ReadAllText(ManifestManager.ManifestPath);
+
+            GameLibInstallReport report = GameLibCli.InstallModules(new[] { "ads.admob" }, new[] { "admob-net" });
+
+            Assert.AreEqual(GameLibInstallStatus.Error, report.Status);
+            StringAssert.Contains("Unknown optional SDK 'admob-net'", report.Errors.Single());
+            StringAssert.Contains("pangle", report.Errors.Single());
+            Assert.AreEqual(before, File.ReadAllText(ManifestManager.ManifestPath));
+        }
+
+        [Test]
+        public void AdMobMediationAdapters_ArePinnedOnTheGoogleScope()
+        {
+            GameLibModuleInfo admob = GameLibModuleCatalog.Find("ads.admob");
+            SdkRequirement gma = admob.Sdks.Single(s => s.PackageName == "com.google.ads.mobile");
+            Assert.That(admob.OptionalSdks, Is.Not.Empty);
+            foreach (SdkRequirement sdk in admob.OptionalSdks)
+            {
+                StringAssert.StartsWith("com.google.ads.mobile.mediation.", sdk.PackageName);
+                Assert.That(sdk.Location, Is.Not.Empty, sdk.PackageName);
+                Assert.AreEqual(gma.RegistryUrl, sdk.RegistryUrl, "the GMA registry serves them");
+                CollectionAssert.AreEqual(gma.RegistryScopes, sdk.RegistryScopes);
+            }
+            Assert.AreEqual("pangle", GameLibModuleCatalog.OptionalKey(admob.OptionalSdks.Single(s => s.DisplayName == "Pangle")));
+        }
+
+        [Test]
         public void Install_NoModule_IsAnError()
         {
             GameLibInstallReport report = GameLibCli.InstallModules(new[] { " ", "" });
