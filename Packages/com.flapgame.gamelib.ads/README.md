@@ -144,6 +144,14 @@ Sizes: `Standard` (320x50), `Adaptive` (full width, the SDK picks the height), `
 `Preload Banner` creates the banner hidden as soon as its SDK is ready, so the first screen with a banner shows an ad
 instead of an empty slot (not for collapsible banners). A hidden MAX banner stops refreshing until it is shown again.
 
+## Ad content rating
+
+`AdsModule > Max Ad Content Rating` caps how mature AdMob's ads may be: `G` (general), `PG`, `T` (teen), `MA` (mature).
+A game for kids or families sets `G` or `PG`; `Unspecified` (default) leaves it to the AdMob console's blocking controls.
+It is AdMob only: MAX has no runtime content rating (Doctor warns when MAX is also used) - limit MAX's ads in the
+AppLovin dashboard. A game that is child-directed under COPPA / Families also needs `ConsentState.IsAgeRestrictedUser` (age-restricted treatment), which
+this does not replace.
+
 ## Ad sound
 
 `ads.SetAdAudio(volume, muted)` tells the SDKs the game's own sound setting, so video ads start at that volume or muted.

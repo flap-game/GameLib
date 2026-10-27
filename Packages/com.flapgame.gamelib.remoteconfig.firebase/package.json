@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.remoteconfig.firebase",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "displayName": "GameLib Remote Config - Firebase",
   "description": "IRemoteConfig backed by Firebase Remote Config: in-asset defaults, disk cache of the last fetch, fetch timeout, Activated event.",
   "unity": "6000.4",
@@ -16,7 +16,7 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.7",
-    "com.flapgame.gamelib.firebase": "0.8.7"
+    "com.flapgame.gamelib.core": "0.8.8",
+    "com.flapgame.gamelib.firebase": "0.8.8"
   }
 }

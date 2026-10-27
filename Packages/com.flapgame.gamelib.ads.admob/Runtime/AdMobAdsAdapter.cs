@@ -467,6 +467,14 @@ namespace FlapGame.GameLib.Ads
             // AgeRestrictedTreatment; Child is the strictest value and covers both old tags (COPPA + under age of consent).
             if (consent.IsAgeRestrictedUser)
                 config.AgeRestrictedTreatment = AgeRestrictedTreatment.Child;
+            config.MaxAdContentRating = (settings?.MaxAdContentRating ?? AdContentRating.Unspecified) switch
+            {
+                AdContentRating.G  => MaxAdContentRating.G,
+                AdContentRating.PG => MaxAdContentRating.PG,
+                AdContentRating.T  => MaxAdContentRating.T,
+                AdContentRating.MA => MaxAdContentRating.MA,
+                _                  => MaxAdContentRating.Unspecified,
+            };
             MobileAds.SetRequestConfiguration(config);
         }
 

@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.core",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "displayName": "GameLib Core",
   "description": "GameLib foundation: bootstrap, lifecycle, consent, entitlements, analytics contracts, and the GameLib Installer window.",
   "unity": "6000.4",

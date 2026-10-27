@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.8] - 2026-10-27
+- `RequestConfiguration.MaxAdContentRating` from `AdsModule.MaxAdContentRating`.
+
 ## [0.8.7] - 2026-10-27
 - `IRewardVerification`: `ServerSideVerificationOptions` (user id, custom data) on each rewarded / rewarded interstitial ad.
 

@@ -302,6 +302,19 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void Validate_WarnsThatTheContentRatingSkipsMax()
+        {
+            settings.MaxAdContentRating = AdContentRating.PG;
+            var issues = new List<GameLibIssue>();
+            settings.Validate(issues);
+            Assert.That(issues, Has.None.Matches<GameLibIssue>(i => i.Message.Contains("Max Ad Content Rating")), "AdMob only: fine");
+
+            settings.Providers.Add(new AdsProviderConfig { ProviderId = AdProviderIds.Max });
+            settings.Validate(issues);
+            Assert.That(issues, Has.Some.Matches<GameLibIssue>(i => i.Message.Contains("Max Ad Content Rating PG applies to AdMob only")));
+        }
+
+        [Test]
         public void Validate_RejectsARewardedInterstitialOnMax()
         {
             settings.Placements.Find(p => p.Id == "ri").Routes.Add(new AdRoute("max", "m3", "mi3"));

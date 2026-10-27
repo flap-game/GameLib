@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.firebase",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "displayName": "GameLib Firebase",
   "description": "Shared Firebase app start (one dependency check for every Firebase module) and the google-services.json / GoogleService-Info.plist checks.",
   "unity": "6000.4",
@@ -16,6 +16,6 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.7"
+    "com.flapgame.gamelib.core": "0.8.8"
   }
 }

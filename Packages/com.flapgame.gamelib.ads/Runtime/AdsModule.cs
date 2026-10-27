@@ -95,6 +95,11 @@ namespace FlapGame.GameLib.Ads
         [Tooltip("Seconds the mock adapter pretends to show an ad for. Editor / development builds only.")]
         [Min(0f)] public float NullAdapterFakeDelaySeconds = 0.5f;
 
+        [Header("Ad Content")]
+        [Tooltip("The most mature ad content AdMob may serve (G, PG, T, MA) - e.g. G or PG for a game rated for kids or " +
+                 "families. Unspecified = the AdMob console's blocking controls decide. AdMob only: MAX has no such setting.")]
+        public AdContentRating MaxAdContentRating = AdContentRating.Unspecified;
+
         [Header("Consent Debug")]
         public ConsentDebugConfig ConsentDebug = new();
 
@@ -178,6 +183,10 @@ namespace FlapGame.GameLib.Ads
                 else if (appOpen.Format != AdFormat.AppOpen)
                     issues.Add(GameLibIssue.Error($"App Open Placement '{AppOpenPlacementId}' has format {appOpen.Format}, expected AppOpen."));
             }
+
+            if (MaxAdContentRating != AdContentRating.Unspecified && FindProvider(AdProviderIds.Max) is { Enabled: true })
+                issues.Add(GameLibIssue.Warning($"Max Ad Content Rating {MaxAdContentRating} applies to AdMob only - MAX has no runtime content rating; " +
+                                                "limit MAX's ads in the AppLovin dashboard."));
 
             if (TestMode)
                 issues.Add(GameLibIssue.Warning("Ads Test Mode is on - turn it off for release builds."));

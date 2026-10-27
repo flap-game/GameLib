@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.8] - 2026-10-27
+- `AdsModule.MaxAdContentRating` (`AdContentRating` G / PG / T / MA): the most mature ad content AdMob may serve. Doctor
+  warns that it does not apply to MAX.
+
 ## [0.8.7] - 2026-10-27
 - Server-side reward verification: `ads.SetRewardUserId(id)` and `ads.ShowRewardedAsync(id, customData, onRewarded)`
   (`ShowRewardedInterstitialAsync` takes `customData` too) reach the showing provider before each rewarded show

@@ -184,6 +184,7 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 | Alternate app icon (iOS) | `IAppIconService.SetIconAsync(name)`, icons listed on the AppIconModule asset | [App Icon](../../com.flapgame.gamelib.appicon/README.md) |
 | Ad events for the game's sheet (request, loaded, load fail) | `ads.ShowRequested`, `ads.PlacementLoaded`, `ads.PlacementLoadFailed`. Revenue and show results are already tracked: never log them by hand. | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Pause during fullscreen ads | AdsModule `Pause Game During Fullscreen Ads` / `Mute Audio During Fullscreen Ads`, not a hand-written handler as well | [Ads](../../com.flapgame.gamelib.ads/README.md) |
+| Kids / family game: no mature ads | AdsModule `Max Ad Content Rating` = G or PG (AdMob only; MAX in its dashboard) | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Server grants rewards (SSV) | Callback URL in the AdMob / MAX console; `ads.SetRewardUserId(id)` + `ads.ShowRewardedAsync(id, customData, onRewarded)` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Bonus reward offered at level end (rewarded interstitial) | AdMob placement format `RewardedInterstitial` + `ads.ShowRewardedInterstitialAsync(id, askUser: intro popup, onRewarded)`; follows the interstitial rules; never plain `ShowAsync` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Ads follow the game's sound toggle | `ads.SetAdAudio(volume, muted)` at start and on every change (only when the game has a sound setting) | [Ads](../../com.flapgame.gamelib.ads/README.md) |
