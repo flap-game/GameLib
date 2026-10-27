@@ -97,6 +97,13 @@ namespace FlapGame.GameLib.Editor
             },
             new GameLibModuleInfo
             {
+                Id = "extensions",
+                DisplayName = "Extensions",
+                Description = "Everyday helpers: random picks and shuffles, FindDeep, DestroyChildren, vector / color / UI extensions, number and time formatting, Delay.",
+                ModuleTypeName = null,
+            },
+            new GameLibModuleInfo
+            {
                 Id = "ads",
                 DisplayName = "Ads",
                 Description = "Placement-based interstitial, rewarded, banner and app open ads, with per-game show rules.",

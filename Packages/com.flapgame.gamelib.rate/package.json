@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.rate",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "displayName": "GameLib Rate",
   "description": "Rate-us prompts: when to ask (every Nth trigger, caps, never again after rating), the native review sheet on iOS and Google Play, store page fallback.",
   "unity": "6000.4",
@@ -16,6 +16,6 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.0"
+    "com.flapgame.gamelib.core": "0.8.1"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.ads",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "displayName": "GameLib Ads",
   "description": "Placement-based interstitial, rewarded, banner and app open ads with per-game show rules. Ad networks plug in through provider packages (ads.max, ads.admob).",
   "unity": "6000.4",
@@ -16,6 +16,6 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.0"
+    "com.flapgame.gamelib.core": "0.8.1"
   }
 }

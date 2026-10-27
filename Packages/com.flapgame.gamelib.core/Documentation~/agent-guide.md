@@ -176,6 +176,7 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 | Remote values | `IRemoteConfig.GetLong / GetBool / GetObject<T>` | [Remote Config](../../com.flapgame.gamelib.remoteconfig.firebase/README.md) |
 | Non-fatal errors, custom keys | `ICrashReporter` | [Crashlytics](../../com.flapgame.gamelib.crashlytics/README.md) |
 | Save data | `save.Section<T>("player")`, change `Data`, `MarkDirty()`; small values `ForScope("x").Save/Load`; `Flush()` after a purchase or a win. Never PlayerPrefs for progress. | [Save](../../com.flapgame.gamelib.save/README.md) |
+| Helpers (random pick, shuffle, FindDeep, DestroyChildren, `1.5K`, `05:30`, Delay) | `using FlapGame.GameLib.Extensions;` before writing your own. No AFramework / CoreGame `Common` helpers. | [Extensions](../../com.flapgame.gamelib.extensions/README.md) |
 | Vibration | `IHapticsService.Play(HapticType...)` | [Haptics](../../com.flapgame.gamelib.haptics/README.md) |
 | Rate us | `if (rate.NotifyTrigger()) popup.Show();` then `RequestReviewAsync()` / `StopPrompting()` | [Rate](../../com.flapgame.gamelib.rate/README.md) |
 | Alternate app icon (iOS) | `IAppIconService.SetIconAsync(name)`, icons listed on the AppIconModule asset | [App Icon](../../com.flapgame.gamelib.appicon/README.md) |

@@ -6,7 +6,7 @@ sections that migrate old saves, autosave, and an optional encryption.
 Install from **GameLib > Setup > Save**, or add to `Packages/manifest.json` (together with core, same tag):
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.save#v0.8.0
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.save#v0.8.1
 ```
 
 ## Use

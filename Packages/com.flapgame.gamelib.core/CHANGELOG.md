@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.1] - 2026-10-27
+- Setup lists the new Extensions package.
+
 ## [0.8.0] - 2026-10-27
 - Setup lists the new Rate, App Icon and Save modules.
 - `GameLibModuleOrder.Save` (-50): after analytics and crash reporting, before the game's own modules.

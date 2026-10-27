@@ -38,6 +38,7 @@
     "com.flapgame.gamelib.build",
     "com.flapgame.gamelib.core",
     "com.flapgame.gamelib.crashlytics",
+    "com.flapgame.gamelib.extensions",
     "com.flapgame.gamelib.firebase",
     "com.flapgame.gamelib.haptics",
     "com.flapgame.gamelib.iap",
