@@ -53,6 +53,14 @@ Check these, then ask the human everything missing in **one** message:
 
 The Unity version must be 6000.4 or newer (`ProjectSettings/ProjectVersion.txt`).
 
+**Cloud Build only** (the human wants no ads, no tracking, only Unity Cloud Build): ask for nothing in the table above.
+Install core and the `build` module (`-gamelibModules build`, step 2), and skip steps 3 and 4: no GameLib Setup, no
+modules, nothing in a scene. Doctor's warning about the missing GameLib settings asset is expected. Then follow the
+[Build README](../../com.flapgame.gamelib.build/README.md): for iOS, run **GameLib > Cloud Build > Install App Store
+Upload Script** and commit `BuildScripts/` and `.gitattributes`. The Cloud Build dashboard is the human's part: give them the
+README's dashboard table, or, on GameHub, tell them to pick **GameLib** for the Post-build Script and the Pre-Export
+Method of the game.
+
 ## 2. Install
 
 Add core to `Packages/manifest.json`. Use the tag the human names, else the newest `v*` tag on the repository
