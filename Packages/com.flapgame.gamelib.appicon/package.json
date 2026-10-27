@@ -1,0 +1,21 @@
+{
+  "name": "com.flapgame.gamelib.appicon",
+  "version": "0.8.0",
+  "displayName": "GameLib App Icon",
+  "description": "Alternate app icons the player can pick (iOS): icons listed on the module asset are built into the Xcode project.",
+  "unity": "6000.4",
+  "author": {
+    "name": "Flap Game",
+    "url": "https://github.com/flap-game/GameLib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flap-game/GameLib.git"
+  },
+  "keywords": [
+    "gamelib"
+  ],
+  "dependencies": {
+    "com.flapgame.gamelib.core": "0.8.0"
+  }
+}

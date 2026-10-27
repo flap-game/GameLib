@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0] - 2026-10-27
+- Banner and MREC heights (`IBannerMetrics`): the layout above the banner and `BannerHeightChanged` now work with MAX (MREC 250 dp, adaptive from MAX, else 50 / 90 dp).
+- `BannerPosition.Custom` (MREC or banner at `AdPlacement.CustomCenter`).
+- An interstitial / rewarded / app open ad that MAX no longer has (expired since it loaded) is not shown: the show fails, the ad reloads. Before, a show of such an ad could stay open if MAX never called back, blocking every fullscreen ad for the session.
+- A hidden banner / MREC stops auto-refreshing (no requests without impressions) and restarts when shown.
+- `AdPlacement.PreloadBanner`.
+
 ## [0.7.1] - 2026-10-26
 - Info logs follow AdsLog.Verbose (see Ads).
 

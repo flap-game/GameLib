@@ -43,7 +43,11 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [TearDown]
-        public void TearDown() => UnityEngine.Object.DestroyImmediate(settings);
+        public void TearDown()
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+            PlayerPrefs.DeleteKey(CompositeAdsService.LastInterstitialKey);
+        }
 
         private CompositeAdsService Create() =>
             new(new IAdsProviderAdapter[] { adMob, max }, settings, null, () => noAds, () => clock);
@@ -339,6 +343,48 @@ namespace FlapGame.GameLib.Ads.Tests
             Assert.That(ads.IsPlacementReady("mock"), Is.True);
             Assert.That(ads.IsPlacementReady("inter"), Is.False, "no None route -> not served");
             Assert.That(Await(ads.ShowAsync("mock")), Is.EqualTo(AdShowResult.Completed));
+        }
+
+        [Test]
+        public async Task WaitForFill_ShowsWhenTheAdLoadsInTime()
+        {
+            settings.Placements[0].WaitForFillSeconds = 5f;
+            using var ads = Create();
+            Task<AdShowResult> show = ads.ShowAsync("inter").AsTask();
+            await Task.Delay(50);
+            Assert.That(show.IsCompleted, Is.False, "waiting for the ad to load");
+            max.MarkReady("inter");
+            Assert.That(await show, Is.EqualTo(AdShowResult.Completed));
+            Assert.That(max.Shown, Is.EqualTo(new[] { "inter" }));
+        }
+
+        [Test]
+        public async Task WaitForFill_NoFillInTime_Fails()
+        {
+            using var ads = Create();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            Assert.That(await ads.ShowAsync("inter", 0.2f), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(watch.Elapsed.TotalSeconds, Is.GreaterThanOrEqualTo(0.15));
+            Assert.That(max.Shown, Is.Empty);
+        }
+
+        [Test]
+        public async Task WaitForFill_OnlyWhenLoadingIsTheOnlyBlock_AndCancellable()
+        {
+            settings.Placements[0].WaitForFillSeconds = 30f;
+            using var ads = Create();
+            noAds = true;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            Assert.That(await ads.ShowAsync("inter"), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(watch.Elapsed.TotalSeconds, Is.LessThan(1), "no-ads blocks: no wait");
+
+            noAds = false;
+            using var cts = new CancellationTokenSource(100);
+            watch.Restart();
+            Assert.That(await ads.ShowAsync("inter", cts.Token), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(watch.Elapsed.TotalSeconds, Is.LessThan(5), "the caller's token ends the wait");
+            max.MarkReady("inter");
+            Assert.That(max.Shown, Is.Empty, "a cancelled wait never shows later");
         }
     }
 }

@@ -62,6 +62,10 @@ namespace FlapGame.GameLib.Ads.Editor
             EditorGUILayout.Space(6);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("AppOpenPlacementId"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("AppOpenColdStartWaitSeconds"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("AppOpenShowAtLaunchFrom"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("AppOpenAutoShowAtLaunch"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("AppOpenMinBackgroundSeconds"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("AppOpenLaunchCountKey"));
             EditorGUILayout.Space(6);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("InitializeInBackground"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("ConsentTimeoutSeconds"));

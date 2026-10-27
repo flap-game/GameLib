@@ -9,5 +9,7 @@ namespace FlapGame.GameLib.Ads
         BottomLeft = 4,
         BottomRight = 5,
         Center = 6,
+        /// <summary>Centred at <c>AdPlacement.CustomCenter</c> (a fraction of the safe area). Not for collapsible banners.</summary>
+        Custom = 7,
     }
 }

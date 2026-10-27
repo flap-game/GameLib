@@ -1,6 +1,6 @@
 # GameLib
 
-Modular Unity library for mobile games: ads, in-app purchases, tracking, haptics (UI later).
+Modular Unity library for mobile games: ads, in-app purchases, tracking, save data, haptics, rate-us, app icons (UI later).
 Each module is its own UPM package, so a game installs only what it uses, when it needs it.
 GameLib is the successor of CoreGame.
 
@@ -13,6 +13,7 @@ GameLib is the successor of CoreGame.
 |---|---|---|
 | `com.flapgame.gamelib.core` | Bootstrap, lifecycle, consent, entitlements, analytics contracts, **GameLib Setup** window | 0.1.0 |
 | `com.flapgame.gamelib.haptics` | Vibration / haptic feedback | 0.1.0 |
+| `com.flapgame.gamelib.save` | Save data: crash-safe file, backup, checksum, versioned sections, autosave, optional encryption | 0.8.0 |
 | `com.flapgame.gamelib.ads` | Placement-based ads (interstitial, rewarded, banner, app open), ad policy | 0.2.0 |
 | `com.flapgame.gamelib.ads.max` | AppLovin MAX adapter | 0.2.0 |
 | `com.flapgame.gamelib.ads.admob` | AdMob adapter and Google UMP consent | 0.3.0 |
@@ -24,6 +25,8 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.att` | iOS App Tracking Transparency prompt: after the consent form (optional delay) or on demand | 0.4.0 |
 | `com.flapgame.gamelib.appsflyer` | AppsFlyer: ad revenue, purchases (manual or Purchase Connector), consent; starts after ATT | 0.3.0 |
 | `com.flapgame.gamelib.build` | Unity Cloud Build: splash off, App Store upload of iOS builds | 0.6.0 |
+| `com.flapgame.gamelib.rate` | Rate-us prompts and the store review sheet (iOS, Google Play) | 0.8.0 |
+| `com.flapgame.gamelib.appicon` | Alternate app icons (iOS) | 0.8.0 |
 | `com.flapgame.gamelib.ui` | UI framework | later |
 
 Modules never reference each other directly; they talk through contracts in `core`
@@ -50,7 +53,7 @@ the SDK. Compile-checked against: AppLovin MAX 8.6.6, Google Mobile Ads 11.6.0, 
 Add `core` to `Packages/manifest.json`, then open **GameLib > Setup** to add further modules and their SDKs step by step:
 
 ```json
-"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.7.1"
+"com.flapgame.gamelib.core": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.core#v0.8.0"
 ```
 
 Unity does not resolve git dependencies between packages, so when installing by hand add every package

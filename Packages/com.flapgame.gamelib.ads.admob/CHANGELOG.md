@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.0] - 2026-10-27
+- `BannerPosition.Custom` (MREC or banner at `AdPlacement.CustomCenter`; not for collapsible banners).
+- `AdPlacement.PreloadBanner` (not for collapsible banners).
+
 ## [0.7.1] - 2026-10-26
 - GetBannerHeightPixels returns the height measured when the banner loaded instead of a native call on every read.
 - The remembered banner height no longer forces PlayerPrefs.Save (a blocking disk write) on the first banner load of each session.

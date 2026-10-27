@@ -90,6 +90,13 @@ namespace FlapGame.GameLib.Editor
             },
             new GameLibModuleInfo
             {
+                Id = "save",
+                DisplayName = "Save",
+                Description = "Save game data: crash-safe file with backup and checksum, versioned sections with migrations, autosave, optional encryption.",
+                ModuleTypeName = "FlapGame.GameLib.Save.SaveModule",
+            },
+            new GameLibModuleInfo
+            {
                 Id = "ads",
                 DisplayName = "Ads",
                 Description = "Placement-based interstitial, rewarded, banner and app open ads, with per-game show rules.",
@@ -212,6 +219,20 @@ namespace FlapGame.GameLib.Editor
                         Location = "https://github.com/AppsFlyerSDK/appsflyer-unity-plugin.git#v7.0.3",
                     },
                 },
+            },
+            new GameLibModuleInfo
+            {
+                Id = "rate",
+                DisplayName = "Rate",
+                Description = "Rate-us prompts: when to ask (every Nth trigger, caps), the store review sheet on iOS and Google Play.",
+                ModuleTypeName = "FlapGame.GameLib.Rate.RateModule",
+            },
+            new GameLibModuleInfo
+            {
+                Id = "appicon",
+                DisplayName = "App Icon",
+                Description = "Alternate app icons the player can pick (iOS), built into the Xcode project.",
+                ModuleTypeName = "FlapGame.GameLib.AppIcon.AppIconModule",
             },
             new GameLibModuleInfo
             {

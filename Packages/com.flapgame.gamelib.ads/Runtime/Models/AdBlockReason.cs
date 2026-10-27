@@ -23,5 +23,11 @@ namespace FlapGame.GameLib.Ads
         NoProvider = 11,
         /// <summary>App open blocked by <c>AdsPolicy.AppOpenMinIntervalSeconds</c> (time since the last app open ad).</summary>
         AppOpenInterval = 12,
+        /// <summary>Interstitial blocked by <c>AdsPolicy.InterstitialFromLevel</c> (the level set with <c>SetPlayerLevel</c> is lower).</summary>
+        BelowLevel = 13,
+        /// <summary>Not this request: the placement shows on every <c>AdPlacement.ShowEveryNthRequest</c>th request only.</summary>
+        RequestCount = 14,
+        /// <summary>Blocked by one of the game's own rules (<see cref="AdShowRule"/>).</summary>
+        GameRule = 15,
     }
 }

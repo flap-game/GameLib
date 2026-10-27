@@ -190,7 +190,11 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [TearDown]
-        public void TearDown() => UnityEngine.Object.DestroyImmediate(settings);
+        public void TearDown()
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+            PlayerPrefs.DeleteKey(CompositeAdsService.LastInterstitialKey);
+        }
 
         private CompositeAdsService Create(AdsPlan plan = null) =>
             new(new IAdsProviderAdapter[] { adMob, max, levelPlay }, settings, plan, null, () => clock);
@@ -404,6 +408,178 @@ namespace FlapGame.GameLib.Ads.Tests
             Assert.That(p.CooldownSeconds, Is.EqualTo(60f));
             Assert.That(p.MaxShowsPerSession, Is.EqualTo(1));
             Assert.That(p.SuppressedByNoAds, Is.False);
+        }
+
+        [Test]
+        public void Policy_FromLevel_BlocksBelowTheLevel()
+        {
+            settings.Policy.InterstitialFromLevel = 3;
+            using var ads = Create();
+            max.MarkReady("inter");
+            adMob.MarkReady("reward");
+
+            Assert.That(ads.CanShow("inter", out AdBlockReason reason), Is.False);
+            Assert.That(reason, Is.EqualTo(AdBlockReason.BelowLevel));
+            Assert.That(ads.CanShow("reward", out _), Is.True, "rewarded is not an interstitial");
+            int changes = 0;
+            ads.PlacementReadyChanged += id => { if (id == "inter") changes++; };
+            ads.SetPlayerLevel(3);
+            Assert.That(changes, Is.EqualTo(1), "UI bound to readiness hears the level gate open");
+            Assert.That(ads.CanShow("inter", out _), Is.True);
+        }
+
+        [Test]
+        public void Placement_ShowEveryNthRequest_CountsBlockedRequests()
+        {
+            settings.Placements.Find(p => p.Id == "inter").ShowEveryNthRequest = 3;
+            using var ads = Create();
+            max.MarkReady("inter");
+
+            Assert.That(Await(ads.ShowAsync("inter")), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(ads.CanShow("inter", out AdBlockReason reason), Is.False);
+            Assert.That(reason, Is.EqualTo(AdBlockReason.RequestCount));
+            Assert.That(Await(ads.ShowAsync("inter")), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(ads.CanShow("inter", out _), Is.True, "the next request is the third");
+            Assert.That(Await(ads.ShowAsync("inter")), Is.EqualTo(AdShowResult.Completed));
+            Assert.That(max.Shown, Is.EqualTo(new[] { "inter" }));
+
+            // Blocked by another rule on its turn: the following request shows.
+            settings.Policy.InterstitialMinIntervalSeconds = 30f;
+            using var timed = Create();
+            settings.Policy.InterstitialMinIntervalSeconds = 0f;
+            Assert.That(Await(timed.ShowAsync("inter")), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(Await(timed.ShowAsync("inter")), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(Await(timed.ShowAsync("inter")), Is.EqualTo(AdShowResult.Completed));
+            clock = 10f;
+            for (int i = 0; i < 3; i++) Assert.That(Await(timed.ShowAsync("inter")), Is.EqualTo(AdShowResult.Failed));
+            clock = 40f;
+            Assert.That(Await(timed.ShowAsync("inter")), Is.EqualTo(AdShowResult.Completed), "the third request was blocked by the interval");
+        }
+
+        [Test]
+        public void GameRule_BlocksAndHearsRequestsAndShows()
+        {
+            using var ads = Create();
+            max.MarkReady("inter");
+            adMob.MarkReady("reward");
+            var rule = new CountingRule();
+            ads.AddRule(rule);
+
+            Assert.That(ads.CanShow("inter", out AdBlockReason reason), Is.False);
+            Assert.That(reason, Is.EqualTo(AdBlockReason.GameRule));
+            Assert.That(Await(ads.ShowAsync("inter")), Is.EqualTo(AdShowResult.Failed));
+            Assert.That(rule.Requests, Is.EqualTo(new[] { ("inter", AdBlockReason.GameRule) }));
+
+            rule.Open = true;
+            Assert.That(Await(ads.ShowAsync("inter")), Is.EqualTo(AdShowResult.Completed));
+            Assert.That(rule.Shown, Is.EqualTo(new[] { "inter" }));
+
+            Assert.That(ads.RemoveRule(rule), Is.True);
+            rule.Open = false;
+            max.MarkReady("inter");
+            Assert.That(ads.CanShow("inter", out _), Is.True);
+        }
+
+        [Test]
+        public void GameRule_ThatThrows_BlocksWithAWarning()
+        {
+            using var ads = Create();
+            max.MarkReady("inter");
+            ads.AddRule(AdShowRule.From(_ => throw new InvalidOperationException("boom")));
+            LogAssert.Expect(LogType.Warning, new Regex("threw for 'inter'"));
+            Assert.That(ads.CanShow("inter", out AdBlockReason reason), Is.False);
+            Assert.That(reason, Is.EqualTo(AdBlockReason.GameRule));
+        }
+
+        [Test]
+        public void Policy_IntervalAcrossSessions_CountsThePreviousSession()
+        {
+            settings.Policy.InterstitialMinIntervalSeconds = 60f;
+            PlayerPrefs.SetString(CompositeAdsService.LastInterstitialKey, (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 20).ToString());
+            try
+            {
+                using (var ads = Create())
+                {
+                    max.MarkReady("inter");
+                    Assert.That(ads.CanShow("inter", out _), Is.True, "off: a new session starts with no interval");
+                }
+
+                settings.Policy.InterstitialIntervalAcrossSessions = true;
+                using (var ads = Create())
+                {
+                    max.MarkReady("inter");
+                    Assert.That(ads.CanShow("inter", out AdBlockReason reason), Is.False);
+                    Assert.That(reason, Is.EqualTo(AdBlockReason.GlobalInterval));
+                    clock = 41f;
+                    Assert.That(ads.CanShow("inter", out _), Is.True, "60 s after the previous session's interstitial");
+                    Assert.That(Await(ads.ShowAsync("inter")), Is.EqualTo(AdShowResult.Completed));
+                    Assert.That(long.Parse(PlayerPrefs.GetString(CompositeAdsService.LastInterstitialKey)),
+                        Is.GreaterThanOrEqualTo(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 1), "saved for the next session");
+                }
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey(CompositeAdsService.LastInterstitialKey);
+            }
+        }
+
+        [Test]
+        public void Plan_SetsTheNewRules()
+        {
+            var plan = new AdsPlan
+            {
+                Name = "rules",
+                Policy = new AdsPlanPolicy { InterstitialFromLevel = 2, InterstitialIntervalAcrossSessions = true },
+                Placements = new List<AdsPlanPlacement> { new() { Id = "inter", ShowEveryNthRequest = 4 } },
+            };
+            using var ads = Create(plan);
+            Assert.That(ads.Policy.InterstitialFromLevel, Is.EqualTo(2));
+            Assert.That(ads.Policy.InterstitialIntervalAcrossSessions, Is.True);
+            Assert.That(ads.Placements["inter"].ShowEveryNthRequest, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void BannerHeightChanged_OnLoadShowHide()
+        {
+            settings.Placements.Add(new AdPlacement { Id = "banner", Format = AdFormat.Banner, Routes = { new AdRoute("max", "b1") } });
+            using var ads = Create();
+            var heights = new List<(string, float)>();
+            ads.BannerHeightChanged += (id, px) => heights.Add((id, px));
+            max.BannerHeight = 150f;
+
+            Assert.That(Await(ads.ShowAsync("banner")), Is.EqualTo(AdShowResult.Completed));
+            Assert.That(heights, Is.Empty, "not loaded yet");
+            max.MarkReady("banner");
+            Assert.That(heights, Is.EqualTo(new[] { ("banner", 150f) }));
+            Assert.That(ads.GetVisibleBannerHeightPixels("banner"), Is.EqualTo(150f));
+
+            ads.HideBanner("banner");
+            Assert.That(heights[heights.Count - 1], Is.EqualTo(("banner", 0f)));
+            Assert.That(ads.GetVisibleBannerHeightPixels("banner"), Is.EqualTo(0f));
+            Await(ads.ShowAsync("banner"));
+            Assert.That(heights[heights.Count - 1], Is.EqualTo(("banner", 150f)), "shown again while loaded");
+        }
+
+        [Test]
+        public void BannerLayout_CustomCentre_StaysInTheSafeArea()
+        {
+            // 1080 x 1920 px at 3 px/dp = 360 x 640 dp; MREC 300 x 250 dp.
+            Vector2 at = BannerLayout.CustomTopLeftDp(new Vector2(0.72f, 0.42f), new Vector2(300f, 250f), 3f, new Vector2(1080f, 1920f));
+            Assert.That(at.x, Is.EqualTo(60f).Within(0.01f), "0.72 * 360 - 150 = 109.2, clamped to 360 - 300");
+            Assert.That(at.y, Is.EqualTo(0.42f * 640f - 125f).Within(0.01f));
+            Vector2 corner = BannerLayout.CustomTopLeftDp(Vector2.zero, new Vector2(300f, 250f), 3f, new Vector2(1080f, 1920f));
+            Assert.That(corner, Is.EqualTo(Vector2.zero));
+        }
+
+        private sealed class CountingRule : AdShowRule
+        {
+            public bool Open;
+            public readonly List<(string, AdBlockReason)> Requests = new();
+            public readonly List<string> Shown = new();
+
+            public override bool Allows(AdPlacement placement) => Open || placement.Format != AdFormat.Interstitial;
+            public override void OnRequested(AdPlacement placement, AdBlockReason reason) => Requests.Add((placement.Id, reason));
+            public override void OnShown(AdPlacement placement, AdShowResult result) => Shown.Add(placement.Id);
         }
 
         [Test]

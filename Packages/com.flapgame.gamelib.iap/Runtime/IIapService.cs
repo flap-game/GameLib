@@ -38,6 +38,12 @@ namespace FlapGame.GameLib.Iap
         bool IsOwned(string productId);
 
         /// <summary>
+        /// What the store said about an active subscription (trial, renewal, end of period). False when
+        /// <paramref name="productId"/> is not an active subscription, or before the store answered.
+        /// </summary>
+        bool TryGetSubscription(string productId, out IapSubscriptionInfo info);
+
+        /// <summary>
         /// Buys <paramref name="productId"/>; completes when the store answered. <paramref name="placement"/> (shop, offer
         /// popup, ...) is sent with the purchase events. One purchase at a time.
         /// </summary>
@@ -79,6 +85,26 @@ namespace FlapGame.GameLib.Iap
         public string Description { get; internal set; }
 
         public override string ToString() => $"{Id} ({Kind}) {PriceString}";
+    }
+
+    /// <summary>An active subscription, as the store last reported it. Unknown fields are null (stores differ).</summary>
+    public sealed class IapSubscriptionInfo
+    {
+        public string ProductId { get; internal set; }
+
+        /// <summary>True while in the free trial. App Store only (null on Google Play, where Unity IAP cannot tell).</summary>
+        public bool? IsFreeTrial { get; internal set; }
+
+        /// <summary>True when it renews at the end of the period. Google Play only (null on the App Store, whose receipt
+        /// does not say when the player turned renewal off).</summary>
+        public bool? IsAutoRenewing { get; internal set; }
+
+        /// <summary>End of the current period, UTC. On Google Play an estimate (purchase date plus whole periods: no grace
+        /// period, account hold or price change).</summary>
+        public DateTime? ExpiresUtc { get; internal set; }
+
+        public override string ToString() =>
+            $"{ProductId} trial={IsFreeTrial?.ToString() ?? "?"} renews={IsAutoRenewing?.ToString() ?? "?"} expires={ExpiresUtc?.ToString("u") ?? "?"}";
     }
 
     /// <summary>One purchase to grant.</summary>
@@ -149,7 +175,8 @@ namespace FlapGame.GameLib.Iap
 
         public PurchaseProductKind Kind;
 
-        [UnityEngine.Tooltip("Entitlement granted by GameLib on purchase and restore, e.g. no_ads. Empty = the game grants in PurchaseGranted.")]
+        [UnityEngine.Tooltip("Entitlement granted by GameLib on purchase and restore, e.g. no_ads. Empty = the game grants in PurchaseGranted. " +
+                             "Several products may grant the same one (weekly / monthly / yearly VIP): it stays while any of them is owned.")]
         public string Entitlement;
 
         [UnityEngine.Tooltip("Google Play id when it differs from Id.")]

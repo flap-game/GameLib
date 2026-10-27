@@ -1,0 +1,19 @@
+{
+  "name": "FlapGame.GameLib.AppIcon.Editor",
+  "rootNamespace": "FlapGame.GameLib",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.AppIcon"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

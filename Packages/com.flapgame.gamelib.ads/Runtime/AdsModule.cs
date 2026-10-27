@@ -56,6 +56,21 @@ namespace FlapGame.GameLib.Ads
         [Tooltip("How long a launch waits for the app open ad to load; after that the launch shows none.")]
         [Min(0f)] public float AppOpenColdStartWaitSeconds = 10f;
 
+        [Tooltip("First launch (counted since install) that shows the launch app open ad: 1 = every launch, 2 = all but the " +
+                 "first (shared rule), 5 = from the 5th launch. Returns from the background are not affected.")]
+        [Min(1)] public int AppOpenShowAtLaunchFrom = 2;
+
+        [Tooltip("On: the launch ad shows by itself as soon as it loads. Off: the game shows it from its loading screen with " +
+                 "AppOpenLauncher.ShowLaunchAdAsync() and continues when that returns (ad closed, or none loaded in time).")]
+        public bool AppOpenAutoShowAtLaunch = true;
+
+        [Tooltip("Minimum seconds in the background before a return shows an app open ad. 0 = every return.")]
+        [Min(0f)] public float AppOpenMinBackgroundSeconds;
+
+        [Tooltip("PlayerPrefs key of the launch counter. Empty = GameLib's own key. A game moving to GameLib sets its old key " +
+                 "(e.g. GameAds_LaunchCount) so its players keep their count.")]
+        public string AppOpenLaunchCountKey;
+
         [Header("Startup")]
         [Tooltip("Run consent + SDK initialization in the background so bootstrap is not blocked by network round-trips.")]
         public bool InitializeInBackground = true;
@@ -233,7 +248,14 @@ namespace FlapGame.GameLib.Ads
             // 4. App open rule. Its cold-start deadline starts once the SDKs are up (AppOpenLauncher.AdsStarted).
             if (!string.IsNullOrEmpty(AppOpenPlacementId) && lifecycle != null)
             {
-                var launcher = new AppOpenLauncher(service, lifecycle, AppOpenPlacementId) { ColdStartWaitSeconds = AppOpenColdStartWaitSeconds };
+                var launcher = new AppOpenLauncher(service, lifecycle, AppOpenPlacementId)
+                {
+                    ColdStartWaitSeconds = AppOpenColdStartWaitSeconds,
+                    ShowAtLaunchFrom     = Math.Max(1, AppOpenShowAtLaunchFrom),
+                    AutoShowAtLaunch     = AppOpenAutoShowAtLaunch,
+                    MinBackgroundSeconds = AppOpenMinBackgroundSeconds,
+                    LaunchCountPrefsKey  = string.IsNullOrWhiteSpace(AppOpenLaunchCountKey) ? AppOpenLauncher.LaunchCountKey : AppOpenLaunchCountKey.Trim(),
+                };
                 services.Register(launcher);
                 launcher.Start();
             }

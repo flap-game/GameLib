@@ -1,0 +1,16 @@
+{
+  "name": "FlapGame.GameLib.Save",
+  "rootNamespace": "FlapGame.GameLib",
+  "references": [
+    "FlapGame.GameLib.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

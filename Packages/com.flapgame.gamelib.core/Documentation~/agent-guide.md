@@ -42,7 +42,7 @@ Check these, then ask the human everything missing in **one** message:
 
 | Need | For |
 |---|---|
-| Which modules | `haptics`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `build`. The ids are in `GameLibModuleCatalog`. |
+| Which modules | `haptics`, `save`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `rate`, `appicon`, `build`. The ids are in `GameLibModuleCatalog`. |
 | Placements | Id, format, and the Android and iOS ad unit id per network. Plus which placement is the app open one. |
 | Interstitial rule | The game's own conditions (see Rules). |
 | MAX SDK key / AdMob app ids | AppLovin Integration Manager / Google Mobile Ads settings. |
@@ -175,7 +175,11 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 | Opening a link / store page | `IAppLifecycle.MarkExternalActivity("link")` first | [Core](../README.md) |
 | Remote values | `IRemoteConfig.GetLong / GetBool / GetObject<T>` | [Remote Config](../../com.flapgame.gamelib.remoteconfig.firebase/README.md) |
 | Non-fatal errors, custom keys | `ICrashReporter` | [Crashlytics](../../com.flapgame.gamelib.crashlytics/README.md) |
+| Save data | `save.Section<T>("player")`, change `Data`, `MarkDirty()`; small values `ForScope("x").Save/Load`; `Flush()` after a purchase or a win. Never PlayerPrefs for progress. | [Save](../../com.flapgame.gamelib.save/README.md) |
 | Vibration | `IHapticsService.Play(HapticType...)` | [Haptics](../../com.flapgame.gamelib.haptics/README.md) |
+| Rate us | `if (rate.NotifyTrigger()) popup.Show();` then `RequestReviewAsync()` / `StopPrompting()` | [Rate](../../com.flapgame.gamelib.rate/README.md) |
+| Alternate app icon (iOS) | `IAppIconService.SetIconAsync(name)`, icons listed on the AppIconModule asset | [App Icon](../../com.flapgame.gamelib.appicon/README.md) |
+| Game's own interstitial rule | `ads.AddRule(AdShowRule.From(p => ...))`, level gate `ads.SetPlayerLevel(n)` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 
 ## 5. Verify
 

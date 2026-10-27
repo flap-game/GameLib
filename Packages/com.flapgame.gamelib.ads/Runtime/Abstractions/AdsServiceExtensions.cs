@@ -1,11 +1,47 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace FlapGame.GameLib.Ads
 {
     public static class AdsServiceExtensions
     {
+        /// <summary>Reports the player's level for <c>AdsPolicy.InterstitialFromLevel</c>. Call at start and on every level change.</summary>
+        public static void SetPlayerLevel(this IAdsService ads, int level)
+        {
+            if (ads is CompositeAdsService composite) composite.PlayerLevel = level;
+            else Debug.LogWarning($"[Ads] SetPlayerLevel needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+        }
+
+        /// <summary>Adds a game rule for fullscreen ads (see <see cref="AdShowRule"/>).</summary>
+        public static void AddRule(this IAdsService ads, AdShowRule rule)
+        {
+            if (ads is CompositeAdsService composite) composite.AddRule(rule);
+            else Debug.LogWarning($"[Ads] AddRule needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+        }
+
+        /// <summary>On-screen height in pixels of a shown banner / MREC (0 = none). See <c>CompositeAdsService.BannerHeightChanged</c>.</summary>
+        public static float GetVisibleBannerHeightPixels(this IAdsService ads, string placementId) =>
+            ads is CompositeAdsService composite ? composite.GetVisibleBannerHeightPixels(placementId) : 0f;
+
+        /// <summary>
+        /// Shows the ad, waiting up to <paramref name="waitForFillSeconds"/> for it to load when nothing else blocks the show
+        /// (overrides <c>AdPlacement.WaitForFillSeconds</c> for this call). Other services show without waiting.
+        /// </summary>
+        public static ValueTask<AdShowResult> ShowAsync(
+            this IAdsService ads,
+            string placementId,
+            float waitForFillSeconds,
+            CancellationToken cancellationToken = default)
+            => ads is CompositeAdsService composite
+                ? composite.ShowAsync(placementId, waitForFillSeconds, cancellationToken)
+                : ads.ShowAsync(placementId, cancellationToken);
+
+        /// <summary>Removes a rule added with <see cref="AddRule"/>.</summary>
+        public static bool RemoveRule(this IAdsService ads, AdShowRule rule) =>
+            ads is CompositeAdsService composite && composite.RemoveRule(rule);
+
         /// <summary>
         /// Shows a rewarded ad and invokes <paramref name="onRewarded"/> only when the user earns the reward.
         /// Returns true if the reward was granted.

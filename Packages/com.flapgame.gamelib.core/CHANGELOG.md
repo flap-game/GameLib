@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.0] - 2026-10-27
+- Setup lists the new Rate, App Icon and Save modules.
+- `GameLibModuleOrder.Save` (-50): after analytics and crash reporting, before the game's own modules.
+
 ## [0.7.1] - 2026-10-26
 - IAnalytics.Track no longer allocates a closure per call, and a BufferedAnalyticsSink that is ready forwards Track / TrackAdRevenue / TrackPurchase directly (no closure, no lock).
 

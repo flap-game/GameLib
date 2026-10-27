@@ -47,6 +47,8 @@ namespace FlapGame.GameLib
         public const int Firebase = -200;
         public const int RemoteConfig = -150;
         public const int Analytics = -100;
+        /// <summary>After analytics and crash reporting (it reports a damaged save to them), before the game's modules.</summary>
+        public const int Save = -50;
         public const int Default = 0;
         public const int Iap = 100;
         public const int Ads = 200;

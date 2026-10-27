@@ -1,0 +1,19 @@
+{
+  "name": "FlapGame.GameLib.Save.Editor",
+  "rootNamespace": "FlapGame.GameLib",
+  "references": [
+    "FlapGame.GameLib.Core",
+    "FlapGame.GameLib.Save"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

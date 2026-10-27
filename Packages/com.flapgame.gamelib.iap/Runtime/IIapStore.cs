@@ -102,6 +102,15 @@ namespace FlapGame.GameLib.Iap
         /// <summary>For subscriptions: false when the store says it is not active; null when it cannot tell.</summary>
         public bool? SubscriptionActive;
 
+        /// <summary>For subscriptions: true while in the free trial; null when the store cannot tell.</summary>
+        public bool? SubscriptionFreeTrial;
+
+        /// <summary>For subscriptions: true when it renews at the end of the period; null when the store cannot tell.</summary>
+        public bool? SubscriptionAutoRenewing;
+
+        /// <summary>For subscriptions: end of the current period (UTC); null when the store does not say.</summary>
+        public DateTime? SubscriptionExpiresUtc;
+
         /// <summary>The SDK's order object, handed back to <see cref="IIapStore.Confirm"/>.</summary>
         public object Native;
 

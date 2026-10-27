@@ -55,6 +55,7 @@ namespace FlapGame.GameLib.Iap
         private readonly IReadOnlyList<IapProduct> productList;
         private readonly List<IapProductConfig> configs;
         private readonly HashSet<string> owned = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, IapSubscriptionInfo> subscriptions = new(StringComparer.Ordinal);
         private readonly List<(IapStoreOrder Order, IapPurchase Purchase)> held = new();
         private Action<IapPurchase> grantedHandlers;
         private InFlight inFlight;
@@ -138,6 +139,32 @@ namespace FlapGame.GameLib.Iap
             TryGetProduct(productId, out IapProduct p) && p.IsAvailable && !string.IsNullOrEmpty(p.PriceString) ? p.PriceString : fallback;
 
         public bool IsOwned(string productId) => productId != null && owned.Contains(productId);
+
+        public bool TryGetSubscription(string productId, out IapSubscriptionInfo info)
+        {
+            info = null;
+            return productId != null && owned.Contains(productId) && subscriptions.TryGetValue(productId, out info);
+        }
+
+        private void RememberSubscription(IapProduct product, IapStoreOrder order)
+        {
+            if (product.Kind != PurchaseProductKind.Subscription || order == null) return;
+            subscriptions[product.Id] = new IapSubscriptionInfo
+            {
+                ProductId      = product.Id,
+                IsFreeTrial    = order.SubscriptionFreeTrial,
+                IsAutoRenewing = order.SubscriptionAutoRenewing,
+                ExpiresUtc     = order.SubscriptionExpiresUtc,
+            };
+        }
+
+        // An entitlement shared by several products stays while any of them is owned.
+        private bool EntitlementStillOwned(string entitlement)
+        {
+            foreach (IapProduct other in products.Values)
+                if (other.Entitlement == entitlement && owned.Contains(other.Id)) return true;
+            return false;
+        }
 
         public Task<IapPurchaseResult> PurchaseAsync(string productId, string placement = null)
         {
@@ -280,22 +307,35 @@ namespace FlapGame.GameLib.Iap
         private void OnPurchasesFetched(IReadOnlyList<IapStoreOrder> paid)
         {
             bool changed = false;
+            var expired = new List<IapProduct>();
             foreach (IapProduct p in products.Values)
             {
                 if (p.Kind == PurchaseProductKind.Consumable) continue;
-                bool isOwned = paid.Any(o => o.ProductId == p.Id && (p.Kind != PurchaseProductKind.Subscription || o.SubscriptionActive != false));
-                if (isOwned)
+                IapStoreOrder order = null;
+                foreach (IapStoreOrder o in paid)
+                {
+                    if (o.ProductId != p.Id || (p.Kind == PurchaseProductKind.Subscription && o.SubscriptionActive == false)) continue;
+                    // Several orders of one subscription (renewals): keep the one that runs longest.
+                    if (order == null || (o.SubscriptionExpiresUtc ?? DateTime.MinValue) > (order.SubscriptionExpiresUtc ?? DateTime.MinValue))
+                        order = o;
+                }
+                if (order != null)
                 {
                     changed |= owned.Add(p.Id);
+                    RememberSubscription(p, order);
                     if (p.Entitlement != null) entitlements?.Grant(p.Entitlement);
                 }
                 else if (p.Kind == PurchaseProductKind.Subscription)
                 {
                     // An expired subscription stops granting; a non-consumable is never taken back here.
                     changed |= owned.Remove(p.Id);
-                    if (p.Entitlement != null) entitlements?.Revoke(p.Entitlement);
+                    subscriptions.Remove(p.Id);
+                    expired.Add(p);
                 }
             }
+            // After every product was counted, so a shared entitlement is not revoked while another product grants it.
+            foreach (IapProduct p in expired)
+                if (p.Entitlement != null && !EntitlementStillOwned(p.Entitlement)) entitlements?.Revoke(p.Entitlement);
 
             if (changed) RaiseOwnedChanged();
             OnRestoreFetchResult(true);
@@ -357,6 +397,7 @@ namespace FlapGame.GameLib.Iap
         {
             IapProduct product = purchase.Product;
             bool ownedChanged = product.Kind != PurchaseProductKind.Consumable && owned.Add(product.Id);
+            RememberSubscription(product, order);
 
             // Logged before the handlers: a crash in between loses this grant rather than granting it twice on redelivery.
             // With PlayerPrefs on both sides one save covers the log and a new entitlement (it writes every key).

@@ -17,6 +17,14 @@ namespace FlapGame.GameLib.Ads
         [Tooltip("No interstitial / app open ad during the first N seconds of a session. 0 = none.")]
         [Min(0f)] public float FirstInterstitialDelaySeconds;
 
+        [Tooltip("InterstitialMinIntervalSeconds also counts from the last interstitial of the previous session (saved on the " +
+                 "device), so restarting the app does not bring the next one sooner.")]
+        public bool InterstitialIntervalAcrossSessions;
+
+        [Tooltip("No interstitial while the player's level (the game reports it with IAdsService.SetPlayerLevel) is below this. " +
+                 "0 = no level gate.")]
+        [Min(0)] public int InterstitialFromLevel;
+
         [Tooltip("A completed rewarded ad restarts the interstitial interval (the player just watched an ad by choice).")]
         public bool RewardedResetsInterstitialTimer = true;
 

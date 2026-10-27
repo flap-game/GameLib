@@ -28,6 +28,10 @@ if (ads.CanShow("revive", out AdBlockReason reason)) ShowReviveButton();
 
 `AdPlacementRef` assets let designers pick placements in the Inspector instead of typing ids.
 
+Nothing loaded yet: `ShowAsync` fails at once, unless the placement's `Wait For Fill Seconds` is set (also in the remote
+plan) - then it waits up to that long for the ad to load, when loading is the only thing missing. Per call:
+`ads.ShowAsync("revive", 3f)`. Show a loading indicator while it waits.
+
 ## AdsModule asset
 
 | Section | What it holds |
@@ -39,20 +43,58 @@ if (ads.CanShow("revive", out AdBlockReason reason)) ShowReviveButton();
 | Placements | Id, format, routes (provider + Android / iOS unit ids, in waterfall order), cooldown, session cap, hidden by no-ads, banner size / position. |
 | Logs | `VerboseLogs`: info logs for every load / show / retry also in release builds (always in the Editor and development builds). |
 
-Per-game interstitial rules (e.g. "from level 2 only") stay in game code: check your condition, then call
-`ShowInterstitialAsync`. `Policy` holds the time-based part.
+## Interstitial rules
+
+The shared rules are all off by default; each game sets its values on the AdsModule asset (or from the remote plan):
+
+| Rule | Where | Blocked with |
+|---|---|---|
+| Seconds between two interstitials | `Policy.InterstitialMinIntervalSeconds` | `GlobalInterval` |
+| ... also across app restarts | `Policy.InterstitialIntervalAcrossSessions` | `GlobalInterval` |
+| None in the first seconds of a session | `Policy.FirstInterstitialDelaySeconds` | `SessionStartGrace` |
+| None below a level | `Policy.InterstitialFromLevel` + `ads.SetPlayerLevel(level)` | `BelowLevel` |
+| Every Nth request of a placement | placement `Show Every Nth Request` (a blocked request still counts) | `RequestCount` |
+| Seconds between two shows / per session cap | placement `Cooldown Seconds` / `Max Shows Per Session` | `Cooldown` / `SessionCap` |
+
+Anything else is the game's own rule, asked after the shared ones:
+
+```csharp
+ads.AddRule(AdShowRule.From(p => p.Format != AdFormat.Interstitial || !tutorial.IsActive));
+```
+
+Subclass `AdShowRule` to count requests (`OnRequested`) or shows (`OnShown`) yourself. Keep `Allows` cheap: `CanShow`
+calls it, and UI may poll that every frame.
 
 ## App open rule
 
 With `AppOpenPlacementId` set:
 
-- no app open ad on the first launch after install;
-- one on every later launch (when it loads within `AppOpenColdStartWaitSeconds`) and on every return from the background;
+- no app open ad on the first launch after install (`AppOpenShowAtLaunchFrom`: 1 = every launch, 5 = from the 5th);
+- one on every later launch (when it loads within `AppOpenColdStartWaitSeconds`) and on every return from the background
+  (at least `AppOpenMinBackgroundSeconds` away, 0 = every return);
 - never on the way back from an ad, an ad click, a purchase, or a link the game opened
   (call `IAppLifecycle.MarkExternalActivity("link")` before `Application.OpenURL`);
 - at least `Policy.AppOpenMinIntervalSeconds` (90 s) between two app open ads; interstitial rules do not apply to it.
 
 Add the game's own condition through the launcher: `services.Resolve<AppOpenLauncher>().Gate = () => !inTutorial;`
+
+To show the launch ad from the loading screen instead (Home opens after it closes), turn `AppOpenAutoShowAtLaunch` off:
+
+```csharp
+await services.Resolve<AppOpenLauncher>().ShowLaunchAdAsync(); // returns at once when this launch shows none
+LoadHome();
+```
+
+A game moving to GameLib keeps its players' launch count by setting `AppOpenLaunchCountKey` to its old PlayerPrefs key.
+
+## Banner layout
+
+`ads.GetVisibleBannerHeightPixels(id)` is the height a shown banner takes on screen (0 when hidden or not loaded);
+`((CompositeAdsService)ads).BannerHeightChanged += (id, px) => ...` tells when it changes. `Position = Custom` centres a
+banner / MREC at `Custom Center` (fraction of the safe area, (0, 0) = top-left).
+
+`Preload Banner` creates the banner hidden as soon as its SDK is ready, so the first screen with a banner shows an ad
+instead of an empty slot (not for collapsible banners). A hidden MAX banner stops refreshing until it is shown again.
 
 ## No-ads, consent, tracking
 

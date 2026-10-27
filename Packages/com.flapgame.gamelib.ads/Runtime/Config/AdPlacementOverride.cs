@@ -25,6 +25,7 @@ namespace FlapGame.GameLib.Ads
         public List<AdRoute> Routes;
         public float? CooldownSeconds;
         public int? MaxShowsPerSession;
+        public int? ShowEveryNthRequest;
         public bool? SuppressedByNoAds;
 
         [Preserve]
@@ -37,6 +38,7 @@ namespace FlapGame.GameLib.Ads
             Routes             = p.Clone().Routes,
             CooldownSeconds    = p.CooldownSeconds,
             MaxShowsPerSession = p.MaxShowsPerSession,
+            ShowEveryNthRequest = p.ShowEveryNthRequest,
             SuppressedByNoAds  = p.SuppressedByNoAds,
         };
     }

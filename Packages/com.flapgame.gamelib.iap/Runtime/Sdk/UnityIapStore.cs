@@ -153,7 +153,6 @@ namespace FlapGame.GameLib.Iap
         {
             CartItem item = order.CartOrdered?.Items()?.FirstOrDefault();
             SubscriptionInfo subscription = order.Info?.PurchasedProductInfo?.FirstOrDefault()?.subscriptionInfo;
-            Result? subscribed = subscription?.IsSubscribed();
             return new IapStoreOrder
             {
                 ProductId = item?.Product?.definition?.id,
@@ -161,9 +160,44 @@ namespace FlapGame.GameLib.Iap
                 OriginalTransactionId = order.Info?.Apple?.OriginalTransactionID,
                 // Unity IAP rebuilds the receipt on every read (on iOS from the whole app receipt): only when a grant needs it.
                 ReceiptSource = () => order.Info?.Receipt,
-                SubscriptionActive = subscribed == Result.True ? true : subscribed == Result.False ? false : null,
+                SubscriptionActive = Read(subscription, s => s.IsSubscribed()),
+                // Unity IAP fills the trial flag on Google from a developer payload that Billing 5+ never sets (always
+                // false), and on Apple derives "auto-renewing" from refund / expiry only (a renewal turned off in Settings
+                // still reads true): unknown rather than wrong.
+                SubscriptionFreeTrial = order.Info?.Google != null ? null : Read(subscription, s => s.IsFreeTrial()),
+                SubscriptionAutoRenewing = order.Info?.Apple != null ? null : Read(subscription, s => s.IsAutoRenewing()),
+                SubscriptionExpiresUtc = ExpireDate(subscription),
                 Native = order,
             };
+        }
+
+        private static bool? Read(SubscriptionInfo subscription, Func<SubscriptionInfo, Result> field)
+        {
+            if (subscription == null) return null;
+            try
+            {
+                Result r = field(subscription);
+                return r == Result.True ? true : r == Result.False ? false : null;
+            }
+            catch (Exception)
+            {
+                return null; // a receipt field this store does not carry
+            }
+        }
+
+        private static DateTime? ExpireDate(SubscriptionInfo subscription)
+        {
+            if (subscription == null) return null;
+            try
+            {
+                DateTime at = subscription.GetExpireDate();
+                if (at == default || at == DateTime.MinValue || at == DateTime.MaxValue) return null;
+                return at.Kind == DateTimeKind.Local ? at.ToUniversalTime() : DateTime.SpecifyKind(at, DateTimeKind.Utc);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         [Preserve]

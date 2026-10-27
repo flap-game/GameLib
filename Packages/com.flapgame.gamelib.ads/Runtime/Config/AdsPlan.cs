@@ -61,6 +61,8 @@ namespace FlapGame.GameLib.Ads
 
         public float? CooldownSeconds;
         public int?   MaxShowsPerSession;
+        public int?   ShowEveryNthRequest;
+        public float? WaitForFillSeconds;
         public bool?  SuppressedByNoAds;
 
         /// <summary>False = the placement never shows (<c>AdBlockReason.PlacementDisabled</c>) and nothing loads for it.</summary>
@@ -76,6 +78,8 @@ namespace FlapGame.GameLib.Ads
     {
         public float? InterstitialMinIntervalSeconds;
         public float? FirstInterstitialDelaySeconds;
+        public bool?  InterstitialIntervalAcrossSessions;
+        public int?   InterstitialFromLevel;
         public bool?  RewardedResetsInterstitialTimer;
         public float? AppOpenSuppressSecondsAfterFullscreen;
         public float? AppOpenMinIntervalSeconds;

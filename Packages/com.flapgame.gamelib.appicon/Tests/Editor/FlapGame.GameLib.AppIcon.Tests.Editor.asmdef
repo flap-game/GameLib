@@ -1,0 +1,26 @@
+{
+  "name": "FlapGame.GameLib.AppIcon.Tests.Editor",
+  "rootNamespace": "FlapGame.GameLib",
+  "references": [
+    "FlapGame.GameLib.AppIcon",
+    "FlapGame.GameLib.AppIcon.Editor",
+    "FlapGame.GameLib.Core",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

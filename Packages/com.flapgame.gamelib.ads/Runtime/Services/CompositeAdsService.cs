@@ -46,6 +46,12 @@ namespace FlapGame.GameLib.Ads
         private readonly Dictionary<string, string> showingProvider = new();
         private readonly Dictionary<string, int> showsThisSession = new();
         private readonly Dictionary<string, float> lastShownAt = new();
+        // ShowAsync requests since the last show, per placement (AdPlacement.ShowEveryNthRequest).
+        private readonly Dictionary<string, int> requestsSinceShow = new();
+        private readonly List<AdShowRule> rules = new();
+        // Read by CanShow (polled by UI) and the notifications: a rule may add / remove rules while it runs.
+        private AdShowRule[] ruleSnapshot = Array.Empty<AdShowRule>();
+        private readonly Dictionary<string, float> visibleBannerHeight = new();
         // Banners the game wants visible (ShowAsync until HideBanner / DestroyBanner), and the provider asked to show each.
         private readonly HashSet<string> wantedBanners = new();
         private readonly Dictionary<string, string> bannerProvider = new();
@@ -66,6 +72,9 @@ namespace FlapGame.GameLib.Ads
         private float lastFullscreenClosedAt = float.NegativeInfinity;
         private float lastInterstitialAt = float.NegativeInfinity;
         private float lastAppOpenAt = float.NegativeInfinity;
+        // The previous session's last interstitial on this clock (AdsPolicy.InterstitialIntervalAcrossSessions).
+        private float previousSessionInterstitialAt = float.NegativeInfinity;
+        private int playerLevel;
         private bool noAdsApplied;
         private bool refreshingNoAds;
         private bool disposed;
@@ -75,6 +84,13 @@ namespace FlapGame.GameLib.Ads
 
         /// <inheritdoc />
         public event Action<string> PlacementReadyChanged;
+
+        /// <summary>
+        /// The on-screen height of a banner / MREC placement changed (<see cref="GetVisibleBannerHeightPixels"/>): it
+        /// loaded while shown, was shown, hidden or destroyed, or no-ads removed it. Arguments: placement id, new height
+        /// in screen pixels (0 = nothing on screen). Lay the UI out above the banner from here.
+        /// </summary>
+        public event Action<string, float> BannerHeightChanged;
 
         /// <summary>Raised when a fullscreen ad starts (true) or ends (false). Pause audio / gameplay on it.</summary>
         public event Action<bool> FullscreenShowingChanged;
@@ -106,6 +122,7 @@ namespace FlapGame.GameLib.Ads
             this.noAdsOwned = noAdsOwned;
             now             = clock ?? (() => Time.realtimeSinceStartup);
             startedAt       = now();
+            previousSessionInterstitialAt = LoadPreviousInterstitial(startedAt);
             this.contextFactory = contextFactory ?? (a => BuildProviderContext(this.settings, a.ProviderId, consent,
                                                                              a is NullAdsAdapter { ServesAllPlacements: true }));
 
@@ -171,6 +188,82 @@ namespace FlapGame.GameLib.Ads
 
         /// <summary>True while a fullscreen ad is on screen.</summary>
         public bool IsShowingFullscreen => showingFullscreen != null;
+
+        /// <summary>PlayerPrefs key of the last interstitial's UTC time (unix seconds), for <c>InterstitialIntervalAcrossSessions</c>.</summary>
+        public const string LastInterstitialKey = "gamelib.ads.last_interstitial_utc";
+
+        /// <summary>The player's level for <c>AdsPolicy.InterstitialFromLevel</c>. The game sets it (<c>SetPlayerLevel</c>).</summary>
+        public int PlayerLevel
+        {
+            get => playerLevel;
+            set
+            {
+                if (playerLevel == value) return;
+                playerLevel = value;
+                if (policy.InterstitialFromLevel > 0) RaiseReadyChangedForInterstitials();
+            }
+        }
+
+        /// <summary>Adds a game rule for fullscreen ads (see <see cref="AdShowRule"/>).</summary>
+        public void AddRule(AdShowRule rule)
+        {
+            if (rule == null) throw new ArgumentNullException(nameof(rule));
+            if (rules.Contains(rule)) return;
+            rules.Add(rule);
+            ruleSnapshot = rules.ToArray();
+            RaiseReadyChangedForFullscreen();
+        }
+
+        /// <summary>Removes a rule added with <see cref="AddRule"/>.</summary>
+        public bool RemoveRule(AdShowRule rule)
+        {
+            if (!rules.Remove(rule)) return false;
+            ruleSnapshot = rules.ToArray();
+            RaiseReadyChangedForFullscreen();
+            return true;
+        }
+
+        private void RaiseReadyChangedForInterstitials()
+        {
+            foreach (AdPlacement p in placements.Values)
+                if (p.Format == AdFormat.Interstitial || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules))
+                    RaiseReadyChanged(p.Id);
+        }
+
+        private void RaiseReadyChangedForFullscreen()
+        {
+            foreach (AdPlacement p in placements.Values)
+                if (!p.IsBannerLike) RaiseReadyChanged(p.Id);
+        }
+
+        private static float LoadPreviousInterstitial(float clockNow)
+        {
+            try
+            {
+                if (!long.TryParse(PlayerPrefs.GetString(LastInterstitialKey, string.Empty), out long at)) return float.NegativeInfinity;
+                long ago = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - at;
+                return ago < 0 ? float.NegativeInfinity : clockNow - ago; // a clock set back: ignore the saved time
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Last interstitial time unavailable ({e.Message}).");
+                return float.NegativeInfinity;
+            }
+        }
+
+        private void SaveInterstitialTime()
+        {
+            try
+            {
+                // Saved now: an app swiped away from the background gets no OnApplicationQuit. Once per interstitial.
+                PlayerPrefs.SetString(LastInterstitialKey, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+                PlayerPrefs.Save();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Last interstitial time not saved ({e.Message}).");
+            }
+        }
 
         /// <summary>Seconds app open placements stay blocked after a fullscreen ad closed. Shortcut to the policy field.</summary>
         public float AppOpenSuppressSecondsAfterFullscreen
@@ -343,6 +436,8 @@ namespace FlapGame.GameLib.Ads
             {
                 if (pp.InterstitialMinIntervalSeconds.HasValue)        policy.InterstitialMinIntervalSeconds        = Mathf.Max(0f, pp.InterstitialMinIntervalSeconds.Value);
                 if (pp.FirstInterstitialDelaySeconds.HasValue)         policy.FirstInterstitialDelaySeconds         = Mathf.Max(0f, pp.FirstInterstitialDelaySeconds.Value);
+                if (pp.InterstitialIntervalAcrossSessions.HasValue)    policy.InterstitialIntervalAcrossSessions    = pp.InterstitialIntervalAcrossSessions.Value;
+                if (pp.InterstitialFromLevel.HasValue)                 policy.InterstitialFromLevel                 = Math.Max(0, pp.InterstitialFromLevel.Value);
                 if (pp.RewardedResetsInterstitialTimer.HasValue)       policy.RewardedResetsInterstitialTimer       = pp.RewardedResetsInterstitialTimer.Value;
                 if (pp.AppOpenSuppressSecondsAfterFullscreen.HasValue) policy.AppOpenSuppressSecondsAfterFullscreen = Mathf.Max(0f, pp.AppOpenSuppressSecondsAfterFullscreen.Value);
                 if (pp.AppOpenMinIntervalSeconds.HasValue)             policy.AppOpenMinIntervalSeconds             = Mathf.Max(0f, pp.AppOpenMinIntervalSeconds.Value);
@@ -374,6 +469,7 @@ namespace FlapGame.GameLib.Ads
                     legacyOverrides[o.Id] = merged = new AdPlacementOverride { Id = o.Id };
                 if (o.CooldownSeconds.HasValue)    merged.CooldownSeconds    = o.CooldownSeconds;
                 if (o.MaxShowsPerSession.HasValue) merged.MaxShowsPerSession = o.MaxShowsPerSession;
+                if (o.ShowEveryNthRequest.HasValue) merged.ShowEveryNthRequest = o.ShowEveryNthRequest;
                 if (o.SuppressedByNoAds.HasValue)  merged.SuppressedByNoAds  = o.SuppressedByNoAds;
                 if (o.Routes != null && o.Routes.Count > 0) merged.Routes = new List<AdRoute>(o.Routes);
                 applied.Add(o.Id);
@@ -430,6 +526,8 @@ namespace FlapGame.GameLib.Ads
                     if (rule.Enabled == false)              disabled.Add(rule.Id);
                     if (rule.CooldownSeconds.HasValue)      p.CooldownSeconds    = Mathf.Max(0f, rule.CooldownSeconds.Value);
                     if (rule.MaxShowsPerSession.HasValue)   p.MaxShowsPerSession = Math.Max(0, rule.MaxShowsPerSession.Value);
+                    if (rule.ShowEveryNthRequest.HasValue)  p.ShowEveryNthRequest = Math.Max(0, rule.ShowEveryNthRequest.Value);
+                    if (rule.WaitForFillSeconds.HasValue)   p.WaitForFillSeconds = Mathf.Max(0f, rule.WaitForFillSeconds.Value);
                     if (rule.SuppressedByNoAds.HasValue)    p.SuppressedByNoAds  = rule.SuppressedByNoAds.Value;
                     if (rule.Routes != null && rule.Routes.Count > 0) p.Routes = OrderRoutes(p, rule.Routes, logPlan);
                 }
@@ -440,6 +538,7 @@ namespace FlapGame.GameLib.Ads
                 if (!placements.TryGetValue(o.Id, out AdPlacement local)) continue;
                 if (o.CooldownSeconds.HasValue)    local.CooldownSeconds    = Mathf.Max(0f, o.CooldownSeconds.Value);
                 if (o.MaxShowsPerSession.HasValue) local.MaxShowsPerSession = Math.Max(0, o.MaxShowsPerSession.Value);
+                if (o.ShowEveryNthRequest.HasValue) local.ShowEveryNthRequest = Math.Max(0, o.ShowEveryNthRequest.Value);
                 if (o.SuppressedByNoAds.HasValue)  local.SuppressedByNoAds  = o.SuppressedByNoAds.Value;
                 if (o.Routes != null && o.Routes.Count > 0)
                 {
@@ -702,6 +801,9 @@ namespace FlapGame.GameLib.Ads
                 }
                 ReconcileAll();
                 if (owned) Debug.Log($"{LogPrefix} No-ads owned: suppressed placements stopped and banners destroyed.");
+                // Adapters do not all report a destroyed banner: tell the layout here.
+                foreach (AdPlacement p in new List<AdPlacement>(placements.Values))
+                    if (p.IsBannerLike) CheckBannerHeight(p.Id);
             }
             finally
             {
@@ -769,9 +871,16 @@ namespace FlapGame.GameLib.Ads
                         reason = AdBlockReason.SessionStartGrace;
                         return false;
                     }
-                    if (policy.InterstitialMinIntervalSeconds > 0f && t - lastInterstitialAt < policy.InterstitialMinIntervalSeconds)
+                    float lastAt = lastInterstitialAt;
+                    if (policy.InterstitialIntervalAcrossSessions && float.IsNegativeInfinity(lastAt)) lastAt = previousSessionInterstitialAt;
+                    if (policy.InterstitialMinIntervalSeconds > 0f && t - lastAt < policy.InterstitialMinIntervalSeconds)
                     {
                         reason = AdBlockReason.GlobalInterval;
+                        return false;
+                    }
+                    if (policy.InterstitialFromLevel > 0 && playerLevel < policy.InterstitialFromLevel)
+                    {
+                        reason = AdBlockReason.BelowLevel;
                         return false;
                     }
                 }
@@ -785,6 +894,20 @@ namespace FlapGame.GameLib.Ads
                     reason = AdBlockReason.Cooldown;
                     return false;
                 }
+                // This request would be the Nth: the counter only moves in ShowAsync, so CanShow stays side-effect free.
+                if (p.ShowEveryNthRequest > 1
+                    && (requestsSinceShow.TryGetValue(placementId, out int requests) ? requests : 0) + 1 < p.ShowEveryNthRequest)
+                {
+                    reason = AdBlockReason.RequestCount;
+                    return false;
+                }
+                AdShowRule[] gameRules = ruleSnapshot;
+                for (int i = 0; i < gameRules.Length; i++)
+                {
+                    if (RuleAllows(gameRules[i], p)) continue;
+                    reason = AdBlockReason.GameRule;
+                    return false;
+                }
                 if (!IsPlacementReady(placementId))
                 {
                     reason = AdBlockReason.NotReady;
@@ -796,12 +919,66 @@ namespace FlapGame.GameLib.Ads
         }
 
 
+        private static bool RuleAllows(AdShowRule rule, AdPlacement p)
+        {
+            try { return rule.Allows(p); }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Rule {rule.GetType().Name} threw for '{p.Id}': {e.Message} - not shown.");
+                return false;
+            }
+        }
+
+        // A fullscreen request: moves the every-Nth counter (unless the placement cannot show at all) and tells the rules.
+        private void NoteRequest(string placementId, AdBlockReason reason)
+        {
+            if (!placements.TryGetValue(placementId ?? string.Empty, out AdPlacement p) || p.IsBannerLike) return;
+            if (reason is AdBlockReason.UnknownPlacement or AdBlockReason.PlacementDisabled or AdBlockReason.NoAdsOwned
+                       or AdBlockReason.NoProvider)
+                return;
+            if (p.ShowEveryNthRequest > 1)
+            {
+                int requests = requestsSinceShow.TryGetValue(placementId, out int n) ? n + 1 : 1;
+                requestsSinceShow[placementId] = requests;
+                if (requests == p.ShowEveryNthRequest - 1) RaiseReadyChanged(placementId); // the next request may show
+            }
+            foreach (AdShowRule rule in ruleSnapshot)
+            {
+                try { rule.OnRequested(p, reason); }
+                catch (Exception e) { Debug.LogWarning($"{LogPrefix} Rule {rule.GetType().Name}.OnRequested threw: {e.Message}"); }
+            }
+        }
+
+        private void NoteShown(AdPlacement p, AdShowResult result)
+        {
+            requestsSinceShow.Remove(p.Id);
+            foreach (AdShowRule rule in ruleSnapshot)
+            {
+                try { rule.OnShown(p, result); }
+                catch (Exception e) { Debug.LogWarning($"{LogPrefix} Rule {rule.GetType().Name}.OnShown threw: {e.Message}"); }
+            }
+        }
+
         /// <inheritdoc />
-        public async ValueTask<AdShowResult> ShowAsync(string placementId, CancellationToken cancellationToken = default)
+        public ValueTask<AdShowResult> ShowAsync(string placementId, CancellationToken cancellationToken = default)
+            => ShowAsync(placementId, -1f, cancellationToken);
+
+        /// <summary>
+        /// <see cref="ShowAsync(string, CancellationToken)"/> that waits up to <paramref name="waitForFillSeconds"/> for the
+        /// ad to load when nothing else blocks the show, instead of <c>AdPlacement.WaitForFillSeconds</c> (negative = use it).
+        /// </summary>
+        public async ValueTask<AdShowResult> ShowAsync(string placementId, float waitForFillSeconds, CancellationToken cancellationToken = default)
         {
             RefreshNoAds();
-            if (!CanShow(placementId, out AdBlockReason reason))
+            bool allowed = CanShow(placementId, out AdBlockReason reason);
+            if (!allowed && reason == AdBlockReason.NotReady && !cancellationToken.IsCancellationRequested)
             {
+                float wait = waitForFillSeconds >= 0f ? waitForFillSeconds : placements[placementId].WaitForFillSeconds;
+                if (wait > 0f) (allowed, reason) = await WaitForFillAsync(placementId, wait, cancellationToken);
+            }
+            if (!allowed)
+            {
+                NoteRequest(placementId, reason);
                 // Its providers were dropped by a slow init and may still join: accepted, shown when one does.
                 if (reason == AdBlockReason.NoProvider && droppedProviders.Count > 0
                     && placements.TryGetValue(placementId, out AdPlacement dropped) && dropped.IsBannerLike)
@@ -810,7 +987,9 @@ namespace FlapGame.GameLib.Ads
                     Debug.Log($"{LogPrefix} Banner '{placementId}': its providers are still initializing - shown once one is ready.");
                     return AdShowResult.Completed;
                 }
-                Debug.LogWarning($"{LogPrefix} Placement '{placementId}' not shown: {reason}.");
+                // Not the Nth request: the expected answer of most requests, not a problem.
+                if (reason != AdBlockReason.RequestCount) Debug.LogWarning($"{LogPrefix} Placement '{placementId}' not shown: {reason}.");
+                else if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Placement '{placementId}' not shown: {reason}.");
                 return AdShowResult.Failed;
             }
             if (cancellationToken.IsCancellationRequested) return AdShowResult.Failed;
@@ -826,16 +1005,21 @@ namespace FlapGame.GameLib.Ads
                 if (target == null)
                 {
                     Debug.Log($"{LogPrefix} Banner '{placementId}': no route active yet - shown once its provider is ready.");
+                    CheckBannerHeight(placementId);
                     return AdShowResult.Completed;
                 }
                 if (bannerProvider.TryGetValue(placementId, out string current) && current != target)
                     SafeHideBanner(byId[current], placementId);
                 bannerProvider[placementId] = target;
-                return await ShowBannerOnAsync(byId[target], placementId, cancellationToken);
+                AdShowResult shown = await ShowBannerOnAsync(byId[target], placementId, cancellationToken);
+                CheckBannerHeight(placementId); // already loaded: no ready change will follow
+                return shown;
             }
 
-            // Claimed synchronously (before the first await) so a second ShowAsync in the same frame sees it.
+            // Claimed synchronously (before the first await) so a second ShowAsync in the same frame sees it - also one
+            // started by a rule's OnRequested below.
             SetShowingFullscreen(placementId);
+            NoteRequest(placementId, AdBlockReason.None);
             bool displayed = false;
             try
             {
@@ -863,11 +1047,14 @@ namespace FlapGame.GameLib.Ads
                         showsThisSession[placementId] = showsThisSession.TryGetValue(placementId, out int n) ? n + 1 : 1;
                         lastShownAt[placementId] = t;
                         // An app open only restarts the interstitial interval when it follows the interstitial rules.
-                        if (p.Format == AdFormat.Interstitial || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules))
+                        if (p.Format == AdFormat.Interstitial || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules)
+                            || (p.Format == AdFormat.Rewarded && result == AdShowResult.Completed && policy.RewardedResetsInterstitialTimer))
+                        {
                             lastInterstitialAt = t;
+                            SaveInterstitialTime();
+                        }
                         if (p.Format == AdFormat.AppOpen) lastAppOpenAt = t;
-                        else if (p.Format == AdFormat.Rewarded && result == AdShowResult.Completed
-                                 && policy.RewardedResetsInterstitialTimer) lastInterstitialAt = t;
+                        NoteShown(p, result);
                         return result;
                     }
                     // The caller gave up: never open a second ad from the next route.
@@ -884,6 +1071,42 @@ namespace FlapGame.GameLib.Ads
             }
         }
 
+        // Waits while loading is the only thing missing. Ends early when the ad is ready, when another rule starts
+        // blocking (another ad opened, no-ads bought) or when the caller cancels; the answer is CanShow's at that moment.
+        private async Task<(bool, AdBlockReason)> WaitForFillAsync(string placementId, float seconds, CancellationToken cancellationToken)
+        {
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Placement '{placementId}' not loaded yet - waiting up to {seconds:0.#}s.");
+            TaskCompletionSource<bool> signal = null;
+            void OnReadyChanged(string id)
+            {
+                if (id == placementId) signal?.TrySetResult(true);
+            }
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            Task delay = Task.Delay(TimeSpan.FromSeconds(seconds), timeout.Token);
+            PlacementReadyChanged += OnReadyChanged;
+            try
+            {
+                AdBlockReason reason;
+                while (true)
+                {
+                    signal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    if (CanShow(placementId, out reason)) return (true, reason);
+                    if (reason != AdBlockReason.NotReady) return (false, reason);
+                    if (await Task.WhenAny(signal.Task, delay) == delay) break;
+                }
+                RefreshNoAds();
+                bool allowed = CanShow(placementId, out reason);
+                if (!allowed && AdsLog.Verbose) Debug.Log($"{LogPrefix} Placement '{placementId}': no fill within {seconds:0.#}s.");
+                return (allowed, reason);
+            }
+            finally
+            {
+                PlacementReadyChanged -= OnReadyChanged;
+                timeout.Cancel();
+            }
+        }
+
         /// <inheritdoc />
         public float GetBannerHeightPixels(string placementId)
         {
@@ -897,6 +1120,17 @@ namespace FlapGame.GameLib.Ads
                 if (height > 0f) return height;
             }
             return 0f;
+        }
+
+        /// <summary>
+        /// Height in screen pixels the banner / MREC at <paramref name="placementId"/> takes on screen now: its loaded
+        /// height while the game shows it (ShowAsync until HideBanner / DestroyBanner), else 0.
+        /// </summary>
+        public float GetVisibleBannerHeightPixels(string placementId)
+        {
+            if (placementId == null || !wantedBanners.Contains(placementId) || disabled.Contains(placementId)) return 0f;
+            if (placements.TryGetValue(placementId, out AdPlacement p) && p.SuppressedByNoAds && IsNoAdsOwned()) return 0f;
+            return GetBannerHeightPixels(placementId);
         }
 
         /// <inheritdoc />
@@ -924,6 +1158,7 @@ namespace FlapGame.GameLib.Ads
             wantedBanners.Remove(placementId); // also cancels a show still waiting for its provider
             bannerProvider.Remove(placementId);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.HideBanner(placementId);
+            CheckBannerHeight(placementId);
         }
 
         /// <inheritdoc />
@@ -933,6 +1168,7 @@ namespace FlapGame.GameLib.Ads
             wantedBanners.Remove(placementId);
             bannerProvider.Remove(placementId);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.DestroyBanner(placementId);
+            CheckBannerHeight(placementId);
         }
 
         /// <summary>Unsubscribes from and disposes every adapter.</summary>
@@ -1014,6 +1250,18 @@ namespace FlapGame.GameLib.Ads
         private void RaiseReadyChanged(string placementId)
         {
             try { PlacementReadyChanged?.Invoke(placementId); }
+            catch (Exception e) { Debug.LogException(e); }
+            CheckBannerHeight(placementId);
+        }
+
+        private void CheckBannerHeight(string placementId)
+        {
+            if (string.IsNullOrEmpty(placementId) || !placements.TryGetValue(placementId, out AdPlacement p) || !p.IsBannerLike) return;
+            float height = GetVisibleBannerHeightPixels(placementId);
+            float before = visibleBannerHeight.TryGetValue(placementId, out float h) ? h : 0f;
+            if (Mathf.Approximately(before, height)) return;
+            visibleBannerHeight[placementId] = height;
+            try { BannerHeightChanged?.Invoke(placementId, height); }
             catch (Exception e) { Debug.LogException(e); }
         }
 

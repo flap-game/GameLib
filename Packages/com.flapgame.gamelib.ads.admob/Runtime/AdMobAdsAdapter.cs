@@ -418,6 +418,27 @@ namespace FlapGame.GameLib.Ads
         private void EnsureLoading(Unit unit)
         {
             if (unit.Slot != null) EnsureLoading(unit.Slot);
+            else PreloadBanner(unit);
+        }
+
+        // AdPlacement.PreloadBanner: the view is created hidden when the placement is allowed, so the first show has an
+        // ad. Not for collapsible banners: their expanded state belongs to the first display.
+        private void PreloadBanner(Unit unit)
+        {
+            AdPlacement p = unit.Placement;
+            if (disposed || !initialized || !unit.Active || unit.Banner != null || !p.IsBannerLike || !p.PreloadBanner
+                || p.Size == BannerSize.Collapsible)
+                return;
+            try
+            {
+                CreateBanner(unit);
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {unit.Id} preloading (hidden).");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Banner {unit.Id} could not be preloaded: {e.Message}");
+                ReleaseBanner(unit);
+            }
         }
 
         private void EnsureLoading(Slot slot)
@@ -738,7 +759,23 @@ namespace FlapGame.GameLib.Ads
         private void CreateBanner(Unit unit)
         {
             AdPlacement p = unit.Placement;
-            var banner = new BannerView(unit.AdUnitId, GetAdSize(p), ToAdMobPosition(p.Position));
+            AdSize size = GetAdSize(p);
+            BannerView banner;
+            if (p.Position == BannerPosition.Custom && p.Size != BannerSize.Collapsible)
+            {
+                // GMA custom positions are dp from the top-left (of the safe area on iOS). Adaptive banners span the width.
+                float scale = MobileAds.Utils.GetDeviceScale();
+                float widthDp = size.Width > 0 ? size.Width : Screen.safeArea.width / (scale > 0f ? scale : 1f);
+                float heightDp = size.Height > 0 ? size.Height : EstimateBannerHeightPixels(size) / (scale > 0f ? scale : 1f);
+                Vector2 at = BannerLayout.CustomTopLeftDp(p.CustomCenter, new Vector2(widthDp, heightDp), scale);
+                banner = new BannerView(unit.AdUnitId, size, Mathf.RoundToInt(at.x), Mathf.RoundToInt(at.y));
+            }
+            else
+            {
+                if (p.Position == BannerPosition.Custom)
+                    Debug.LogWarning($"{LogPrefix} Banner {unit.Id}: a collapsible banner cannot use a custom position - placed at the bottom.");
+                banner = new BannerView(unit.AdUnitId, size, ToAdMobPosition(p.Position));
+            }
             unit.Banner       = banner;
             unit.BannerLoaded = false;
             unit.LoadedHeightPixels = 0f;

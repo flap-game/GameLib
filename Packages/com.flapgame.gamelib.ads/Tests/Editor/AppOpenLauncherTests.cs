@@ -37,6 +37,113 @@ namespace FlapGame.GameLib.Ads.Tests
             ads.Dispose();
             UnityEngine.Object.DestroyImmediate(settings);
             PlayerPrefs.DeleteKey(AppOpenLauncher.LaunchCountKey);
+            PlayerPrefs.DeleteKey(OldGameKey);
+        }
+
+        private const string OldGameKey = "gamelib.tests.old_launch_count";
+
+        [Test]
+        public void ShowAtLaunchFrom_CountsLaunches()
+        {
+            PlayerPrefs.SetInt(AppOpenLauncher.LaunchCountKey, 3);
+            using (AppOpenLauncher fourth = Launcher())
+            {
+                fourth.ShowAtLaunchFrom = 5;
+                fourth.Start();
+                Assert.That(fourth.LaunchCount, Is.EqualTo(4));
+                Assert.That(fourth.IsLaunchAdDue, Is.False);
+                Assert.That(adapter.Shown, Is.Empty);
+            }
+            using AppOpenLauncher fifth = Launcher();
+            fifth.ShowAtLaunchFrom = 5;
+            fifth.Start();
+            Assert.That(adapter.Shown, Is.EqualTo(new[] { "app_open" }));
+        }
+
+        [Test]
+        public void ShowAtLaunchFrom1_ShowsOnTheFirstLaunch()
+        {
+            using AppOpenLauncher launcher = Launcher();
+            launcher.ShowAtLaunchFrom = 1;
+            launcher.Start();
+            Assert.That(launcher.IsFirstLaunch, Is.True);
+            Assert.That(adapter.Shown, Is.EqualTo(new[] { "app_open" }));
+        }
+
+        [Test]
+        public async Task ManualLaunchAd_ShowsWhenAsked_Once()
+        {
+            PlayerPrefs.SetInt(AppOpenLauncher.LaunchCountKey, 1);
+            using AppOpenLauncher launcher = Launcher();
+            launcher.AutoShowAtLaunch = false;
+            launcher.Start();
+            Assert.That(adapter.Shown, Is.Empty, "the loading screen decides when");
+
+            Assert.That(await launcher.ShowLaunchAdAsync(), Is.True);
+            Assert.That(adapter.Shown, Is.EqualTo(new[] { "app_open" }));
+            Assert.That(await launcher.ShowLaunchAdAsync(), Is.True, "the same launch ad");
+            Assert.That(adapter.Shown.Count, Is.EqualTo(1), "once per launch");
+        }
+
+        [Test]
+        public async Task ManualCall_WhileTheAutoLaunchAdRuns_WaitsForIt()
+        {
+            PlayerPrefs.SetInt(AppOpenLauncher.LaunchCountKey, 1);
+            adapter.Pending = new TaskCompletionSource<AdShowResult>();
+            using AppOpenLauncher launcher = Launcher();
+            launcher.Start();
+            Task<bool> loading = launcher.ShowLaunchAdAsync();
+            Assert.That(loading.IsCompleted, Is.False, "the loading screen waits for the ad on screen");
+            adapter.Pending.SetResult(AdShowResult.Completed);
+            Assert.That(await loading, Is.True);
+            Assert.That(adapter.Shown.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void EveryNthRequest_CountsTheLaunchersReturns()
+        {
+            settings.Placements[0].ShowEveryNthRequest = 3;
+            using var nth = new CompositeAdsService(new IAdsProviderAdapter[] { adapter }, settings);
+            nth.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            adapter.MarkReady("app_open");
+            using var launcher = new AppOpenLauncher(nth, lifecycle, "app_open") { IgnoreReturnsInEditor = false, ColdStartWaitSeconds = 0f };
+            launcher.Start(); // first launch: none
+            for (int i = 0; i < 3; i++) lifecycle.RaiseResumed(new AppResumeInfo(TimeSpan.FromSeconds(30), false, null));
+            Assert.That(adapter.Shown, Is.EqualTo(new[] { "app_open" }), "the third return");
+        }
+
+        [Test]
+        public async Task ManualLaunchAd_NotDue_ReturnsAtOnce()
+        {
+            using AppOpenLauncher launcher = Launcher();
+            launcher.AutoShowAtLaunch = false;
+            Assert.That(await launcher.ShowLaunchAdAsync(), Is.False, "first launch (starts the launcher too)");
+            Assert.That(launcher.LaunchCount, Is.EqualTo(1));
+            Assert.That(adapter.Shown, Is.Empty);
+        }
+
+        [Test]
+        public void MinBackgroundSeconds_ShortTripsShowNothing()
+        {
+            using AppOpenLauncher launcher = Launcher();
+            launcher.MinBackgroundSeconds = 10f;
+            launcher.Start();
+            lifecycle.RaiseResumed(new AppResumeInfo(TimeSpan.FromSeconds(5), false, null));
+            Assert.That(adapter.Shown, Is.Empty);
+            lifecycle.RaiseResumed(new AppResumeInfo(TimeSpan.FromSeconds(12), false, null));
+            Assert.That(adapter.Shown, Is.EqualTo(new[] { "app_open" }));
+        }
+
+        [Test]
+        public void LaunchCountPrefsKey_KeepsTheOldGamesCount()
+        {
+            PlayerPrefs.SetInt(OldGameKey, 7);
+            using AppOpenLauncher launcher = Launcher();
+            launcher.LaunchCountPrefsKey = OldGameKey;
+            launcher.Start();
+            Assert.That(launcher.LaunchCount, Is.EqualTo(8));
+            Assert.That(PlayerPrefs.GetInt(OldGameKey), Is.EqualTo(8));
+            Assert.That(PlayerPrefs.HasKey(AppOpenLauncher.LaunchCountKey), Is.False);
         }
 
         private AppOpenLauncher Launcher() =>

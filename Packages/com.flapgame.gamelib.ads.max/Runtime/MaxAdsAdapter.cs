@@ -30,7 +30,7 @@ namespace FlapGame.GameLib.Ads
     /// </para>
     /// </summary>
     [Preserve]
-    public sealed class MaxAdsAdapter : IAdsProviderAdapter
+    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics
     {
         private const string LogPrefix = "[Ads/MAX]";
         private const double MaxRetryDelaySeconds = 60d;
@@ -49,6 +49,10 @@ namespace FlapGame.GameLib.Ads
         private readonly HashSet<string> retryingUnits      = new(); // backoff timer running
         private readonly HashSet<string> createdBannerUnits = new();
         private readonly HashSet<string> loadedBannerUnits  = new();
+        private readonly HashSet<string> visibleBannerUnits = new(); // shown and not hidden since
+        private readonly HashSet<string> refreshPaused      = new(); // auto-refresh stopped while hidden
+        private readonly Dictionary<string, float> bannerHeightPixels = new(); // per unit, computed once
+        private float pixelsPerDp;
 
         private readonly Dictionary<string, TaskCompletionSource<AdShowResult>> pendingShows     = new(); // per unit
         private readonly Dictionary<string, TaskCompletionSource<bool>>         rewardSignals    = new(); // per rewarded unit
@@ -168,6 +172,8 @@ namespace FlapGame.GameLib.Ads
             // Placements activated before init (the composite should not, but be tolerant) start loading now.
             foreach (string unit in new List<string>(unitFormats.Keys))
                 if (IsUnitActive(unit)) LoadUnit(unit);
+            foreach (string id in new List<string>(activePlacements))
+                if (assigned.TryGetValue(id, out AdUnitAssignment a) && a.Placement.IsBannerLike) PreloadBanner(a);
         }
 
         /// <inheritdoc />
@@ -180,7 +186,8 @@ namespace FlapGame.GameLib.Ads
             bool banner = a.Placement.IsBannerLike;
             if (active)
             {
-                if (!banner && initialized)
+                if (banner && initialized) PreloadBanner(a);
+                else if (!banner && initialized)
                 {
                     if (loadedUnits.Contains(unit)) PlacementReadyChanged?.Invoke(placementId); // cached ad reused
                     else LoadUnit(unit);
@@ -229,8 +236,11 @@ namespace FlapGame.GameLib.Ads
         public void HideBanner(string placementId)
         {
             if (!TryGetBanner(placementId, out AdUnitAssignment a) || !createdBannerUnits.Contains(a.AdUnitId)) return;
-            if (IsMrecUnit(a.AdUnitId)) MaxSdk.HideMRec(a.AdUnitId);
-            else MaxSdk.HideBanner(a.AdUnitId);
+            string unit = a.AdUnitId;
+            if (IsMrecUnit(unit)) MaxSdk.HideMRec(unit);
+            else MaxSdk.HideBanner(unit);
+            visibleBannerUnits.Remove(unit);
+            PauseRefresh(unit);
         }
 
         /// <inheritdoc />
@@ -417,6 +427,15 @@ namespace FlapGame.GameLib.Ads
                 return AdShowResult.Failed;
             }
             if (cancellationToken.IsCancellationRequested) return AdShowResult.Failed;
+            if (!SdkHasAd(unit, p.Format))
+            {
+                // Expired (or dropped by MAX) since it loaded: showing it might never call back and hold the show open.
+                Debug.LogWarning($"{LogPrefix} {adType} {p.Id} not shown: MAX no longer has the ad (expired) - reloading.");
+                loadedUnits.Remove(unit);
+                NotifyUnit(unit);
+                LoadUnit(unit);
+                return AdShowResult.Failed;
+            }
 
             var tcs = new TaskCompletionSource<AdShowResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             TaskCompletionSource<bool> reward = null;
@@ -458,6 +477,25 @@ namespace FlapGame.GameLib.Ads
             return result;
         }
 
+        // Asked only at show time (one native call): readiness checks stay on the adapter's own state.
+        private static bool SdkHasAd(string unit, AdFormat format)
+        {
+            try
+            {
+                return format switch
+                {
+                    AdFormat.Interstitial => MaxSdk.IsInterstitialReady(unit),
+                    AdFormat.Rewarded     => MaxSdk.IsRewardedAdReady(unit),
+                    _                     => MaxSdk.IsAppOpenAdReady(unit),
+                };
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Ready check for {unit} threw: {e.Message} - showing anyway.");
+                return true;
+            }
+        }
+
         // Hidden arrives as Skipped; upgrade to Completed if the reward callback landed or lands within the grace.
         private async Task<AdShowResult> ResolveRewardAsync(AdShowResult closed, Task<bool> rewardEarned)
         {
@@ -497,23 +535,7 @@ namespace FlapGame.GameLib.Ads
             try
             {
                 bool mrec = IsMrecUnit(unit);
-                if (!createdBannerUnits.Contains(unit))
-                {
-                    var config = new MaxSdkBase.AdViewConfiguration(ToMaxPosition(p.Position));
-                    if (mrec)
-                    {
-                        MaxSdk.CreateMRec(unit, config);
-                    }
-                    else
-                    {
-                        // MAX 8.x: adaptive is a creation option (AdViewConfiguration.IsAdaptive, default true).
-                        // Collapsible has no MAX equivalent and maps to adaptive; Standard stays 320x50.
-                        config.IsAdaptive = p.Size == BannerSize.Adaptive || p.Size == BannerSize.Collapsible;
-                        MaxSdk.CreateBanner(unit, config);
-                    }
-                    createdBannerUnits.Add(unit);
-                }
-
+                CreateBannerView(a, mrec);
                 if (mrec)
                 {
                     MaxSdk.SetMRecPlacement(unit, p.Id);
@@ -523,6 +545,12 @@ namespace FlapGame.GameLib.Ads
                 {
                     MaxSdk.SetBannerPlacement(unit, p.Id);
                     MaxSdk.ShowBanner(unit);
+                }
+                visibleBannerUnits.Add(unit);
+                if (refreshPaused.Remove(unit))
+                {
+                    if (mrec) MaxSdk.StartMRecAutoRefresh(unit);
+                    else MaxSdk.StartBannerAutoRefresh(unit);
                 }
             }
             catch (Exception e)
@@ -535,12 +563,78 @@ namespace FlapGame.GameLib.Ads
             return AdShowResult.Completed;
         }
 
+        // MAX creates the view hidden and starts loading it at once.
+        private void CreateBannerView(AdUnitAssignment a, bool mrec)
+        {
+            AdPlacement p = a.Placement;
+            string unit = a.AdUnitId;
+            if (createdBannerUnits.Contains(unit)) return;
+            MaxSdkBase.AdViewConfiguration config;
+            if (p.Position == BannerPosition.Custom)
+            {
+                Vector2 at = BannerLayout.CustomTopLeftDp(p.CustomCenter, SizeDp(p, mrec), PixelsPerDp());
+                config = new MaxSdkBase.AdViewConfiguration(at.x, at.y);
+            }
+            else
+            {
+                config = new MaxSdkBase.AdViewConfiguration(ToMaxPosition(p.Position));
+            }
+            if (mrec)
+            {
+                MaxSdk.CreateMRec(unit, config);
+            }
+            else
+            {
+                // MAX 8.x: adaptive is a creation option (AdViewConfiguration.IsAdaptive, default true).
+                // Collapsible has no MAX equivalent and maps to adaptive; Standard stays 320x50.
+                config.IsAdaptive = p.Size == BannerSize.Adaptive || p.Size == BannerSize.Collapsible;
+                MaxSdk.CreateBanner(unit, config);
+            }
+            createdBannerUnits.Add(unit);
+        }
+
+        // AdPlacement.PreloadBanner: the view is created hidden when the placement is allowed, so the first show has an ad.
+        private void PreloadBanner(AdUnitAssignment a)
+        {
+            if (disposed || !initialized || !a.Placement.PreloadBanner || a.Placement.Size == BannerSize.Collapsible) return;
+            if (!activePlacements.Contains(a.Placement.Id) || createdBannerUnits.Contains(a.AdUnitId)) return;
+            try
+            {
+                CreateBannerView(a, IsMrecUnit(a.AdUnitId));
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {a.Placement.Id} preloading (hidden).");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Banner {a.Placement.Id} could not be preloaded: {e.Message}");
+            }
+        }
+
+        // A hidden view keeps refreshing in MAX: requests without impressions. Stopped only after the first load, so a
+        // preloaded view still gets its ad; restarted by the next show.
+        private void PauseRefresh(string unit)
+        {
+            if (visibleBannerUnits.Contains(unit) || !loadedBannerUnits.Contains(unit) || !refreshPaused.Add(unit)) return;
+            try
+            {
+                if (IsMrecUnit(unit)) MaxSdk.StopMRecAutoRefresh(unit);
+                else MaxSdk.StopBannerAutoRefresh(unit);
+            }
+            catch (Exception e)
+            {
+                refreshPaused.Remove(unit);
+                Debug.LogWarning($"{LogPrefix} Banner {Describe(unit)} refresh not stopped: {e.Message}");
+            }
+        }
+
         private void DestroyBannerUnit(string unit)
         {
             if (!createdBannerUnits.Remove(unit)) return;
             if (IsMrecUnit(unit)) MaxSdk.DestroyMRec(unit);
             else MaxSdk.DestroyBanner(unit);
             bool wasLoaded = loadedBannerUnits.Remove(unit);
+            visibleBannerUnits.Remove(unit);
+            refreshPaused.Remove(unit);
+            bannerHeightPixels.Remove(unit); // recreated later, maybe in another orientation
             retryAttempts.Remove(unit);
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {Describe(unit)} destroyed.");
             if (wasLoaded && !disposed) NotifyUnit(unit);
@@ -611,6 +705,7 @@ namespace FlapGame.GameLib.Ads
             retryAttempts.Remove(unit);
             if (!loadedBannerUnits.Add(unit)) return; // auto-refresh
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {Describe(unit)} loaded.");
+            PauseRefresh(unit); // preloaded or hidden before it loaded
             NotifyUnit(unit);
         }
 
@@ -676,6 +771,54 @@ namespace FlapGame.GameLib.Ads
         private void OnMRecLoaded(string unit, MaxSdkBase.AdInfo _) => OnAdViewLoaded(unit);
         private void OnMRecLoadFailed(string unit, MaxSdkBase.ErrorInfo error) => OnAdViewLoadFailed(unit, error);
         private void OnMRecRevenue(string unit, MaxSdkBase.AdInfo info) => OnRevenue(unit, info);
+
+        // --- Banner metrics ---
+
+        /// <inheritdoc />
+        public float GetBannerHeightPixels(string placementId) =>
+            TryGetBanner(placementId, out AdUnitAssignment a) && loadedBannerUnits.Contains(a.AdUnitId) ? HeightPixels(a) : 0f;
+
+        /// <inheritdoc />
+        public float GetExpectedBannerHeightPixels(string placementId) =>
+            TryGetBanner(placementId, out AdUnitAssignment a) ? HeightPixels(a) : 0f;
+
+        // MAX reports no view size: the height follows from the format (MREC 250 dp, adaptive banner from MAX, else
+        // 50 dp / 90 dp on tablets). Computed once per unit - each MaxSdkUtils call is a native call.
+        private float HeightPixels(AdUnitAssignment a)
+        {
+            if (bannerHeightPixels.TryGetValue(a.AdUnitId, out float px)) return px;
+            try
+            {
+                px = SizeDp(a.Placement, IsMrecUnit(a.AdUnitId)).y * PixelsPerDp();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Banner {a.Placement.Id} height unknown: {e.Message}");
+                return 0f;
+            }
+            bannerHeightPixels[a.AdUnitId] = px;
+            return px;
+        }
+
+        private float PixelsPerDp()
+        {
+            if (pixelsPerDp > 0f) return pixelsPerDp;
+            float density = MaxSdkUtils.GetScreenDensity();
+            pixelsPerDp = density > 0f ? density : 1f;
+            return pixelsPerDp;
+        }
+
+        private Vector2 SizeDp(AdPlacement p, bool mrec)
+        {
+            if (mrec) return new Vector2(300f, 250f);
+            if (p.Size == BannerSize.Adaptive || p.Size == BannerSize.Collapsible)
+            {
+                // Adaptive banners span the width, and their height is the one for the full width.
+                float height = MaxSdkUtils.GetAdaptiveBannerHeight();
+                return new Vector2(Screen.safeArea.width / PixelsPerDp(), height > 0f ? height : 50f);
+            }
+            return MaxSdkUtils.IsTablet() ? new Vector2(728f, 90f) : new Vector2(320f, 50f);
+        }
 
         // --- Helpers ---
 

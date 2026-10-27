@@ -102,6 +102,46 @@ namespace FlapGame.GameLib.Iap.Tests
         public void TearDown() => service.Dispose();
 
         [Test]
+        public async Task SharedEntitlement_StaysWhileAnotherProductGrantsIt()
+        {
+            IapProductConfig[] vipPlans =
+            {
+                new() { Id = "vip_week", Kind = PurchaseProductKind.Subscription, Entitlement = "vip" },
+                new() { Id = "vip_year", Kind = PurchaseProductKind.Subscription, Entitlement = "vip" },
+            };
+            using var plans = new IapService(store, vipPlans, entitlements, null, null, new MemoryTransactionLog());
+            await plans.InitializeAsync();
+
+            store.Owned(new IapStoreOrder { ProductId = "vip_week", TransactionId = "w", SubscriptionActive = false },
+                        new IapStoreOrder { ProductId = "vip_year", TransactionId = "y", SubscriptionActive = true });
+            Assert.That(entitlements.Has("vip"), Is.True, "the expired weekly plan must not take VIP from the yearly one");
+            Assert.That(plans.IsOwned("vip_week"), Is.False);
+
+            store.Owned(new IapStoreOrder { ProductId = "vip_year", TransactionId = "y", SubscriptionActive = false });
+            Assert.That(entitlements.Has("vip"), Is.False, "no plan left");
+        }
+
+        [Test]
+        public async Task Subscription_Details_FromTheStore()
+        {
+            await service.InitializeAsync();
+            var expires = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+            store.Owned(new IapStoreOrder { ProductId = "vip", TransactionId = "a", SubscriptionActive = true,
+                                            SubscriptionExpiresUtc = expires.AddDays(-7), SubscriptionFreeTrial = false },
+                        new IapStoreOrder { ProductId = "vip", TransactionId = "b", SubscriptionActive = true,
+                                            SubscriptionExpiresUtc = expires, SubscriptionFreeTrial = true, SubscriptionAutoRenewing = true });
+
+            Assert.That(service.TryGetSubscription("vip", out IapSubscriptionInfo info), Is.True);
+            Assert.That(info.ExpiresUtc, Is.EqualTo(expires), "the order that runs longest");
+            Assert.That(info.IsFreeTrial, Is.True);
+            Assert.That(info.IsAutoRenewing, Is.True);
+            Assert.That(service.TryGetSubscription("no_ads", out _), Is.False, "not a subscription");
+
+            store.Owned(new IapStoreOrder { ProductId = "vip", TransactionId = "b", SubscriptionActive = false });
+            Assert.That(service.TryGetSubscription("vip", out _), Is.False, "expired");
+        }
+
+        [Test]
         public async Task Initialize_FetchesProducts_WithLocalizedPrices_ThenOwnedPurchases()
         {
             bool ready = false;

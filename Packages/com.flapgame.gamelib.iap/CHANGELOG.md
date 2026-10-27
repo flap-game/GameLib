@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.0] - 2026-10-27
+- `IIapService.TryGetSubscription(id, out IapSubscriptionInfo)`: free trial, auto-renewing and end of period of an active subscription, as the store reports them (null when it does not). Breaking for custom `IIapService` implementations.
+- Several products may grant one entitlement (weekly / monthly / yearly VIP): an expired subscription no longer revokes it while another product that grants it is owned.
+
 ## [0.7.1] - 2026-10-26
 - New IIapService.OwnedChanged: raised when IsOwned changes (a grant, the owned purchases fetched at launch or after a restore, an expired subscription). Breaking for custom IIapService implementations.
 - The store receipt is built only when a new grant sends it (IapStoreOrder.Receipt is read through ReceiptSource on first use). On iOS Unity IAP rebuilt the whole app receipt for every order on every purchases fetch.

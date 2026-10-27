@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0] - 2026-10-27
+- Interstitial rules shared by every game, all off by default (set per game on the AdsModule asset or from the remote plan): `Policy.InterstitialFromLevel` (no interstitial below that level; the game reports it with `ads.SetPlayerLevel(n)`, new `AdBlockReason.BelowLevel`), `Policy.InterstitialIntervalAcrossSessions` (the interval also counts the last interstitial of the previous session), `AdPlacement.ShowEveryNthRequest` (shows on every Nth request; a blocked request still counts; `AdBlockReason.RequestCount`).
+- A game's own rule on top: `ads.AddRule(AdShowRule)` / `AdShowRule.From(placement => ...)`, asked by `CanShow` after the shared rules (`AdBlockReason.GameRule`), told about every request (`OnRequested`) and show (`OnShown`).
+- App open: `AppOpenShowAtLaunchFrom` (first launch that shows the launch ad: 1 every launch, 2 the shared rule, 5 from the 5th), `AppOpenAutoShowAtLaunch` (off = the loading screen shows it with `AppOpenLauncher.ShowLaunchAdAsync()` and continues when it returns), `AppOpenMinBackgroundSeconds`, `AppOpenLaunchCountKey` (keep the launch count of a game moving to GameLib). `AppOpenLauncher.SkipFirstLaunch` is obsolete (`ShowAtLaunchFrom`).
+- `CompositeAdsService.BannerHeightChanged` (placement, on-screen height in pixels; 0 = nothing on screen) and `GetVisibleBannerHeightPixels` / `ads.GetVisibleBannerHeightPixels(id)`, to lay the UI out above the banner.
+- `BannerPosition.Custom`: banner / MREC centred at `AdPlacement.CustomCenter` (fraction of the safe area). `BannerLayout.CustomTopLeftDp`.
+- `AdPlacement.WaitForFillSeconds` (also in the remote plan) and `ads.ShowAsync(id, waitForFillSeconds)`: a fullscreen show waits for the ad to load when loading is the only thing missing, instead of failing at once. 0 (default) = as before.
+- `AdPlacement.PreloadBanner`: the banner is created hidden when its SDK is ready, so the first show displays a loaded ad.
+
 ## [0.7.1] - 2026-10-26
 - A fullscreen placement that reached MaxShowsPerSession is no longer kept loaded (no reload request, no ad held in memory for a placement that cannot show again this session).
 - CanShow / IsPlacementReady / banner heights no longer allocate: the effective routes of each placement are cached and rebuilt only when the plan, a provider or the placements change. Safe to call from UI every frame (PlacementReadyChanged is still the cheaper way).
