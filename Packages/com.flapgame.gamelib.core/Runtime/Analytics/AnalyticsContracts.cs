@@ -100,6 +100,7 @@ namespace FlapGame.GameLib
         Banner = 3,
         Mrec = 4,
         AppOpen = 5,
+        RewardedInterstitial = 6,
     }
 
     /// <summary>One completed (and granted) purchase.</summary>

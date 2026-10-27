@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.6] - 2026-10-27
+- `ad_format` `rewarded_interstitial`.
+
 ## [0.8.3] - 2026-10-27
 - AdMob-served impressions no longer log `ad_impression` (Firebase's guide: a linked AdMob app is measured by the Firebase
   SDK itself; the manual event is for other platforms such as MAX and ironSource). This removes the double count in GA4.

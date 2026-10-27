@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.6] - 2026-10-27
+- Ad type `rewarded_interstitial`.
+
 ## [0.8.2] - 2026-10-27
 - The AppsFlyer id goes to `ITrackerIds` (`TrackerIds.AppsFlyer`) once the SDK started (`getAppsFlyerId` on 6.17,
   `getAppsFlyerUID` on 7.x). `IAppsFlyerBackend.GetAppsFlyerIdAsync`.

@@ -5,7 +5,7 @@ Rate-us prompts. The game draws its own popup; the module decides **when** to sh
 Install from **GameLib > Setup > Rate**, or add to `Packages/manifest.json` (together with core, same tag):
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.rate#v0.8.5
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.rate#v0.8.6
 ```
 
 ## Use

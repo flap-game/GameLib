@@ -68,6 +68,24 @@ calls it, and UI may poll that every frame.
 `ads.ResetPacing()` forgets the intervals, cooldowns, session counts and every-Nth counts (saved ones too), as if no ad
 had been shown yet - for a QA button or a remote config switch. The session start grace and the game's own rules stay.
 
+## Rewarded interstitial
+
+A rewarded ad the game offers at a natural break (level end) instead of the player tapping "watch": placement format
+`RewardedInterstitial`, **AdMob only** (MAX has no such format; Doctor reports a MAX route as an error).
+
+- It follows the interstitial rules above (interval, session grace, level gate) and restarts their timer: to the player
+  it is still an ad that came up by itself.
+- Google requires an intro screen first: what the reward is, and a clear way to say no (Google suggests a few seconds'
+  countdown). Show it through the call below - the intro opens only when the ad can show right now, the ad only on yes:
+
+```csharp
+bool earned = await ads.ShowRewardedInterstitialAsync("level_end_bonus",
+    askUser: ct => introPopup.ShowAsync(ct),   // the game's popup: true = watch, false = no thanks
+    onRewarded: () => coins.Add(50));
+```
+
+A "no" shows nothing and restarts no timer. Never call `ShowAsync` on this placement directly: that opens it unannounced.
+
 ## While a fullscreen ad is up
 
 Turn on `Pause Game During Fullscreen Ads` (`Time.timeScale = 0`) and / or `Mute Audio During Fullscreen Ads`

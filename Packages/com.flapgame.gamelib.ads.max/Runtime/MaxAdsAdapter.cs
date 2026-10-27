@@ -230,6 +230,9 @@ namespace FlapGame.GameLib.Ads
                 case AdFormat.Rewarded:
                 case AdFormat.AppOpen:
                     return await ShowFullscreenAsync(a, cancellationToken);
+                case AdFormat.RewardedInterstitial:
+                    Debug.LogWarning($"{LogPrefix} {placementId}: MAX has no rewarded interstitial - route it to AdMob.");
+                    return AdShowResult.Failed;
                 default:
                     return ShowBanner(a);
             }
@@ -396,7 +399,7 @@ namespace FlapGame.GameLib.Ads
                 case AdFormat.Interstitial: MaxSdk.LoadInterstitial(unit); break;
                 case AdFormat.Rewarded:     MaxSdk.LoadRewardedAd(unit);   break;
                 case AdFormat.AppOpen:      MaxSdk.LoadAppOpenAd(unit);    break;
-                default: return; // banners load through their view
+                default: return; // banners load through their view; MAX has no rewarded interstitial
             }
             loadingUnits.Add(unit);
         }

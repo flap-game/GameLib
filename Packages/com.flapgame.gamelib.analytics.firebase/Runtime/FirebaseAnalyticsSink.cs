@@ -131,6 +131,7 @@ namespace FlapGame.GameLib.Analytics.Firebase
             AdFormatKind.Banner => "banner",
             AdFormatKind.Mrec => "mrec",
             AdFormatKind.AppOpen => "app_open",
+            AdFormatKind.RewardedInterstitial => "rewarded_interstitial",
             _ => "unknown",
         };
 

@@ -162,6 +162,7 @@ namespace FlapGame.GameLib.Ads
                 // An inactive placement is never ready, even when its shared slot holds an ad for another placement.
                 case AdFormat.Interstitial: return unit.Active && unit.Slot.Interstitial != null;
                 case AdFormat.Rewarded:     return unit.Active && unit.Slot.Rewarded != null;
+                case AdFormat.RewardedInterstitial: return unit.Active && unit.Slot.RewardedInterstitial != null;
                 case AdFormat.AppOpen:      return unit.Active && IsAppOpenReady(unit.Slot);
                 default:                    return unit.Banner != null && unit.BannerLoaded;
             }
@@ -180,6 +181,7 @@ namespace FlapGame.GameLib.Ads
             {
                 case AdFormat.Interstitial: return await ShowInterstitialAsync(unit, cancellationToken);
                 case AdFormat.Rewarded:     return await ShowRewardedAsync(unit, cancellationToken);
+                case AdFormat.RewardedInterstitial: return await ShowRewardedInterstitialAsync(unit, cancellationToken);
                 case AdFormat.AppOpen:      return await ShowAppOpenAsync(unit, cancellationToken);
                 default:                    return ShowBanner(unit);
             }
@@ -381,7 +383,7 @@ namespace FlapGame.GameLib.Ads
         }
 
         private static bool IsFullscreen(AdFormat format) =>
-            format == AdFormat.Interstitial || format == AdFormat.Rewarded || format == AdFormat.AppOpen;
+            format is AdFormat.Interstitial or AdFormat.Rewarded or AdFormat.RewardedInterstitial or AdFormat.AppOpen;
 
         /// <summary>Google's public demo unit ids (always fill, never pay). Used in test mode when a route has no id.</summary>
         private static string GoogleTestUnitId(AdFormat format)
@@ -391,6 +393,7 @@ namespace FlapGame.GameLib.Ads
             {
                 AdFormat.Interstitial => "ca-app-pub-3940256099942544/4411468910",
                 AdFormat.Rewarded     => "ca-app-pub-3940256099942544/1712485313",
+                AdFormat.RewardedInterstitial => "ca-app-pub-3940256099942544/6978759866",
                 AdFormat.AppOpen      => "ca-app-pub-3940256099942544/5662855259",
                 _                     => "ca-app-pub-3940256099942544/2934735716",
             };
@@ -399,6 +402,7 @@ namespace FlapGame.GameLib.Ads
             {
                 AdFormat.Interstitial => "ca-app-pub-3940256099942544/1033173712",
                 AdFormat.Rewarded     => "ca-app-pub-3940256099942544/5224354917",
+                AdFormat.RewardedInterstitial => "ca-app-pub-3940256099942544/5354046379",
                 AdFormat.AppOpen      => "ca-app-pub-3940256099942544/9257395921",
                 _                     => "ca-app-pub-3940256099942544/6300978111",
             };
@@ -483,6 +487,7 @@ namespace FlapGame.GameLib.Ads
             {
                 case AdFormat.Interstitial: if (slot.Interstitial == null) LoadInterstitial(slot); break;
                 case AdFormat.Rewarded:     if (slot.Rewarded == null)     LoadRewarded(slot);     break;
+                case AdFormat.RewardedInterstitial: if (slot.RewardedInterstitial == null) LoadRewardedInterstitial(slot); break;
                 case AdFormat.AppOpen:      if (slot.AppOpen == null)      LoadAppOpen(slot);      break;
             }
         }
@@ -510,6 +515,19 @@ namespace FlapGame.GameLib.Ads
                 slot.Rewarded?.Destroy();
                 slot.Rewarded = ad;
                 if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Rewarded {slot.Name} loaded.");
+                RaiseReadyChanged(slot);
+            }));
+        }
+
+        private void LoadRewardedInterstitial(Slot slot)
+        {
+            int generation = BeginLoad(slot);
+            RewardedInterstitialAd.Load(slot.AdUnitId, new AdRequest(), (ad, error) => RunOnMain(() =>
+            {
+                if (!AcceptLoad(slot, generation, ad == null, error?.GetMessage(), "Rewarded interstitial")) { ad?.Destroy(); return; }
+                slot.RewardedInterstitial?.Destroy();
+                slot.RewardedInterstitial = ad;
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Rewarded interstitial {slot.Name} loaded.");
                 RaiseReadyChanged(slot);
             }));
         }
@@ -604,6 +622,8 @@ namespace FlapGame.GameLib.Ads
             slot.Interstitial = null;
             slot.Rewarded?.Destroy();
             slot.Rewarded = null;
+            slot.RewardedInterstitial?.Destroy();
+            slot.RewardedInterstitial = null;
             slot.AppOpen?.Destroy();
             slot.AppOpen = null;
         }
@@ -712,6 +732,42 @@ namespace FlapGame.GameLib.Ads
                 : await RewardGrace.ResolveAsync(closed, earned.Task, LateRewardGrace);
 
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Rewarded {unit.Id} result: {result}.");
+            ad.Destroy();
+            if (!disposed) EnsureLoading(unit.Slot);
+            return result;
+        }
+
+        // The intro screen Google requires is the game's, before ShowAsync (ads.ShowRewardedInterstitialAsync).
+        private async ValueTask<AdShowResult> ShowRewardedInterstitialAsync(Unit unit, CancellationToken cancellationToken)
+        {
+            RewardedInterstitialAd ad = unit.Active ? unit.Slot.RewardedInterstitial : null;
+            if (ad == null)
+            {
+                Debug.LogWarning($"{LogPrefix} Rewarded interstitial {unit.Id} not shown: not ready (ad not loaded).");
+                return AdShowResult.Failed;
+            }
+            if (cancellationToken.IsCancellationRequested) return AdShowResult.Failed;
+
+            var tcs    = new TaskCompletionSource<AdShowResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var earned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            // Closed = Skipped for now; RewardGrace upgrades it if the reward callback lands (even slightly after the close).
+            ad.OnAdFullScreenContentClosed += () => RunOnMain(() => tcs.TrySetResult(AdShowResult.Skipped));
+            ad.OnAdFullScreenContentFailed += _ => RunOnMain(() => tcs.TrySetResult(AdShowResult.Failed));
+            ad.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(ad.GetResponseInfo)));
+            ad.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
+
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing rewarded interstitial {unit.Id}.");
+            unit.Slot.RewardedInterstitial = null; // consumed, for every placement on the slot
+            RaiseReadyChanged(unit.Slot);
+            ad.Show(_ => RunOnMain(() => earned.TrySetResult(true)));
+
+            // The ad is on screen: the caller's token no longer applies (see class remarks).
+            AdShowResult closed = await AwaitCloseAsync(tcs);
+            AdShowResult result = closed == AdShowResult.Failed
+                ? closed
+                : await RewardGrace.ResolveAsync(closed, earned.Task, LateRewardGrace);
+
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Rewarded interstitial {unit.Id} result: {result}.");
             ad.Destroy();
             if (!disposed) EnsureLoading(unit.Slot);
             return result;
@@ -961,6 +1017,7 @@ namespace FlapGame.GameLib.Ads
 #if GAMELIB_ADMOB
             public InterstitialAd Interstitial;
             public RewardedAd Rewarded;
+            public RewardedInterstitialAd RewardedInterstitial;
             public AppOpenAd AppOpen;
             public DateTime AppOpenLoadedAt;
 #endif

@@ -184,6 +184,7 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 | Alternate app icon (iOS) | `IAppIconService.SetIconAsync(name)`, icons listed on the AppIconModule asset | [App Icon](../../com.flapgame.gamelib.appicon/README.md) |
 | Ad events for the game's sheet (request, loaded, load fail) | `ads.ShowRequested`, `ads.PlacementLoaded`, `ads.PlacementLoadFailed`. Revenue and show results are already tracked: never log them by hand. | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Pause during fullscreen ads | AdsModule `Pause Game During Fullscreen Ads` / `Mute Audio During Fullscreen Ads`, not a hand-written handler as well | [Ads](../../com.flapgame.gamelib.ads/README.md) |
+| Bonus reward offered at level end (rewarded interstitial) | AdMob placement format `RewardedInterstitial` + `ads.ShowRewardedInterstitialAsync(id, askUser: intro popup, onRewarded)`; follows the interstitial rules; never plain `ShowAsync` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Ads follow the game's sound toggle | `ads.SetAdAudio(volume, muted)` at start and on every change (only when the game has a sound setting) | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | QA: which mediated networks fill | `await ads.OpenDebuggerAsync()` (AdMob Ad Inspector on test devices, MAX Mediation Debugger) from a QA button | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Every-Nth across sessions, QA reset | placement `Persist Request Count`; `ads.ResetPacing()` | [Ads](../../com.flapgame.gamelib.ads/README.md) |

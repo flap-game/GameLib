@@ -5,7 +5,7 @@ Vibration and haptic feedback for Android and iOS. A no-op in the Editor and on 
 Install from **GameLib > Setup > Haptics**, or add to `Packages/manifest.json` (together with core, same tag):
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.haptics#v0.8.5
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.haptics#v0.8.6
 ```
 
 ## Use

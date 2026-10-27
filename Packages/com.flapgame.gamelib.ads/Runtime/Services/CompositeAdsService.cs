@@ -328,9 +328,15 @@ namespace FlapGame.GameLib.Ads
         private void RaiseReadyChangedForInterstitials()
         {
             foreach (AdPlacement p in placements.Values)
-                if (p.Format == AdFormat.Interstitial || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules))
+                if (FollowsInterstitialRules(p))
                     RaiseReadyChanged(p.Id);
         }
+
+        // Interstitial pacing (session grace, interval, level gate, shared timer): interstitials, rewarded interstitials -
+        // shown without the player asking - and app opens when the policy says so.
+        private bool FollowsInterstitialRules(AdPlacement p) =>
+            p.Format is AdFormat.Interstitial or AdFormat.RewardedInterstitial
+            || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules);
 
         private void RaiseReadyChangedForFullscreen()
         {
@@ -970,7 +976,7 @@ namespace FlapGame.GameLib.Ads
                     reason = AdBlockReason.AppOpenInterval;
                     return false;
                 }
-                if (p.Format == AdFormat.Interstitial || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules))
+                if (FollowsInterstitialRules(p))
                 {
                     if (policy.FirstInterstitialDelaySeconds > 0f && t - startedAt < policy.FirstInterstitialDelaySeconds)
                     {
@@ -1184,8 +1190,9 @@ namespace FlapGame.GameLib.Ads
                         float t = now();
                         showsThisSession[placementId] = showsThisSession.TryGetValue(placementId, out int n) ? n + 1 : 1;
                         lastShownAt[placementId] = t;
-                        // An app open only restarts the interstitial interval when it follows the interstitial rules.
-                        if (p.Format == AdFormat.Interstitial || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules)
+                        // An app open only restarts the interstitial interval when it follows the interstitial rules;
+                        // a rewarded interstitial always does (it shares the interstitial pacing).
+                        if (FollowsInterstitialRules(p)
                             || (p.Format == AdFormat.Rewarded && result == AdShowResult.Completed && policy.RewardedResetsInterstitialTimer))
                         {
                             lastInterstitialAt = t;

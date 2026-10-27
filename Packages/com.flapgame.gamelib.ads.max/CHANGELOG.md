@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.6] - 2026-10-27
+- A rewarded interstitial placement on MAX fails with a warning (MAX has no such format).
+
 ## [0.8.5] - 2026-10-27
 - `IAdsAudio`: `MaxSdk.SetMuted` (muted, or volume 0; MAX has no volume).
 

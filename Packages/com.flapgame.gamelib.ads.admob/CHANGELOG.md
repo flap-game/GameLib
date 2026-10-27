@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.6] - 2026-10-27
+- Rewarded interstitial (`RewardedInterstitialAd`), with Google's demo units in test mode.
+
 ## [0.8.5] - 2026-10-27
 - `IAdsAudio`: `MobileAds.SetApplicationVolume` / `SetApplicationMuted`.
 

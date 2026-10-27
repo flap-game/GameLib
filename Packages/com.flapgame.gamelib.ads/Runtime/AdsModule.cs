@@ -166,6 +166,8 @@ namespace FlapGame.GameLib.Ads
                         if (p.Format == AdFormat.Banner && p.Size is BannerSize.SmallFullWidth or BannerSize.Collapsible
                             && r.EffectiveProviderId == AdProviderIds.Max)
                             issues.Add(GameLibIssue.Warning($"Placement '{p.Id}': MAX has no {p.Size} banner - its route '{r.EffectiveProviderId}' shows a Standard 320x50 one."));
+                        if (p.Format == AdFormat.RewardedInterstitial && r.EffectiveProviderId == AdProviderIds.Max)
+                            issues.Add(GameLibIssue.Error($"Placement '{p.Id}': MAX has no rewarded interstitial - route it to AdMob, or use an Interstitial / Rewarded placement on MAX."));
                     }
             }
 
@@ -349,6 +351,7 @@ namespace FlapGame.GameLib.Ads
                 AdFormat.Banner       => AdFormatKind.Banner,
                 AdFormat.Mrec         => AdFormatKind.Mrec,
                 AdFormat.AppOpen      => AdFormatKind.AppOpen,
+                AdFormat.RewardedInterstitial => AdFormatKind.RewardedInterstitial,
                 _                     => AdFormatKind.Unknown,
             },
             AdUnitId  = impression.AdUnitId,

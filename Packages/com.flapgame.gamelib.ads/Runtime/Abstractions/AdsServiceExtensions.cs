@@ -103,6 +103,44 @@ namespace FlapGame.GameLib.Ads
             => ads.ShowRewardedAsync((string)placement, onRewarded, cancellationToken);
 
         /// <summary>
+        /// Shows a rewarded interstitial (<see cref="AdFormat.RewardedInterstitial"/>) the way Google's policy requires: only
+        /// when the ad can show right now, <paramref name="askUser"/> runs the game's intro screen (the reward, and a way to
+        /// say no; Google asks for a few seconds' countdown) and the ad opens only on true. <paramref name="onRewarded"/> runs
+        /// when the reward was earned. Returns true if it was. Nothing ready = no intro, false; a "no" = no show, false.
+        /// </summary>
+        public static async ValueTask<bool> ShowRewardedInterstitialAsync(
+            this IAdsService ads,
+            string placementId,
+            Func<CancellationToken, Task<bool>> askUser,
+            Action onRewarded,
+            CancellationToken cancellationToken = default)
+        {
+            if (askUser == null) throw new ArgumentNullException(nameof(askUser));
+            if (!ads.CanShow(placementId, out _))
+            {
+                // Counted and reported like any blocked show - without waiting for fill: the ad never opens unannounced.
+                await ads.ShowAsync(placementId, 0f, cancellationToken);
+                return false;
+            }
+            if (!await askUser(cancellationToken) || cancellationToken.IsCancellationRequested) return false;
+            AdShowResult result = await ads.ShowAsync(placementId, 0f, cancellationToken);
+            if (result == AdShowResult.Completed)
+                onRewarded?.Invoke();
+            return result == AdShowResult.Completed;
+        }
+
+        /// <summary>
+        /// Shows a rewarded interstitial using a drag-drop placement reference.
+        /// </summary>
+        public static ValueTask<bool> ShowRewardedInterstitialAsync(
+            this IAdsService ads,
+            AdPlacementRef placement,
+            Func<CancellationToken, Task<bool>> askUser,
+            Action onRewarded,
+            CancellationToken cancellationToken = default)
+            => ads.ShowRewardedInterstitialAsync((string)placement, askUser, onRewarded, cancellationToken);
+
+        /// <summary>
         /// Shows an interstitial ad and invokes <paramref name="onCompleted"/> when the user dismisses it
         /// or when it could not be shown at all. The callback ALWAYS fires (Completed, Skipped or Failed) —
         /// use this for game-flow continuation, not for granting rewards.

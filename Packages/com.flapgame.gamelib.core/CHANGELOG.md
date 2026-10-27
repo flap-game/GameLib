@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.6] - 2026-10-27
+- `AdFormatKind.RewardedInterstitial`.
+
 ## [0.8.2] - 2026-10-27
 - `ITrackerIds` (always registered): the Firebase app instance id and the AppsFlyer id of this install, for joining
   rows across tools (`ids.FirebaseAppInstanceId()`, `ids.AppsFlyerId()`, `Changed`). Kept on the device, so the last

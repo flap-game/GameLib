@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -24,6 +25,11 @@ namespace FlapGame.GameLib.Ads.Tests
             {
                 Id = "inter", Format = AdFormat.Interstitial,
                 Routes = { new AdRoute("max", "m1", "mi1"), new AdRoute("admob", "a1", "ai1") },
+            });
+            settings.Placements.Add(new AdPlacement
+            {
+                Id = "ri", Format = AdFormat.RewardedInterstitial,
+                Routes = { new AdRoute("admob", "a3", "ai3") },
             });
             settings.Placements.Add(new AdPlacement
             {
@@ -217,6 +223,66 @@ namespace FlapGame.GameLib.Ads.Tests
             ads.SetAdAudio(1.5f, true);
             Assert.That(max.AdAudio[^1], Is.EqualTo((1f, true)), "clamped to 0..1");
             Assert.That(adMob.AdAudio, Is.EqualTo(max.AdAudio));
+        }
+
+        [Test]
+        public void RewardedInterstitial_SharesTheInterstitialPacing()
+        {
+            settings.Policy.InterstitialMinIntervalSeconds = 60f;
+            settings.Policy.InterstitialFromLevel = 3;
+            using var ads = Create();
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            ads.SetPlayerLevel(5);
+            max.MarkReady("inter");
+            adMob.MarkReady("ri");
+
+            Assert.That(Await(ads.ShowAsync("ri")), Is.EqualTo(AdShowResult.Completed));
+            Assert.That(ads.CanShow("inter", out AdBlockReason reason), Is.False, "one timer for both");
+            Assert.That(reason, Is.EqualTo(AdBlockReason.GlobalInterval));
+            Assert.That(ads.CanShow("ri", out reason), Is.False);
+            Assert.That(reason, Is.EqualTo(AdBlockReason.GlobalInterval));
+
+            clock = 100f;
+            ads.SetPlayerLevel(1);
+            Assert.That(ads.CanShow("ri", out reason), Is.False);
+            Assert.That(reason, Is.EqualTo(AdBlockReason.BelowLevel));
+        }
+
+        [Test]
+        public void ShowRewardedInterstitial_AsksOnlyWhenTheAdCanShow_AndShowsOnlyOnYes()
+        {
+            using var ads = Create();
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            int asked = 0, rewarded = 0;
+            bool answer = false;
+            System.Func<CancellationToken, Task<bool>> intro = _ => { asked++; return Task.FromResult(answer); };
+
+            UnityEngine.TestTools.LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("not shown: NotReady"));
+            Assert.That(Await(ads.ShowRewardedInterstitialAsync("ri", intro, () => rewarded++)), Is.False);
+            Assert.That(asked, Is.EqualTo(0), "no intro for an ad that cannot open");
+
+            adMob.MarkReady("ri");
+            Assert.That(Await(ads.ShowRewardedInterstitialAsync("ri", intro, () => rewarded++)), Is.False);
+            Assert.That(asked, Is.EqualTo(1));
+            Assert.That(adMob.Shown, Is.Empty, "a no never opens the ad");
+
+            answer = true;
+            Assert.That(Await(ads.ShowRewardedInterstitialAsync("ri", intro, () => rewarded++)), Is.True);
+            Assert.That(adMob.Shown, Is.EqualTo(new[] { "ri" }));
+            Assert.That(rewarded, Is.EqualTo(1));
+
+            adMob.NextResult = AdShowResult.Skipped; // closed before the reward
+            Assert.That(Await(ads.ShowRewardedInterstitialAsync("ri", intro, () => rewarded++)), Is.False);
+            Assert.That(rewarded, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Validate_RejectsARewardedInterstitialOnMax()
+        {
+            settings.Placements.Find(p => p.Id == "ri").Routes.Add(new AdRoute("max", "m3", "mi3"));
+            var issues = new List<GameLibIssue>();
+            settings.Validate(issues);
+            Assert.That(issues, Has.Some.Matches<GameLibIssue>(i => i.Message.Contains("no rewarded interstitial")));
         }
 
         [Test]

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.6] - 2026-10-27
+- Format `AdFormat.RewardedInterstitial` (AdMob only): follows the interstitial pacing rules and restarts their timer.
+  `ads.ShowRewardedInterstitialAsync(placement, askUser, onRewarded)` runs the game's intro screen Google requires - only
+  when the ad can show - and opens the ad only on yes. Doctor reports a MAX route on it as an error.
+
 ## [0.8.5] - 2026-10-27
 - `ads.SetAdAudio(volume, muted)`: video ads start at the game's volume or muted (`IAdsAudio`, implemented by the AdMob
   and MAX adapters); applied once each SDK initialized and on every change.
