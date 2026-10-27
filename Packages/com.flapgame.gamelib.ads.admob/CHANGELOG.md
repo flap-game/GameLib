@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.4] - 2026-10-27
+- `IAdsDebugger`: Google's Ad Inspector (`MobileAds.OpenAdInspector`), on AdMob test devices.
+
 ## [0.8.2] - 2026-10-27
 - `BannerSize.SmallFullWidth`: a custom `AdSize(AdSize.FullWidth, 32)` banner (full width of the safe area on iOS).
 

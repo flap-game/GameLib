@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.ads.max",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "displayName": "GameLib Ads - AppLovin MAX",
   "description": "AppLovin MAX provider for GameLib Ads, including the MAX consent flow.",
   "unity": "6000.4",
@@ -16,7 +16,7 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.3",
-    "com.flapgame.gamelib.ads": "0.8.3"
+    "com.flapgame.gamelib.core": "0.8.4",
+    "com.flapgame.gamelib.ads": "0.8.4"
   }
 }

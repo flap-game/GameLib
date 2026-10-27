@@ -115,6 +115,12 @@ namespace FlapGame.GameLib.Ads
         public event Action<string> AdClicked;
 
         /// <summary>
+        /// Raised with the provider id right before an SDK debug screen opens (<see cref="OpenDebuggerAsync"/>). On Android
+        /// it is a separate activity: the installer marks the trip as game-initiated, so the return shows no app open ad.
+        /// </summary>
+        public event Action<string> DebuggerOpening;
+
+        /// <summary>
         /// Raised with the provider id when an adapter that timed out at init finished later and its routes came back.
         /// A CMP that runs inside that SDK's init (MAX) only answers now: the installer re-publishes consent on it.
         /// </summary>
@@ -259,6 +265,35 @@ namespace FlapGame.GameLib.Ads
             requestsSinceShow.Clear();
             Debug.Log($"{LogPrefix} Pacing reset.");
             RaiseReadyChangedForFullscreen();
+        }
+
+        /// <summary>
+        /// Opens the debug screen of <paramref name="providerId"/> (<see cref="IAdsDebugger"/>: AdMob Ad Inspector, MAX
+        /// Mediation Debugger), or of the first initialized provider that has one when null. False when none could open.
+        /// </summary>
+        public async Task<bool> OpenDebuggerAsync(string providerId = null)
+        {
+            string wanted = string.IsNullOrEmpty(providerId) ? null : AdProviderIds.Normalize(providerId);
+            foreach (IAdsProviderAdapter adapter in adapters)
+            {
+                string id = AdProviderIds.Normalize(adapter.ProviderId);
+                if (wanted != null && id != wanted) continue;
+                if (adapter is not IAdsDebugger debugger || !adapter.IsInitialized) continue;
+                try { DebuggerOpening?.Invoke(id); }
+                catch (Exception e) { Debug.LogException(e); }
+                try
+                {
+                    return await debugger.OpenDebuggerAsync();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"{LogPrefix} {id} debugger failed: {e.Message}");
+                    return false;
+                }
+            }
+            Debug.LogWarning($"{LogPrefix} No ad debugger to open{(wanted != null ? $" for '{wanted}'" : string.Empty)}: " +
+                             "the provider is not installed, not initialized yet, or has none (the Editor mock has none).");
+            return false;
         }
 
         /// <summary>Removes a rule added with <see cref="AddRule"/>.</summary>

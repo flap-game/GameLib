@@ -108,6 +108,17 @@ Sizes: `Standard` (320x50), `Adaptive` (full width, the SDK picks the height), `
 `Preload Banner` creates the banner hidden as soon as its SDK is ready, so the first screen with a banner shows an ad
 instead of an empty slot (not for collapsible banners). A hidden MAX banner stops refreshing until it is shown again.
 
+## Debugging mediation
+
+`await ads.OpenDebuggerAsync()` opens the ad SDK's own debug screen - every mediated network, whether its adapter is
+integrated and initialized, which ad loaded from where: AdMob's **Ad Inspector** or MAX's **Mediation Debugger**. Pass
+`"admob"` / `"max"` to pick one; null opens the first installed one. Put it behind a QA / cheat button.
+
+- AdMob opens the Ad Inspector on **test devices only** (AdMob console > Settings > Test devices, or `AdMob Test Device
+  Ids` with Test Mode on); elsewhere it returns false with a warning.
+- The return from it never shows an app open ad.
+- It returns false in the Editor (the mock has no debugger) and before the SDK initialized.
+
 ## No-ads, consent, tracking
 
 - **No-ads** follows the `no_ads` entitlement (`IEntitlements`): the IAP module grants it, or grant it yourself.

@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.4] - 2026-10-27
+- `IAdsDebugger`: AppLovin's Mediation Debugger (`MaxSdk.ShowMediationDebugger`).
+
 ## [0.8.3] - 2026-10-27
 - Paid impressions carry the user's country code (`SdkConfiguration.CountryCode`), sent to AppsFlyer as `country`
   (`AdRevenueScheme.COUNTRY`) - it was always empty before.

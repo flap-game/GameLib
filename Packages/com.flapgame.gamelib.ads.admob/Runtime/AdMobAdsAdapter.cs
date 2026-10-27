@@ -32,7 +32,7 @@ namespace FlapGame.GameLib.Ads
     /// outcome is awaited, so the composite never opens a second ad on top of it.
     /// </para>
     /// </summary>
-    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource
+    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger
     {
         private const string LogPrefix = "[Ads/AdMob]";
 
@@ -275,6 +275,31 @@ namespace FlapGame.GameLib.Ads
         }
 
         /// <inheritdoc />
+        /// <summary>
+        /// Google's Ad Inspector. It opens on test devices only (added in the AdMob console > Settings > Test devices, or
+        /// in AdsModule > AdMob Test Device Ids with Test Mode on); elsewhere it closes at once with an error.
+        /// </summary>
+        public Task<bool> OpenDebuggerAsync()
+        {
+            if (disposed || !initialized) return Task.FromResult(false);
+#if GAMELIB_ADMOB
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            MobileAds.OpenAdInspector(error => RunOnMain(() =>
+            {
+                if (error == null)
+                {
+                    tcs.TrySetResult(true);
+                    return;
+                }
+                Debug.LogWarning($"{LogPrefix} Ad Inspector: {error.GetMessage()} - it opens on AdMob test devices only.");
+                tcs.TrySetResult(false);
+            }));
+            return tcs.Task;
+#else
+            return Task.FromResult(false);
+#endif
+        }
+
         public void Dispose()
         {
             if (disposed) return;

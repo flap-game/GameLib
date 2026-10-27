@@ -49,6 +49,18 @@ namespace FlapGame.GameLib.Ads
             else Debug.LogWarning($"[Ads] ResetPacing needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
         }
 
+        /// <summary>
+        /// Opens the ad SDK's debug screen (AdMob Ad Inspector, MAX Mediation Debugger) for a QA menu: every mediated
+        /// network, whether it is integrated, and which ad loaded from where. <paramref name="providerId"/> null = the first
+        /// installed one that has a debugger. AdMob opens it on test devices only. False when nothing opened.
+        /// </summary>
+        public static Task<bool> OpenDebuggerAsync(this IAdsService ads, string providerId = null)
+        {
+            if (ads is CompositeAdsService composite) return composite.OpenDebuggerAsync(providerId);
+            Debug.LogWarning($"[Ads] OpenDebuggerAsync needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+            return Task.FromResult(false);
+        }
+
         /// <summary>True while an interstitial, rewarded or app open ad is on screen (false for another service).</summary>
         public static bool IsShowingFullscreen(this IAdsService ads) =>
             ads is CompositeAdsService composite && composite.IsShowingFullscreen;

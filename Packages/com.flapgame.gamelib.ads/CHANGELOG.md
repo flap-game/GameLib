@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.4] - 2026-10-27
+- `ads.OpenDebuggerAsync(providerId = null)`: opens the SDK's debug screen (`IAdsDebugger`, implemented by the AdMob and
+  MAX adapters). The trip to it is marked as game-initiated, so the return shows no app open ad
+  (`CompositeAdsService.DebuggerOpening`).
+
 ## [0.8.3] - 2026-10-27
 - `AdImpression.CountryCode` and `AdRevenue.CountryCode` filled from the ad SDK (MAX), for AppsFlyer's `country`.
 

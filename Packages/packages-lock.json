@@ -14,7 +14,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3",
+        "com.flapgame.gamelib.core": "0.8.4",
         "com.unity.modules.audio": "1.0.0"
       }
     },
@@ -23,8 +23,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3",
-        "com.flapgame.gamelib.ads": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4",
+        "com.flapgame.gamelib.ads": "0.8.4"
       }
     },
     "com.flapgame.gamelib.ads.max": {
@@ -32,8 +32,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3",
-        "com.flapgame.gamelib.ads": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4",
+        "com.flapgame.gamelib.ads": "0.8.4"
       }
     },
     "com.flapgame.gamelib.analytics.firebase": {
@@ -41,8 +41,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3",
-        "com.flapgame.gamelib.firebase": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4",
+        "com.flapgame.gamelib.firebase": "0.8.4"
       }
     },
     "com.flapgame.gamelib.appicon": {
@@ -50,7 +50,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.appsflyer": {
@@ -58,7 +58,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.att": {
@@ -66,7 +66,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.build": {
@@ -74,7 +74,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.core": {
@@ -90,8 +90,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3",
-        "com.flapgame.gamelib.firebase": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4",
+        "com.flapgame.gamelib.firebase": "0.8.4"
       }
     },
     "com.flapgame.gamelib.extensions": {
@@ -107,7 +107,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.haptics": {
@@ -115,7 +115,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.iap": {
@@ -123,7 +123,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.rate": {
@@ -131,7 +131,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4"
       }
     },
     "com.flapgame.gamelib.remoteconfig.firebase": {
@@ -139,8 +139,8 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3",
-        "com.flapgame.gamelib.firebase": "0.8.3"
+        "com.flapgame.gamelib.core": "0.8.4",
+        "com.flapgame.gamelib.firebase": "0.8.4"
       }
     },
     "com.flapgame.gamelib.save": {
@@ -148,7 +148,7 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.flapgame.gamelib.core": "0.8.3",
+        "com.flapgame.gamelib.core": "0.8.4",
         "com.unity.nuget.newtonsoft-json": "3.2.1"
       }
     },

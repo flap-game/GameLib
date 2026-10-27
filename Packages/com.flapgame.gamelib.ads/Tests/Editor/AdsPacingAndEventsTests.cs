@@ -176,6 +176,27 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void OpenDebugger_OpensTheInitializedProvider_AndAnnouncesIt()
+        {
+            using var ads = Create();
+            var opening = new List<string>();
+            ads.DebuggerOpening += opening.Add;
+
+            UnityEngine.TestTools.LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("No ad debugger"));
+            Assert.That(ads.OpenDebuggerAsync().GetAwaiter().GetResult(), Is.False, "nothing initialized yet");
+
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            Assert.That(ads.OpenDebuggerAsync().GetAwaiter().GetResult(), Is.True);
+            Assert.That(max.DebuggerOpened, Is.EqualTo(1), "null = the first provider that has one");
+            Assert.That(((IAdsService)ads).OpenDebuggerAsync("admob").GetAwaiter().GetResult(), Is.True);
+            Assert.That(adMob.DebuggerOpened, Is.EqualTo(1));
+            Assert.That(opening, Is.EqualTo(new[] { "max", "admob" }), "the installer marks the trip as game-initiated");
+
+            adMob.DebuggerResult = false; // not a test device
+            Assert.That(ads.OpenDebuggerAsync("admob").GetAwaiter().GetResult(), Is.False);
+        }
+
+        [Test]
         public void Validate_WarnsWhenMaxServesASmallBanner()
         {
             settings.Placements.Find(p => p.Id == "banner").Size = BannerSize.SmallFullWidth;

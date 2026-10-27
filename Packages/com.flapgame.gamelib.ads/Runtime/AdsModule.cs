@@ -676,6 +676,7 @@ namespace FlapGame.GameLib.Ads
                 {
                     ads.FullscreenShowingChanged += OnFullscreenShowingChanged;
                     ads.AdClicked += OnAdClicked;
+                    ads.DebuggerOpening += OnDebuggerOpening;
                 }
             }
 
@@ -706,12 +707,15 @@ namespace FlapGame.GameLib.Ads
 
             private void OnAdClicked(string placementId) => lifecycle.MarkExternalActivity("ad_click");
 
+            private void OnDebuggerOpening(string providerId) => lifecycle.MarkExternalActivity("ad_debugger");
+
             public void Dispose()
             {
                 entitlements.Changed -= OnEntitlementChanged;
                 if (planSource != null) planSource.PlanChanged -= OnPlanChanged;
                 ads.FullscreenShowingChanged -= OnFullscreenShowingChanged;
                 ads.AdClicked -= OnAdClicked;
+                ads.DebuggerOpening -= OnDebuggerOpening;
                 fullscreenScope?.Dispose();
                 fullscreenScope = null;
             }

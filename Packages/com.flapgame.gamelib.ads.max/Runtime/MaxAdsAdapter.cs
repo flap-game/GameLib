@@ -30,7 +30,7 @@ namespace FlapGame.GameLib.Ads
     /// </para>
     /// </summary>
     [Preserve]
-    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics
+    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdsDebugger
     {
         private const string LogPrefix = "[Ads/MAX]";
         private const double MaxRetryDelaySeconds = 60d;
@@ -272,6 +272,14 @@ namespace FlapGame.GameLib.Ads
         }
 
         /// <summary>Stops every reload, resolves pending shows as Failed, destroys banners and unsubscribes from MAX.</summary>
+        /// <summary>AppLovin's Mediation Debugger. MAX reports no close, so this completes once it is opened.</summary>
+        public Task<bool> OpenDebuggerAsync()
+        {
+            if (disposed || !initialized) return Task.FromResult(false);
+            MaxSdk.ShowMediationDebugger();
+            return Task.FromResult(true);
+        }
+
         public void Dispose()
         {
             if (disposed) return;

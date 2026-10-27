@@ -12,8 +12,12 @@ using FlapGame.GameLib.Ads.Editor;
 namespace FlapGame.GameLib.Ads.Tests
 {
     /// <summary>Scriptable <see cref="IAdsProviderAdapter"/> shared by the ads tests.</summary>
-    internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource
+    internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger
     {
+        public int DebuggerOpened;
+        public bool DebuggerResult = true;
+        public Task<bool> OpenDebuggerAsync() { DebuggerOpened++; return Task.FromResult(DebuggerResult); }
+
         public readonly HashSet<string> Ready = new();
         public readonly HashSet<string> Active = new();
         public readonly List<(string id, bool active)> ActiveCalls = new();
