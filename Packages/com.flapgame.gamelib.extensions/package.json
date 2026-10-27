@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.extensions",
-  "version": "0.8.9",
+  "version": "0.8.10",
   "displayName": "GameLib Extensions",
   "description": "Everyday helpers for game code: collections and random picks, Transform / GameObject / vector / color / UI extensions, number and time formatting, coroutine delays.",
   "unity": "6000.4",

@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.10] - 2026-10-27
+- Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.
+
 ## [0.8.9] - 2026-10-27
 - Mediation adapters for 19 networks, from GameLib > Setup > Ads - AdMob > Optional (README: Mediation adapters).
 

@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.save",
-  "version": "0.8.9",
+  "version": "0.8.10",
   "displayName": "GameLib Save",
   "description": "Save game data: crash-safe files with a backup, checksum, optional encryption, versioned sections with migrations, autosave.",
   "unity": "6000.4",
@@ -16,7 +16,7 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.9",
+    "com.flapgame.gamelib.core": "0.8.10",
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
 }

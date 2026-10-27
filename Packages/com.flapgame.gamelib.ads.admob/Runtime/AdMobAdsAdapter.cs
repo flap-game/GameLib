@@ -32,7 +32,7 @@ namespace FlapGame.GameLib.Ads
     /// outcome is awaited, so the composite never opens a second ad on top of it.
     /// </para>
     /// </summary>
-    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification
+    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification, IBannerExpansion
     {
         private const string LogPrefix = "[Ads/AdMob]";
 
@@ -79,6 +79,9 @@ namespace FlapGame.GameLib.Ads
 
         /// <inheritdoc />
         public event Action<string> AdClicked;
+
+        /// <inheritdoc />
+        public event Action<string, bool> BannerExpandedChanged;
 
         /// <summary>Grace to wait for a reward callback that arrives after the close callback.</summary>
         public TimeSpan LateRewardGrace { get; set; } = RewardGrace.DefaultGrace;
@@ -931,6 +934,8 @@ namespace FlapGame.GameLib.Ads
             });
             banner.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(banner.GetResponseInfo)));
             banner.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
+            banner.OnAdFullScreenContentOpened += () => RunOnMain(() => BannerExpandedChanged?.Invoke(unit.Id, true));
+            banner.OnAdFullScreenContentClosed += () => RunOnMain(() => BannerExpandedChanged?.Invoke(unit.Id, false));
 
             banner.Hide(); // created hidden; OnBannerAdLoaded applies the desired visibility
             banner.LoadAd(GetBannerRequest(p));

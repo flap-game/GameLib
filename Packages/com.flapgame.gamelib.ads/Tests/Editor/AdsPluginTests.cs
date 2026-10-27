@@ -12,7 +12,8 @@ using FlapGame.GameLib.Ads.Editor;
 namespace FlapGame.GameLib.Ads.Tests
 {
     /// <summary>Scriptable <see cref="IAdsProviderAdapter"/> shared by the ads tests.</summary>
-    internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification
+    internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification,
+                                          IAdsCreativeDebugger, IAdSegments, IBannerExpansion
     {
         public int DebuggerOpened;
         public bool DebuggerResult = true;
@@ -21,6 +22,12 @@ namespace FlapGame.GameLib.Ads.Tests
         public void ApplyAdAudio(float volume, bool muted) => AdAudio.Add((volume, muted));
         public readonly List<(string userId, string customData)> RewardVerifications = new();
         public void SetRewardVerification(string userId, string customData) => RewardVerifications.Add((userId, customData));
+        public int CreativeDebuggerOpened;
+        public bool OpenCreativeDebugger() { CreativeDebuggerOpened++; return true; }
+        public readonly List<IReadOnlyDictionary<int, int[]>> SegmentCalls = new();
+        public void ApplySegments(IReadOnlyDictionary<int, int[]> segments) => SegmentCalls.Add(segments);
+        public event Action<string, bool> BannerExpandedChanged;
+        public void Expand(string id, bool expanded) => BannerExpandedChanged?.Invoke(id, expanded);
 
         public readonly HashSet<string> Ready = new();
         public readonly HashSet<string> Active = new();

@@ -72,6 +72,28 @@ namespace FlapGame.GameLib.Ads
             else Debug.LogWarning($"[Ads] SetAdAudio needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
         }
 
+        /// <summary>
+        /// Opens AppLovin's Creative Debugger for a QA menu: the ads shown recently, their network and creative, and a way to
+        /// report a bad one. MAX only, once initialized; false when it did not open.
+        /// </summary>
+        public static bool OpenCreativeDebugger(this IAdsService ads, string providerId = null)
+        {
+            if (ads is CompositeAdsService composite) return composite.OpenCreativeDebugger(providerId);
+            Debug.LogWarning($"[Ads] OpenCreativeDebugger needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+            return false;
+        }
+
+        /// <summary>
+        /// MAX segment targeting: the player is in segment <paramref name="key"/> with <paramref name="values"/> (e.g. key 1 =
+        /// payer, value 1), so the MAX dashboard can serve that segment its own waterfall / floors. No values = out of the
+        /// segment. Keys and values 0..32000.
+        /// </summary>
+        public static void SetAdSegment(this IAdsService ads, int key, params int[] values)
+        {
+            if (ads is CompositeAdsService composite) composite.SetAdSegment(key, values);
+            else Debug.LogWarning($"[Ads] SetAdSegment needs the GameLib ads service, not {ads?.GetType().Name ?? "null"}.");
+        }
+
         /// <summary>True while an interstitial, rewarded or app open ad is on screen (false for another service).</summary>
         public static bool IsShowingFullscreen(this IAdsService ads) =>
             ads is CompositeAdsService composite && composite.IsShowingFullscreen;

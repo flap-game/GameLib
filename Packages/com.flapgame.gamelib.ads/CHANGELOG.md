@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.10] - 2026-10-27
+- `ads.OpenCreativeDebugger()` (`IAdsCreativeDebugger`) and `ads.SetAdSegment(key, values)` (`IAdSegments`, keys and values
+  0..32000; passed before init and on every change).
+- A banner / MREC showing fullscreen content (`IBannerExpansion`, from MAX and AdMob) counts as a fullscreen ad until it
+  closes or is hidden: `IsShowingFullscreen` / `FullscreenShowingChanged` include it, so the pause applies and no
+  fullscreen ad shows over it (`AnotherAdShowing`).
+- `AdsModule.MaxExtraParameters` / `MaxCreativeDebuggerOnFlip`; placement `MaxExtraParameters` and `BannerBackgroundColor`
+  (`AdKeyValue`). Doctor warns on an extra parameter without a key.
+
 ## [0.8.8] - 2026-10-27
 - `AdsModule.MaxAdContentRating` (`AdContentRating` G / PG / T / MA): the most mature ad content AdMob may serve. Doctor
   warns that it does not apply to MAX.

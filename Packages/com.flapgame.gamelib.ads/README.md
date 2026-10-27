@@ -109,6 +109,8 @@ the server - the server's grant is what counts.
 Turn on `Pause Game During Fullscreen Ads` (`Time.timeScale = 0`) and / or `Mute Audio During Fullscreen Ads`
 (`AudioListener.pause`) on the AdsModule asset: both are put back when the ad closes, unless the game changed them during
 the ad. A game with its own pause listens to `((CompositeAdsService)ads).FullscreenShowingChanged` instead - not both.
+A banner or MREC that opens fullscreen content (an expandable creative; MAX and AdMob report it) counts as a fullscreen
+ad until it closes or the game hides it: the pause applies, and no other fullscreen ad shows over it.
 
 ## App open rule
 

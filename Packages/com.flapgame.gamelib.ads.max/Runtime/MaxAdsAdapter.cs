@@ -30,7 +30,8 @@ namespace FlapGame.GameLib.Ads
     /// </para>
     /// </summary>
     [Preserve]
-    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdsDebugger, IAdsAudio, IRewardVerification
+    public sealed class MaxAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification,
+                                       IAdsCreativeDebugger, IAdSegments, IBannerExpansion
     {
         private const string LogPrefix = "[Ads/MAX]";
         private const double MaxRetryDelaySeconds = 60d;
@@ -65,6 +66,8 @@ namespace FlapGame.GameLib.Ads
         private bool initialized;
         private bool disposed;
         private string appliedUserId, rewardCustomData; // S2S reward callback (SetRewardVerification)
+        private IReadOnlyDictionary<int, int[]> segments;   // last ApplySegments; pushed before init and on every change
+        private readonly HashSet<string> extrasApplied = new(); // fullscreen units whose extra parameters are set
 
         /// <summary>Creates the adapter and subscribes to the static MAX callbacks (released by <see cref="Dispose"/>).</summary>
         [Preserve]
@@ -79,6 +82,7 @@ namespace FlapGame.GameLib.Ads
             MaxSdkCallbacks.Interstitial.OnAdHiddenEvent        += OnInterstitialHidden;
             MaxSdkCallbacks.Interstitial.OnAdDisplayFailedEvent += OnInterstitialDisplayFailed;
             MaxSdkCallbacks.Interstitial.OnAdRevenuePaidEvent   += OnInterstitialRevenue;
+            MaxSdkCallbacks.Interstitial.OnAdClickedEvent       += OnAdClicked;
 
             MaxSdkCallbacks.Rewarded.OnAdLoadedEvent            += OnRewardedLoaded;
             MaxSdkCallbacks.Rewarded.OnAdLoadFailedEvent        += OnRewardedLoadFailed;
@@ -86,20 +90,28 @@ namespace FlapGame.GameLib.Ads
             MaxSdkCallbacks.Rewarded.OnAdHiddenEvent            += OnRewardedHidden;
             MaxSdkCallbacks.Rewarded.OnAdDisplayFailedEvent     += OnRewardedDisplayFailed;
             MaxSdkCallbacks.Rewarded.OnAdRevenuePaidEvent       += OnRewardedRevenue;
+            MaxSdkCallbacks.Rewarded.OnAdClickedEvent           += OnAdClicked;
 
             MaxSdkCallbacks.AppOpen.OnAdLoadedEvent             += OnAppOpenLoaded;
             MaxSdkCallbacks.AppOpen.OnAdLoadFailedEvent         += OnAppOpenLoadFailed;
             MaxSdkCallbacks.AppOpen.OnAdHiddenEvent             += OnAppOpenHidden;
             MaxSdkCallbacks.AppOpen.OnAdDisplayFailedEvent      += OnAppOpenDisplayFailed;
             MaxSdkCallbacks.AppOpen.OnAdRevenuePaidEvent        += OnAppOpenRevenue;
+            MaxSdkCallbacks.AppOpen.OnAdClickedEvent            += OnAdClicked;
 
             MaxSdkCallbacks.Banner.OnAdLoadedEvent              += OnBannerLoaded;
             MaxSdkCallbacks.Banner.OnAdLoadFailedEvent          += OnBannerLoadFailed;
             MaxSdkCallbacks.Banner.OnAdRevenuePaidEvent         += OnBannerRevenue;
+            MaxSdkCallbacks.Banner.OnAdClickedEvent             += OnAdClicked;
+            MaxSdkCallbacks.Banner.OnAdExpandedEvent            += OnAdViewExpanded;
+            MaxSdkCallbacks.Banner.OnAdCollapsedEvent           += OnAdViewCollapsed;
 
             MaxSdkCallbacks.MRec.OnAdLoadedEvent                += OnMRecLoaded;
             MaxSdkCallbacks.MRec.OnAdLoadFailedEvent            += OnMRecLoadFailed;
             MaxSdkCallbacks.MRec.OnAdRevenuePaidEvent           += OnMRecRevenue;
+            MaxSdkCallbacks.MRec.OnAdClickedEvent               += OnAdClicked;
+            MaxSdkCallbacks.MRec.OnAdExpandedEvent              += OnAdViewExpanded;
+            MaxSdkCallbacks.MRec.OnAdCollapsedEvent             += OnAdViewCollapsed;
         }
 
         /// <inheritdoc />
@@ -116,6 +128,12 @@ namespace FlapGame.GameLib.Ads
 
         /// <inheritdoc />
         public event Action<AdImpression> ImpressionPaid;
+
+        /// <inheritdoc />
+        public event Action<string> AdClicked;
+
+        /// <inheritdoc />
+        public event Action<string, bool> BannerExpandedChanged;
 
         /// <summary>Grace to wait for a reward callback that arrives after the hidden callback.</summary>
         public TimeSpan LateRewardGrace { get; set; } = TimeSpan.FromSeconds(0.5);
@@ -143,6 +161,7 @@ namespace FlapGame.GameLib.Ads
 
             if (context.TestMode && context.Settings?.MaxTestDeviceIds?.Count > 0)
                 MaxSdk.SetTestDeviceAdvertisingIdentifiers(context.Settings.MaxTestDeviceIds.ToArray());
+            ApplySdkSettings(context.Settings);
 
             if (!MaxSdk.IsInitialized())
             {
@@ -314,6 +333,75 @@ namespace FlapGame.GameLib.Ads
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Video ads start muted: {mute}.");
         }
 
+        /// <summary>AppLovin's Creative Debugger: the ads shown recently, their network and creative.</summary>
+        public bool OpenCreativeDebugger()
+        {
+            if (disposed || !initialized) return false;
+            MaxSdk.ShowCreativeDebugger();
+            return true;
+        }
+
+        /// <summary>MAX segment targeting (<c>MaxSdk.SetSegmentCollection</c>), before init and on every change.</summary>
+        public void ApplySegments(IReadOnlyDictionary<int, int[]> segments)
+        {
+            if (disposed) return;
+            this.segments = segments;
+            if (initialized) PushSegments();
+        }
+
+        private void PushSegments()
+        {
+            if (segments == null) return;
+            MaxSegmentCollection.MaxSegmentCollectionBuilder builder = MaxSegmentCollection.Builder();
+            foreach (KeyValuePair<int, int[]> s in segments) builder.AddSegment(new MaxSegment(s.Key, new List<int>(s.Value)));
+            MaxSdk.SetSegmentCollection(builder.Build());
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Segments: {segments.Count}.");
+        }
+
+        // Before InitializeSdk: SDK-wide extra parameters, AppLovin's own verbose log, Creative Debugger on flip, segments.
+        private void ApplySdkSettings(AdsModule settings)
+        {
+            if (settings != null)
+            {
+                if (settings.VerboseLogs) MaxSdk.SetVerboseLogging(true);
+                MaxSdk.SetCreativeDebuggerEnabled(settings.MaxCreativeDebuggerOnFlip);
+                if (settings.MaxExtraParameters != null)
+                    foreach (AdKeyValue e in settings.MaxExtraParameters)
+                        if (e != null && !string.IsNullOrWhiteSpace(e.Key)) MaxSdk.SetExtraParameter(e.Key.Trim(), e.Value);
+            }
+            PushSegments();
+        }
+
+        // The Max Extra Parameters of every placement on the unit (a later placement wins a shared key).
+        private void ApplyUnitExtras(string unit, AdFormat format)
+        {
+            if (!unitPlacements.TryGetValue(unit, out List<string> ids)) return;
+            foreach (string id in ids)
+            {
+                if (!assigned.TryGetValue(id, out AdUnitAssignment a) || a.Placement?.MaxExtraParameters == null) continue;
+                foreach (AdKeyValue e in a.Placement.MaxExtraParameters)
+                {
+                    if (e == null || string.IsNullOrWhiteSpace(e.Key)) continue;
+                    string key = e.Key.Trim();
+                    try
+                    {
+                        switch (format)
+                        {
+                            case AdFormat.Interstitial: MaxSdk.SetInterstitialExtraParameter(unit, key, e.Value); break;
+                            case AdFormat.Rewarded:     MaxSdk.SetRewardedAdExtraParameter(unit, key, e.Value);   break;
+                            case AdFormat.AppOpen:      MaxSdk.SetAppOpenAdExtraParameter(unit, key, e.Value);    break;
+                            case AdFormat.Banner:       MaxSdk.SetBannerExtraParameter(unit, key, e.Value);       break;
+                            case AdFormat.Mrec:         MaxSdk.SetMRecExtraParameter(unit, key, e.Value);         break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"{LogPrefix} Extra parameter '{key}' on {Describe(unit)} not set: {ex.Message}");
+                    }
+                }
+            }
+        }
+
         /// <summary>Stops every reload, resolves pending shows as Failed, destroys banners and unsubscribes from MAX.</summary>
         public void Dispose()
         {
@@ -334,6 +422,7 @@ namespace FlapGame.GameLib.Ads
             MaxSdkCallbacks.Interstitial.OnAdHiddenEvent        -= OnInterstitialHidden;
             MaxSdkCallbacks.Interstitial.OnAdDisplayFailedEvent -= OnInterstitialDisplayFailed;
             MaxSdkCallbacks.Interstitial.OnAdRevenuePaidEvent   -= OnInterstitialRevenue;
+            MaxSdkCallbacks.Interstitial.OnAdClickedEvent       -= OnAdClicked;
 
             MaxSdkCallbacks.Rewarded.OnAdLoadedEvent            -= OnRewardedLoaded;
             MaxSdkCallbacks.Rewarded.OnAdLoadFailedEvent        -= OnRewardedLoadFailed;
@@ -341,20 +430,28 @@ namespace FlapGame.GameLib.Ads
             MaxSdkCallbacks.Rewarded.OnAdHiddenEvent            -= OnRewardedHidden;
             MaxSdkCallbacks.Rewarded.OnAdDisplayFailedEvent     -= OnRewardedDisplayFailed;
             MaxSdkCallbacks.Rewarded.OnAdRevenuePaidEvent       -= OnRewardedRevenue;
+            MaxSdkCallbacks.Rewarded.OnAdClickedEvent           -= OnAdClicked;
 
             MaxSdkCallbacks.AppOpen.OnAdLoadedEvent             -= OnAppOpenLoaded;
             MaxSdkCallbacks.AppOpen.OnAdLoadFailedEvent         -= OnAppOpenLoadFailed;
             MaxSdkCallbacks.AppOpen.OnAdHiddenEvent             -= OnAppOpenHidden;
             MaxSdkCallbacks.AppOpen.OnAdDisplayFailedEvent      -= OnAppOpenDisplayFailed;
             MaxSdkCallbacks.AppOpen.OnAdRevenuePaidEvent        -= OnAppOpenRevenue;
+            MaxSdkCallbacks.AppOpen.OnAdClickedEvent            -= OnAdClicked;
 
             MaxSdkCallbacks.Banner.OnAdLoadedEvent              -= OnBannerLoaded;
             MaxSdkCallbacks.Banner.OnAdLoadFailedEvent          -= OnBannerLoadFailed;
             MaxSdkCallbacks.Banner.OnAdRevenuePaidEvent         -= OnBannerRevenue;
+            MaxSdkCallbacks.Banner.OnAdClickedEvent             -= OnAdClicked;
+            MaxSdkCallbacks.Banner.OnAdExpandedEvent            -= OnAdViewExpanded;
+            MaxSdkCallbacks.Banner.OnAdCollapsedEvent           -= OnAdViewCollapsed;
 
             MaxSdkCallbacks.MRec.OnAdLoadedEvent                -= OnMRecLoaded;
             MaxSdkCallbacks.MRec.OnAdLoadFailedEvent            -= OnMRecLoadFailed;
             MaxSdkCallbacks.MRec.OnAdRevenuePaidEvent           -= OnMRecRevenue;
+            MaxSdkCallbacks.MRec.OnAdClickedEvent               -= OnAdClicked;
+            MaxSdkCallbacks.MRec.OnAdExpandedEvent              -= OnAdViewExpanded;
+            MaxSdkCallbacks.MRec.OnAdCollapsedEvent             -= OnAdViewCollapsed;
 
             lifetime.Dispose();
         }
@@ -366,6 +463,7 @@ namespace FlapGame.GameLib.Ads
             // Idempotent: a faulted/cancelled InitializeAsync may be retried with the same context.
             assigned.Clear();
             unitPlacements.Clear();
+            extrasApplied.Clear();
             unitFormats.Clear();
             if (units == null) return;
 
@@ -416,6 +514,7 @@ namespace FlapGame.GameLib.Ads
             if (disposed || !initialized || !IsUnitActive(unit)) return;
             if (loadingUnits.Contains(unit) || loadedUnits.Contains(unit) || pendingShows.ContainsKey(unit)) return;
             if (!unitFormats.TryGetValue(unit, out AdFormat format)) return;
+            if (extrasApplied.Add(unit)) ApplyUnitExtras(unit, format);
 
             switch (format)
             {
@@ -635,7 +734,10 @@ namespace FlapGame.GameLib.Ads
                 // Collapsible has no MAX equivalent and maps to adaptive; Standard stays 320x50.
                 config.IsAdaptive = p.Size == BannerSize.Adaptive || p.Size == BannerSize.Collapsible;
                 MaxSdk.CreateBanner(unit, config);
+                if (p.BannerBackgroundColor.a > 0f) MaxSdk.SetBannerBackgroundColor(unit, p.BannerBackgroundColor);
             }
+            // Right after the view exists, as AppLovin's samples do; a recreated view gets them again.
+            ApplyUnitExtras(unit, mrec ? AdFormat.Mrec : AdFormat.Banner);
             createdBannerUnits.Add(unit);
         }
 
@@ -729,17 +831,7 @@ namespace FlapGame.GameLib.Ads
                 return;
             }
 
-            // The placement MAX echoes back (we pass ours to Show/Set*Placement), else the one on screen, else the first active.
-            string placementId = null;
-            if (!string.IsNullOrEmpty(info.Placement) && ids.Contains(info.Placement)) placementId = info.Placement;
-            else if (showingPlacement.TryGetValue(unit, out string showing)) placementId = showing;
-            else
-            {
-                foreach (string id in ids)
-                    if (activePlacements.Contains(id)) { placementId = id; break; }
-                placementId ??= ids[0];
-            }
-
+            string placementId = PlacementOf(unit, info, ids);
             AdFormat format = assigned.TryGetValue(placementId, out AdUnitAssignment a) ? a.Format : unitFormats[unit];
             ImpressionPaid?.Invoke(new AdImpression(placementId, AdProviderIds.Max, format, unit, info.NetworkName,
                                                     info.Revenue, RevenueCurrency, info.RevenuePrecision, countryCode));
@@ -823,6 +915,35 @@ namespace FlapGame.GameLib.Ads
 
         private void OnBannerLoaded(string unit, MaxSdkBase.AdInfo _) => OnAdViewLoaded(unit);
         private void OnBannerLoadFailed(string unit, MaxSdkBase.ErrorInfo error) => OnAdViewLoadFailed(unit, error);
+        // The placement MAX echoes back (we pass ours to Show/Set*Placement), else the one on screen, else the first active.
+        private string PlacementOf(string unit, MaxSdkBase.AdInfo info, List<string> ids)
+        {
+            if (!string.IsNullOrEmpty(info?.Placement) && ids.Contains(info.Placement)) return info.Placement;
+            if (showingPlacement.TryGetValue(unit, out string showing)) return showing;
+            foreach (string id in ids)
+                if (activePlacements.Contains(id)) return id;
+            return ids[0];
+        }
+
+        private void OnAdViewExpanded(string unit, MaxSdkBase.AdInfo info) => RaiseExpanded(unit, info, true);
+        private void OnAdViewCollapsed(string unit, MaxSdkBase.AdInfo info) => RaiseExpanded(unit, info, false);
+
+        private void RaiseExpanded(string unit, MaxSdkBase.AdInfo info, bool expanded)
+        {
+            if (disposed || !unitPlacements.TryGetValue(unit, out List<string> ids) || ids.Count == 0) return;
+            BannerExpandedChanged?.Invoke(PlacementOf(unit, info, ids), expanded);
+        }
+
+        // Every format: a banner / MREC click leaves the app without a fullscreen ad up, so the return must not show an
+        // app open ad (the installer marks it as game-initiated).
+        private void OnAdClicked(string unit, MaxSdkBase.AdInfo info)
+        {
+            if (disposed || !unitPlacements.TryGetValue(unit, out List<string> ids) || ids.Count == 0) return;
+            string placementId = PlacementOf(unit, info, ids);
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} {placementId} clicked.");
+            AdClicked?.Invoke(placementId);
+        }
+
         private void OnBannerRevenue(string unit, MaxSdkBase.AdInfo info) => OnRevenue(unit, info);
 
         private void OnMRecLoaded(string unit, MaxSdkBase.AdInfo _) => OnAdViewLoaded(unit);

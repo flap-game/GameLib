@@ -75,6 +75,12 @@ namespace FlapGame.GameLib.Ads
         /// account / player id, which its server matches the callback to. Null = none.
         /// </summary>
         public string RewardUserId { get; set; }
+
+        /// <summary>Highest segment key / value MAX accepts (<c>MaxSegment</c>: 0..32000).</summary>
+        public const int MaxSegmentNumber = 32000;
+        private readonly SortedDictionary<int, int[]> segments = new();
+        // Banners / MRECs showing fullscreen content: they count as a fullscreen ad on screen.
+        private readonly HashSet<string> expandedBanners = new();
         private Task initializationTask;
         private string showingFullscreen;
         private float lastFullscreenClosedAt = float.NegativeInfinity;
@@ -182,6 +188,12 @@ namespace FlapGame.GameLib.Ads
                     clicks.AdClicked += clicked;
                     unsubscribe.Add(() => clicks.AdClicked -= clicked);
                 }
+                if (a is IBannerExpansion expansion)
+                {
+                    Action<string, bool> expanded = OnAdapterBannerExpanded;
+                    expansion.BannerExpandedChanged += expanded;
+                    unsubscribe.Add(() => expansion.BannerExpandedChanged -= expanded);
+                }
             }
 
             basePolicy = settings?.Policy?.Clone() ?? new AdsPolicy();
@@ -213,7 +225,11 @@ namespace FlapGame.GameLib.Ads
         public AdLoadStrategy LoadStrategy => loadStrategy;
 
         /// <summary>True while a fullscreen ad is on screen.</summary>
-        public bool IsShowingFullscreen => showingFullscreen != null;
+        /// <summary>
+        /// True while an interstitial, rewarded or app open ad is on screen, or a banner / MREC shows fullscreen content
+        /// (<see cref="IBannerExpansion"/>).
+        /// </summary>
+        public bool IsShowingFullscreen => showingFullscreen != null || expandedBanners.Count > 0;
 
         /// <summary>PlayerPrefs key of the last interstitial's UTC time (unix seconds), for <c>InterstitialIntervalAcrossSessions</c>.</summary>
         public const string LastInterstitialKey = "gamelib.ads.last_interstitial_utc";
@@ -320,6 +336,71 @@ namespace FlapGame.GameLib.Ads
             if (adAudio is not { } audio || adapter is not IAdsAudio target) return;
             try { target.ApplyAdAudio(audio.Volume, audio.Muted); }
             catch (Exception e) { Debug.LogWarning($"{LogPrefix} {adapter.ProviderId} ApplyAdAudio threw: {e.Message}"); }
+        }
+
+        /// <summary>
+        /// Opens the creative debug screen of <paramref name="providerId"/> (<see cref="IAdsCreativeDebugger"/>: AppLovin's
+        /// Creative Debugger), or of the first initialized provider that has one when null. False when none could open.
+        /// </summary>
+        public bool OpenCreativeDebugger(string providerId = null)
+        {
+            string wanted = string.IsNullOrEmpty(providerId) ? null : AdProviderIds.Normalize(providerId);
+            foreach (IAdsProviderAdapter adapter in adapters)
+            {
+                string id = AdProviderIds.Normalize(adapter.ProviderId);
+                if (wanted != null && id != wanted) continue;
+                if (adapter is not IAdsCreativeDebugger debugger || !adapter.IsInitialized) continue;
+                try
+                {
+                    return debugger.OpenCreativeDebugger();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"{LogPrefix} {id} creative debugger failed: {e.Message}");
+                    return false;
+                }
+            }
+            Debug.LogWarning($"{LogPrefix} No creative debugger to open{(wanted != null ? $" for '{wanted}'" : string.Empty)}: " +
+                             "only MAX has one, and it must be initialized.");
+            return false;
+        }
+
+        /// <summary>
+        /// Puts the player in segment <paramref name="key"/> with <paramref name="values"/> (<see cref="IAdSegments"/>: MAX
+        /// segment targeting), or out of it when no value is given. Keys and values 0..<see cref="MaxSegmentNumber"/>; a
+        /// wrong one is ignored with a warning. Reaches SDKs that initialize later too.
+        /// </summary>
+        public void SetAdSegment(int key, params int[] values)
+        {
+            if (key < 0 || key > MaxSegmentNumber)
+            {
+                Debug.LogWarning($"{LogPrefix} Segment key {key} ignored: keys are 0..{MaxSegmentNumber}.");
+                return;
+            }
+            if (values == null || values.Length == 0)
+            {
+                if (!segments.Remove(key)) return;
+            }
+            else
+            {
+                foreach (int v in values)
+                    if (v < 0 || v > MaxSegmentNumber)
+                    {
+                        Debug.LogWarning($"{LogPrefix} Segment {key} ignored: value {v} is not in 0..{MaxSegmentNumber}.");
+                        return;
+                    }
+                segments[key] = (int[])values.Clone();
+            }
+            foreach (IAdsProviderAdapter adapter in adapters) SafeApplySegments(adapter);
+        }
+
+        private void SafeApplySegments(IAdsProviderAdapter adapter)
+        {
+            if (adapter is not IAdSegments target) return;
+            var copy = new Dictionary<int, int[]>(segments.Count);
+            foreach (KeyValuePair<int, int[]> s in segments) copy[s.Key] = (int[])s.Value.Clone();
+            try { target.ApplySegments(copy); }
+            catch (Exception e) { Debug.LogWarning($"{LogPrefix} {adapter.ProviderId} ApplySegments threw: {e.Message}"); }
         }
 
         /// <summary>Removes a rule added with <see cref="AddRule"/>.</summary>
@@ -432,6 +513,7 @@ namespace FlapGame.GameLib.Ads
             try
             {
                 SafeApplyConsent(adapter);
+                if (segments.Count > 0) SafeApplySegments(adapter);
                 AdsProviderContext context = contextFactory(adapter);
                 var assigned = new HashSet<string>();
                 if (context?.Units != null)
@@ -1327,6 +1409,7 @@ namespace FlapGame.GameLib.Ads
             if (string.IsNullOrEmpty(placementId)) return;
             wantedBanners.Remove(placementId); // also cancels a show still waiting for its provider
             bannerProvider.Remove(placementId);
+            SetBannerExpanded(placementId, false);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.HideBanner(placementId);
             CheckBannerHeight(placementId);
         }
@@ -1337,6 +1420,7 @@ namespace FlapGame.GameLib.Ads
             if (string.IsNullOrEmpty(placementId)) return;
             wantedBanners.Remove(placementId);
             bannerProvider.Remove(placementId);
+            SetBannerExpanded(placementId, false);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.DestroyBanner(placementId);
             CheckBannerHeight(placementId);
         }
@@ -1396,12 +1480,31 @@ namespace FlapGame.GameLib.Ads
 
         private void SetShowingFullscreen(string placementId)
         {
-            bool was = showingFullscreen != null;
+            bool was = IsShowingFullscreen;
             showingFullscreen = placementId;
-            bool isNow = placementId != null;
+            RaiseFullscreenShowingIfChanged(was);
+        }
+
+        private void RaiseFullscreenShowingIfChanged(bool was)
+        {
+            bool isNow = IsShowingFullscreen;
             if (was == isNow) return;
             try { FullscreenShowingChanged?.Invoke(isNow); }
             catch (Exception e) { Debug.LogException(e); }
+        }
+
+        private void OnAdapterBannerExpanded(string placementId, bool expanded)
+        {
+            if (disposed || string.IsNullOrEmpty(placementId)) return;
+            SetBannerExpanded(placementId, expanded);
+        }
+
+        private void SetBannerExpanded(string placementId, bool expanded)
+        {
+            bool was = IsShowingFullscreen;
+            if (expanded ? !expandedBanners.Add(placementId) : !expandedBanners.Remove(placementId)) return;
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner '{placementId}' {(expanded ? "opened fullscreen content" : "is back in its slot")}.");
+            RaiseFullscreenShowingIfChanged(was);
         }
 
         private void RaiseShowRequested(string placementId, AdBlockReason reason)

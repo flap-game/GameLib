@@ -50,6 +50,15 @@ namespace FlapGame.GameLib.Ads
                  "instead of an empty slot. A hidden banner stops refreshing until shown. Not for collapsible banners.")]
         public bool PreloadBanner;
 
+        [Tooltip("Banner only, MAX only: an opaque color behind the banner (AppLovin asks for a non-transparent one for " +
+                 "banners to be fully functional). Alpha 0 = not set.")]
+        public Color BannerBackgroundColor = Color.clear;
+
+        [Header("AppLovin MAX only")]
+        [Tooltip("Extra parameters for this placement's MAX ad unit (MaxSdk.Set*ExtraParameter), set before it loads - only " +
+                 "the ones AppLovin documents or support asks for.")]
+        public List<AdKeyValue> MaxExtraParameters = new();
+
         public bool IsBannerLike => Format == AdFormat.Banner || Format == AdFormat.Mrec;
 
         public AdPlacement Clone()
@@ -59,6 +68,10 @@ namespace FlapGame.GameLib.Ads
             if (Routes != null)
                 foreach (AdRoute r in Routes)
                     copy.Routes.Add(r?.Clone());
+            copy.MaxExtraParameters = new List<AdKeyValue>(MaxExtraParameters?.Count ?? 0);
+            if (MaxExtraParameters != null)
+                foreach (AdKeyValue e in MaxExtraParameters)
+                    copy.MaxExtraParameters.Add(e == null ? null : new AdKeyValue(e.Key, e.Value));
             return copy;
         }
     }

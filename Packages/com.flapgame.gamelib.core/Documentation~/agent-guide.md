@@ -189,6 +189,8 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 | Server grants rewards (SSV) | Callback URL in the AdMob / MAX console; `ads.SetRewardUserId(id)` + `ads.ShowRewardedAsync(id, customData, onRewarded)` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Bonus reward offered at level end (rewarded interstitial) | AdMob placement format `RewardedInterstitial` + `ads.ShowRewardedInterstitialAsync(id, askUser: intro popup, onRewarded)`; follows the interstitial rules; never plain `ShowAsync` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Ads follow the game's sound toggle | `ads.SetAdAudio(volume, muted)` at start and on every change (only when the game has a sound setting) | [Ads](../../com.flapgame.gamelib.ads/README.md) |
+| QA: which network / creative a MAX ad came from, report a bad ad | `ads.OpenCreativeDebugger()` from a QA button (also: flip the device face down twice on a fullscreen MAX ad) | [MAX](../../com.flapgame.gamelib.ads.max/README.md) |
+| MAX waterfall / floors per player group (payers, level band) | `ads.SetAdSegment(key, values)` with the numbers used in the MAX dashboard | [MAX](../../com.flapgame.gamelib.ads.max/README.md) |
 | QA: which mediated networks fill | `await ads.OpenDebuggerAsync()` (AdMob Ad Inspector on test devices, MAX Mediation Debugger) from a QA button | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Every-Nth across sessions, QA reset | placement `Persist Request Count`; `ads.ResetPacing()` | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Firebase / AppsFlyer id in game events (`af_firebase_id`) | `services.Resolve<ITrackerIds>().FirebaseAppInstanceId()` / `.AppsFlyerId()` (null until known) | [Core](../README.md) |

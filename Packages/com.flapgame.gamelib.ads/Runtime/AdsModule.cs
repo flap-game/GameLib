@@ -100,13 +100,21 @@ namespace FlapGame.GameLib.Ads
                  "families. Unspecified = the AdMob console's blocking controls decide. AdMob only: MAX has no such setting.")]
         public AdContentRating MaxAdContentRating = AdContentRating.Unspecified;
 
+        [Header("AppLovin MAX")]
+        [Tooltip("Extra parameters for the whole AppLovin SDK (MaxSdk.SetExtraParameter, set before it initializes) - only " +
+                 "the ones AppLovin documents or support asks for. Per ad unit: the placement's Max Extra Parameters.")]
+        public List<AdKeyValue> MaxExtraParameters = new();
+        [Tooltip("AppLovin's Creative Debugger opens on a fullscreen MAX ad after the device is flipped face down twice (SDK " +
+                 "default: on). A QA button opens it with ads.OpenCreativeDebugger().")]
+        public bool MaxCreativeDebuggerOnFlip = true;
+
         [Header("Consent Debug")]
         public ConsentDebugConfig ConsentDebug = new();
 
         [Header("Test Mode")]
         [Tooltip("Enable to show test ads. Add device IDs below (printed in logcat on first run).")]
         public bool TestMode;
-        [Tooltip("Info logs for every ad load, show and retry also in release builds (always on in the Editor and development builds). Warnings and errors are always logged.")]
+        [Tooltip("Info logs for every ad load, show and retry also in release builds (always on in the Editor and development builds). Warnings and errors are always logged. Also turns on the AppLovin SDK's own verbose log (tag AppLovinSdk).")]
         public bool VerboseLogs;
         [Tooltip("AdMob test device IDs.")]
         public List<string> AdMobTestDeviceIds = new();
@@ -117,6 +125,17 @@ namespace FlapGame.GameLib.Ads
         public List<AdPlacement> Placements = new();
 
         public override int Order => GameLibModuleOrder.Ads;
+
+        private static void WarnEmptyKeys(ICollection<GameLibIssue> issues, List<AdKeyValue> parameters, string where)
+        {
+            if (parameters == null) return;
+            foreach (AdKeyValue e in parameters)
+                if (e == null || string.IsNullOrWhiteSpace(e.Key))
+                {
+                    issues.Add(GameLibIssue.Warning($"{where}: a row has no key - it is skipped."));
+                    return;
+                }
+        }
 
         /// <summary>The config row for <paramref name="providerId"/>, or null when the provider is not listed.</summary>
         public AdsProviderConfig FindProvider(string providerId)
@@ -171,6 +190,8 @@ namespace FlapGame.GameLib.Ads
                         if (p.Format == AdFormat.Banner && p.Size is BannerSize.SmallFullWidth or BannerSize.Collapsible
                             && r.EffectiveProviderId == AdProviderIds.Max)
                             issues.Add(GameLibIssue.Warning($"Placement '{p.Id}': MAX has no {p.Size} banner - its route '{r.EffectiveProviderId}' shows a Standard 320x50 one."));
+                        if (r.EffectiveProviderId == AdProviderIds.Max)
+                            WarnEmptyKeys(issues, p.MaxExtraParameters, $"Placement '{p.Id}' Max Extra Parameters");
                         if (p.Format == AdFormat.RewardedInterstitial && r.EffectiveProviderId == AdProviderIds.Max)
                             issues.Add(GameLibIssue.Error($"Placement '{p.Id}': MAX has no rewarded interstitial - route it to AdMob, or use an Interstitial / Rewarded placement on MAX."));
                     }
@@ -183,6 +204,8 @@ namespace FlapGame.GameLib.Ads
                 else if (appOpen.Format != AdFormat.AppOpen)
                     issues.Add(GameLibIssue.Error($"App Open Placement '{AppOpenPlacementId}' has format {appOpen.Format}, expected AppOpen."));
             }
+
+            WarnEmptyKeys(issues, MaxExtraParameters, "Max Extra Parameters");
 
             if (MaxAdContentRating != AdContentRating.Unspecified && FindProvider(AdProviderIds.Max) is { Enabled: true })
                 issues.Add(GameLibIssue.Warning($"Max Ad Content Rating {MaxAdContentRating} applies to AdMob only - MAX has no runtime content rating; " +

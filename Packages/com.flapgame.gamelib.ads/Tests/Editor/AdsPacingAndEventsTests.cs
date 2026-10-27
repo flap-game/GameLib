@@ -315,6 +315,72 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void Segments_ReachEveryAdapter_BeforeInitAndOnChange()
+        {
+            using var ads = Create();
+            ads.SetAdSegment(1, 1);
+            ads.SetAdSegment(2, 5, 6);
+            Assert.That(max.SegmentCalls.Count, Is.EqualTo(2), "set before init: the adapter keeps it for its init");
+            Assert.That(max.SegmentCalls[^1][2], Is.EqualTo(new[] { 5, 6 }));
+
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            Assert.That(max.SegmentCalls.Count, Is.EqualTo(3), "again right before its init");
+
+            UnityEngine.TestTools.LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("value 40000"));
+            ads.SetAdSegment(3, 40000);
+            ads.SetAdSegment(1);
+            Assert.That(max.SegmentCalls.Count, Is.EqualTo(4), "a wrong value changes nothing");
+            Assert.That(max.SegmentCalls[^1].Keys, Is.EqualTo(new[] { 2 }), "no values = out of the segment");
+            Assert.That(adMob.SegmentCalls[^1].Keys, Is.EqualTo(new[] { 2 }));
+        }
+
+        [Test]
+        public void CreativeDebugger_OpensOnTheInitializedProvider()
+        {
+            using var ads = Create();
+            UnityEngine.TestTools.LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("No creative debugger"));
+            Assert.That(ads.OpenCreativeDebugger(), Is.False);
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            Assert.That(((IAdsService)ads).OpenCreativeDebugger("max"), Is.True);
+            Assert.That(max.CreativeDebuggerOpened, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ExpandedBanner_CountsAsFullscreen_UntilItCollapsesOrIsHidden()
+        {
+            using var ads = Create();
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            max.MarkReady("inter");
+            var changes = new List<bool>();
+            ads.FullscreenShowingChanged += changes.Add;
+
+            max.Expand("banner", true);
+            Assert.That(ads.IsShowingFullscreen, Is.True);
+            Assert.That(ads.CanShow("inter", out AdBlockReason reason), Is.False, "no interstitial over it");
+            Assert.That(reason, Is.EqualTo(AdBlockReason.AnotherAdShowing));
+            max.Expand("banner", true);
+            max.Expand("banner", false);
+            Assert.That(ads.IsShowingFullscreen, Is.False);
+            Assert.That(changes, Is.EqualTo(new[] { true, false }), "once each way");
+
+            max.Expand("banner", true);
+            ads.HideBanner("banner");
+            Assert.That(ads.IsShowingFullscreen, Is.False, "a hidden banner shows nothing");
+            Assert.That(ads.CanShow("inter", out _), Is.True);
+        }
+
+        [Test]
+        public void Validate_WarnsOnAnExtraParameterWithoutKey()
+        {
+            settings.MaxExtraParameters.Add(new AdKeyValue("", "1"));
+            settings.Placements.Find(p => p.Id == "inter").MaxExtraParameters.Add(new AdKeyValue(" ", "x"));
+            var issues = new List<GameLibIssue>();
+            settings.Validate(issues);
+            Assert.That(issues, Has.Some.Matches<GameLibIssue>(i => i.Message.StartsWith("Max Extra Parameters: a row has no key")));
+            Assert.That(issues, Has.Some.Matches<GameLibIssue>(i => i.Message.StartsWith("Placement 'inter' Max Extra Parameters")));
+        }
+
+        [Test]
         public void Validate_RejectsARewardedInterstitialOnMax()
         {
             settings.Placements.Find(p => p.Id == "ri").Routes.Add(new AdRoute("max", "m3", "mi3"));

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.10] - 2026-10-27
+- Creative Debugger (`MaxSdk.ShowCreativeDebugger`, flip-to-open from `MaxCreativeDebuggerOnFlip`), segments
+  (`SetSegmentCollection`), SDK-wide and per ad unit extra parameters, banner background color, banner / MREC
+  expanded / collapsed events. `VerboseLogs` also turns on `MaxSdk.SetVerboseLogging`.
+- Fix: ad clicks are reported (`IAdClickSource`, `OnAdClickedEvent` on every format). Before, coming back from a click on a
+  MAX banner or MREC showed an app open ad - against the app open rule (a trip for an ad click is not a return).
+
 ## [0.8.7] - 2026-10-27
 - `IRewardVerification`: `MaxSdk.SetUserId` and the rewarded show's `customData` (S2S reward callback).
 
