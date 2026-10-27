@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.11] - 2026-10-27
+- Agent guide: "Cloud Build only" setup (core + `build`, no modules, no Setup; GameHub presets for the post-build script and
+  the Pre-Export Method).
+
 ## [0.8.9] - 2026-10-27
 - Setup: optional SDKs per module (`GameLibModuleInfo.OptionalSdks`), installed / removed one by one; CLI
   `-gamelibOptional key,key` (`InstallModules(ids, optional)`), and the Doctor report lists the installed ones. Ads -
