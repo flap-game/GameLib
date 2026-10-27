@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.appsflyer",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "displayName": "GameLib AppsFlyer",
   "description": "AppsFlyer attribution as an analytics sink: ad revenue, purchases (manual af_purchase or Purchase Connector), DMA consent, iOS App Tracking Transparency before start.",
   "unity": "6000.4",
@@ -16,6 +16,6 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.2"
+    "com.flapgame.gamelib.core": "0.8.3"
   }
 }

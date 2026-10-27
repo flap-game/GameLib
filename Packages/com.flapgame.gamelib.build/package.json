@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.build",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "displayName": "GameLib Build",
   "description": "Unity Cloud Build hooks: Unity splash off, App Store upload script for iOS.",
   "unity": "6000.4",
@@ -16,6 +16,6 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.2"
+    "com.flapgame.gamelib.core": "0.8.3"
   }
 }

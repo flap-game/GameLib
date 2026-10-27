@@ -356,6 +356,7 @@ namespace FlapGame.GameLib.Ads
             Value     = impression.Value,
             Currency  = impression.Currency,
             Precision = impression.Precision,
+            CountryCode = impression.CountryCode,
         };
 
         // Firebase's documented ad_platform values.

@@ -27,6 +27,11 @@ namespace FlapGame.GameLib.Analytics.Firebase
                  "'in_app_purchase' on Android/iOS, so turning this on counts revenue twice unless auto-collection is off.")]
         public bool LogStandardPurchaseEvent;
 
+        [Tooltip("Also log ad_impression for ads AdMob serves. OFF by default: with the AdMob app linked to Firebase, the " +
+                 "Firebase SDK logs ad_impression for AdMob itself, and a second event counts the revenue twice. Turn on only " +
+                 "when the AdMob app is not linked. MAX / ironSource impressions are always logged.")]
+        public bool LogAdMobImpressions;
+
         [Tooltip("Send Google consent mode (analytics_storage, ad_storage, ad_user_data, ad_personalization) from the CMP answer.")]
         public bool FollowConsent = true;
 
@@ -41,7 +46,7 @@ namespace FlapGame.GameLib.Analytics.Firebase
                 return default;
             }
 
-            var buffer = new BufferedAnalyticsSink<FirebaseAnalyticsSink>(new FirebaseAnalyticsSink(backend, LogStandardPurchaseEvent), LogTag);
+            var buffer = new BufferedAnalyticsSink<FirebaseAnalyticsSink>(new FirebaseAnalyticsSink(backend, LogStandardPurchaseEvent, logAdMobImpressions: LogAdMobImpressions), LogTag);
             services.Resolve<IAnalyticsSinkRegistry>().AddSink(buffer);
 
             if (FollowConsent && services.TryResolve(out IConsentState consent))

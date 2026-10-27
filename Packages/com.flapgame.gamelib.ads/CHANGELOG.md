@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.3] - 2026-10-27
+- `AdImpression.CountryCode` and `AdRevenue.CountryCode` filled from the ad SDK (MAX), for AppsFlyer's `country`.
+
 ## [0.8.2] - 2026-10-27
 - Events for the game's own ad analytics on `IAdsService`: `ShowRequested (placement, reason)` once per `ShowAsync`
   (`AdBlockReason.None` = sent to the SDK), `PlacementLoaded (placement, provider)`, `PlacementLoadFailed (placement,

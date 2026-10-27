@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.3] - 2026-10-27
+- AdMob-served impressions no longer log `ad_impression` (Firebase's guide: a linked AdMob app is measured by the Firebase
+  SDK itself; the manual event is for other platforms such as MAX and ironSource). This removes the double count in GA4.
+  **Log AdMob Impressions** turns them back on for an AdMob app that is not linked to Firebase.
+
 ## [0.8.2] - 2026-10-27
 - The Firebase app instance id goes to `ITrackerIds` (`TrackerIds.Firebase`) once Firebase runs.
   `IFirebaseAnalyticsBackend.GetAppInstanceIdAsync`.

@@ -9,7 +9,10 @@ namespace FlapGame.GameLib.Analytics.Firebase
     /// <list type="bullet">
     /// <item>Events, parameters and user properties are fitted to Firebase limits by <see cref="FirebaseAnalyticsSanitizer"/>.</item>
     /// <item><see cref="TrackAdRevenue"/> logs GA4's <c>ad_impression</c> (<c>ad_platform</c>, <c>ad_source</c>,
-    /// <c>ad_format</c>, <c>ad_unit_name</c>, <c>value</c>, <c>currency</c>) plus <c>placement</c>.</item>
+    /// <c>ad_format</c>, <c>ad_unit_name</c>, <c>value</c>, <c>currency</c>) plus <c>placement</c>, for the platforms
+    /// Firebase does not measure itself. AdMob impressions are skipped unless <see cref="LogAdMobImpressions"/>: with the
+    /// AdMob app linked to Firebase, the Firebase SDK logs their <c>ad_impression</c> automatically, and a second one
+    /// would count the revenue twice.</item>
     /// <item><see cref="TrackPurchase"/> logs the standard <c>purchase</c> only when <see cref="LogStandardPurchaseEvent"/>
     /// is on: on device Firebase already auto-logs <c>in_app_purchase</c> for store purchases, so both would count the same
     /// revenue twice in GA4.</item>
@@ -23,14 +26,22 @@ namespace FlapGame.GameLib.Analytics.Firebase
         private readonly IFirebaseAnalyticsBackend backend;
         private readonly FirebaseAnalyticsSanitizer sanitizer;
 
-        public FirebaseAnalyticsSink(IFirebaseAnalyticsBackend backend, bool logStandardPurchaseEvent, FirebaseAnalyticsSanitizer sanitizer = null)
+        public FirebaseAnalyticsSink(IFirebaseAnalyticsBackend backend, bool logStandardPurchaseEvent, FirebaseAnalyticsSanitizer sanitizer = null,
+                                     bool logAdMobImpressions = false)
         {
             this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
             LogStandardPurchaseEvent = logStandardPurchaseEvent;
+            LogAdMobImpressions = logAdMobImpressions;
             this.sanitizer = sanitizer ?? new FirebaseAnalyticsSanitizer();
         }
 
         public bool LogStandardPurchaseEvent { get; }
+
+        /// <summary>Also log <c>ad_impression</c> for AdMob-served ads (only when the AdMob app is NOT linked to Firebase).</summary>
+        public bool LogAdMobImpressions { get; }
+
+        /// <summary><see cref="AdRevenue.Platform"/> of AdMob-served ads.</summary>
+        public const string AdMobPlatform = "AdMob";
 
         public void Track(AnalyticsEvent analyticsEvent)
         {
@@ -48,7 +59,9 @@ namespace FlapGame.GameLib.Analytics.Firebase
 
         public void TrackAdRevenue(AdRevenue revenue)
         {
-            if (revenue != null) Track(BuildAdImpression(revenue));
+            if (revenue == null) return;
+            if (!LogAdMobImpressions && string.Equals(revenue.Platform, AdMobPlatform, StringComparison.OrdinalIgnoreCase)) return;
+            Track(BuildAdImpression(revenue));
         }
 
         public void TrackPurchase(PurchaseRecord purchase)

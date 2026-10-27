@@ -202,6 +202,8 @@ both logs, check that there is no `error CS`.
 Doctor does **not** check:
 - the MAX SDK key;
 - the AdMob app ids;
+- that the AdMob app is linked to Firebase (GameLib leaves AdMob's `ad_impression` to Firebase; when it is not linked,
+  turn on `Log AdMob Impressions` on the Firebase Analytics module, or AdMob revenue never reaches GA4);
 - that ad unit ids and product ids exist in the consoles;
 - anything that only shows on a device: ads filling, the consent form, the ATT prompt, purchases, revenue in the
   dashboards.

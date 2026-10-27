@@ -10,7 +10,7 @@ files in place - see the [Firebase package README](../com.flapgame.gamelib.fireb
 |---|---|
 | `analytics.Track("level_complete", ("level", 3))` | the event as is, fitted to Firebase limits (below) |
 | `SetUserId` / `SetUserProperty` | `SetUserId` / `SetUserProperty` (name ≤ 24, value ≤ 36 chars) |
-| `TrackAdRevenue` (sent by the Ads module for every paid impression) | `ad_impression`: `ad_platform`, `ad_source`, `ad_format`, `ad_unit_name`, `value`, `currency`, plus `placement` and `precision` |
+| `TrackAdRevenue` (sent by the Ads module for every paid impression) | `ad_impression`: `ad_platform`, `ad_source`, `ad_format`, `ad_unit_name`, `value`, `currency`, plus `placement` and `precision` - not for AdMob-served ads, see *Ad revenue* |
 | `TrackPurchase` (sent by the IAP module) | nothing by default - see *Purchases* |
 | CMP answer (`IConsentState`) | consent mode v2: `analytics_storage`, `ad_storage`, `ad_user_data`, `ad_personalization` |
 
@@ -25,6 +25,14 @@ The sink is added at once and Firebase starts in the background, so bootstrap ne
 meanwhile are buffered (up to 200, identity first) and sent once Firebase is up. Past **Init Timeout Seconds**
 (default 30) it logs one warning and keeps buffering; if Firebase cannot start at all, the sink turns itself off for the
 session with one log line.
+
+## Ad revenue
+
+GameLib logs `ad_impression` with the parameters of
+[Firebase's guide](https://firebase.google.com/docs/analytics/measure-ad-revenue) for MAX (`ad_platform` `AppLovin`,
+`currency` `USD`) and ironSource. **AdMob-served ads are skipped**: link the AdMob app to Firebase (AdMob > App
+settings > Linked services) and the Firebase SDK logs their `ad_impression` itself - a second, manual one would count
+the revenue twice. Turn **Log AdMob Impressions** on only when the AdMob app is not linked.
 
 ## Purchases
 

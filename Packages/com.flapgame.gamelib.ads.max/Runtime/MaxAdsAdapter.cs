@@ -36,6 +36,7 @@ namespace FlapGame.GameLib.Ads
         private const double MaxRetryDelaySeconds = 60d;
         // MAX documents impression-level revenue in USD; MaxSdkBase.AdInfo carries no currency field.
         private const string RevenueCurrency = "USD";
+        private string countryCode;
 
         // Placement id -> assignment (placement + MAX unit id for this platform).
         private readonly Dictionary<string, AdUnitAssignment> assigned = new();
@@ -149,6 +150,7 @@ namespace FlapGame.GameLib.Ads
                 // an SDK whose every load fails.
                 void OnSdkInit(MaxSdkBase.SdkConfiguration config)
                 {
+                    if (config != null) countryCode = config.CountryCode;
                     if (config != null && config.IsSuccessfullyInitialized) tcs.TrySetResult(true);
                     else tcs.TrySetException(new InvalidOperationException("MaxSdk.InitializeSdk reported IsSuccessfullyInitialized = false"));
                 }
@@ -166,6 +168,7 @@ namespace FlapGame.GameLib.Ads
             }
 
             if (disposed) throw new ObjectDisposedException(nameof(MaxAdsAdapter));
+            if (string.IsNullOrEmpty(countryCode)) countryCode = SafeCountryCode(); // MAX was already initialized
             initialized = true;
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Initialized with {assigned.Count} placement(s) on {unitFormats.Count} unit(s).");
 
@@ -696,7 +699,18 @@ namespace FlapGame.GameLib.Ads
 
             AdFormat format = assigned.TryGetValue(placementId, out AdUnitAssignment a) ? a.Format : unitFormats[unit];
             ImpressionPaid?.Invoke(new AdImpression(placementId, AdProviderIds.Max, format, unit, info.NetworkName,
-                                                    info.Revenue, RevenueCurrency, info.RevenuePrecision));
+                                                    info.Revenue, RevenueCurrency, info.RevenuePrecision, countryCode));
+        }
+
+        // AppsFlyer's ad revenue 'country' (AdRevenueScheme.COUNTRY), from the MAX SDK configuration.
+        private static string SafeCountryCode()
+        {
+            try { return MaxSdk.GetSdkConfiguration()?.CountryCode; }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Country code unavailable: {e.Message}");
+                return null;
+            }
         }
 
         private void OnAdViewLoaded(string unit)

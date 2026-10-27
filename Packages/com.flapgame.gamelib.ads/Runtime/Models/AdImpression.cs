@@ -21,9 +21,11 @@ namespace FlapGame.GameLib.Ads
         public readonly string Currency;
         /// <summary>SDK precision label ("exact", "estimated", "publisher_defined", ...), when reported.</summary>
         public readonly string Precision;
+        /// <summary>The user's two-letter country code (e.g. "US"), when the SDK reports it (MAX does).</summary>
+        public readonly string CountryCode;
 
         public AdImpression(string placementId, string providerId, AdFormat format, string adUnitId,
-                            string adSource, double value, string currency, string precision = null)
+                            string adSource, double value, string currency, string precision = null, string countryCode = null)
         {
             PlacementId = placementId;
             ProviderId  = providerId;
@@ -33,6 +35,7 @@ namespace FlapGame.GameLib.Ads
             Value       = value;
             Currency    = string.IsNullOrEmpty(currency) ? "USD" : currency;
             Precision   = precision;
+            CountryCode = string.IsNullOrWhiteSpace(countryCode) ? null : countryCode.Trim().ToUpperInvariant();
         }
     }
 }

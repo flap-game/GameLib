@@ -6,7 +6,7 @@ The Editor simulates the change so an icon picker can be tested in Play mode.
 Install from **GameLib > Setup > App Icon**, or add to `Packages/manifest.json` (together with core, same tag):
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.appicon#v0.8.2
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.appicon#v0.8.3
 ```
 
 ## Setup

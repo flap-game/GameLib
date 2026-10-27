@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -165,6 +166,21 @@ namespace FlapGame.GameLib.Analytics.Firebase.Tests
             Assert.That(p["value"], Is.EqualTo(0.0123));
             Assert.That(p["currency"], Is.EqualTo("USD"));
             Assert.That(p["placement"], Is.EqualTo("revive"));
+        }
+
+        [Test]
+        public void AdMobImpressions_AreLeftToFirebase_UnlessTurnedOn()
+        {
+            var admob = new AdRevenue { Platform = "AdMob", Network = "AdMob Network", Format = AdFormatKind.Banner, Value = 0.001, Currency = "USD" };
+
+            var backend = new FakeBackend();
+            Sink(backend).TrackAdRevenue(admob);
+            Assert.That(backend.Events, Is.Empty, "a linked AdMob app logs ad_impression itself: a second one counts revenue twice");
+
+            var notLinked = new FakeBackend();
+            new FirebaseAnalyticsSink(notLinked, false, new FirebaseAnalyticsSanitizer(warnings.Add), logAdMobImpressions: true).TrackAdRevenue(admob);
+            Assert.That(notLinked.Events.Single().Name, Is.EqualTo("ad_impression"));
+            Assert.That(notLinked.Events.Single().Parameters["ad_platform"], Is.EqualTo("AdMob"));
         }
 
         [Test]

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.3] - 2026-10-27
+- Paid impressions carry the user's country code (`SdkConfiguration.CountryCode`), sent to AppsFlyer as `country`
+  (`AdRevenueScheme.COUNTRY`) - it was always empty before.
+
 ## [0.8.0] - 2026-10-27
 - Banner and MREC heights (`IBannerMetrics`): the layout above the banner and `BannerHeightChanged` now work with MAX (MREC 250 dp, adaptive from MAX, else 50 / 90 dp).
 - `BannerPosition.Custom` (MREC or banner at `AdPlacement.CustomCenter`).

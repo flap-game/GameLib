@@ -727,6 +727,10 @@ namespace FlapGame.GameLib.Ads.Tests
             Assert.That(r.Value, Is.EqualTo(0.0123));
             Assert.That(r.Currency, Is.EqualTo("USD"));
             Assert.That(r.Precision, Is.EqualTo("exact"));
+            Assert.That(r.CountryCode, Is.Null);
+
+            var withCountry = new AdImpression("inter", "max", AdFormat.Interstitial, "m1", "x", 0.01, "USD", null, " vn ");
+            Assert.That(AdsModule.ToAdRevenue(withCountry).CountryCode, Is.EqualTo("VN"), "AppsFlyer's 'country': two letters, upper case");
         }
 
         [Test]
