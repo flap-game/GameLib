@@ -4,6 +4,8 @@ Unity Cloud Build hooks for a GameLib game:
 
 - **Unity splash screen off** (`HideUnitySplashScreen`, on by default).
 - **App Store upload.** A post-build script that uploads the IPA of an iOS build to App Store Connect with `altool`.
+- **Pod install guard.** An iOS build on macOS fails right away when `pod install` did not finish
+  (`IosPodIntegrationGuard`), instead of ~5 minutes later in an unrelated Objective-C compile error. Nothing to set up.
 
 Editor only: nothing of this package goes into the player. The version name and build numbers are not touched here:
 the PO sets them on GameHub.
@@ -51,5 +53,8 @@ minutes later.
 
 - Core's build validator (`GameLibBuildValidator`) also runs in Cloud Build. A GameLib configuration error, such as a
   missing SDK key, fails the build there, the same as locally.
+- The pod install guard checks for `Pods/Pods.xcodeproj` (written last by `pod install`). It skips Windows/Linux exports
+  and EDM4U set to no CocoaPods integration. On a failure, search the log upwards for `[!] Error installing`; a
+  `Could not resolve host: github.com` there is a transient Cloud Build network issue, retry the build.
 - `PreExport` takes no parameter: Cloud Build's `BuildManifestObject` type lives in the project, where this package
   cannot see it.
