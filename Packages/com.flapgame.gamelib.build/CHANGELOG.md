@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - Unreleased
+## [0.8.13] - 2026-10-28
 - iOS pod install guard (`IosPodIntegrationGuard`): a build on macOS whose `pod install` did not finish fails right away
   with the cause, instead of later in fastlane with a misleading Objective-C compile error.
 
