@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.crashlytics",
-  "version": "0.8.11",
+  "version": "0.8.12",
   "displayName": "GameLib Crashlytics",
   "description": "Firebase Crashlytics as ICrashReporter, with analytics events as breadcrumbs and the shared user id.",
   "unity": "6000.4",
@@ -16,7 +16,7 @@
     "gamelib"
   ],
   "dependencies": {
-    "com.flapgame.gamelib.core": "0.8.11",
-    "com.flapgame.gamelib.firebase": "0.8.11"
+    "com.flapgame.gamelib.core": "0.8.12",
+    "com.flapgame.gamelib.firebase": "0.8.12"
   }
 }
