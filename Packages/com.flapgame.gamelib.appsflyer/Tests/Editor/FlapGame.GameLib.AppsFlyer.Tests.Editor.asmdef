@@ -3,6 +3,7 @@
   "rootNamespace": "FlapGame.GameLib",
   "references": [
     "FlapGame.GameLib.AppsFlyer",
+    "FlapGame.GameLib.AppsFlyer.Editor",
     "FlapGame.GameLib.Core",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"

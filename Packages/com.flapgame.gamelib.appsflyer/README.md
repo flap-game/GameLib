@@ -8,6 +8,10 @@ Plugin 7.0.3 leaves the Purchase Connector out of its Android build (AppsFlyer's
 GameLib detects that at launch: with *Purchase Mode* = `PurchaseConnector`, Android purchases are logged as `af_purchase`
 instead (a warning says so), and iOS keeps the connector. Purchase revenue is never lost or counted twice.
 
+On iOS the plugin embeds AppsFlyerLib / PurchaseConnector as if EDM4U resolved them through Swift Package Manager
+(EDM4U 1.2.187+). When they come from CocoaPods instead, `AppsFlyerIosEmbedFix` removes those embeds after the build,
+so the archive does not fail on a missing `PurchaseConnector.framework`. Nothing to set up.
+
 ## Configure (AppsFlyerModule)
 
 | Field | |
