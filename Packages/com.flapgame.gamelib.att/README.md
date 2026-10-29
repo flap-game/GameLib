@@ -3,6 +3,10 @@
 The iOS App Tracking Transparency (ATT) prompt. Install from **GameLib > Setup > App Tracking Transparency** (AppsFlyer
 adds it too). Android and the Editor have no ATT: the status is `NotApplicable`, nothing is shown, nothing waits.
 
+A game restored from an Android build, or one whose ads / MMP SDKs (which used to show the prompt) were removed, has no
+ATT at all: no prompt shows on iOS and nothing reports an error. Install this module and list `AttModule` in
+GameLibSettings: without it Info.plist gets no `NSUserTrackingUsageDescription` either.
+
 ## Configure (AttModule)
 
 | Field | |

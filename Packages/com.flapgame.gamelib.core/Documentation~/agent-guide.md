@@ -51,6 +51,10 @@ Check these, then ask the human everything missing in **one** message:
 | AppsFlyer | Dev key and the numeric iOS app id. |
 | ATT | The prompt sentence (`NSUserTrackingUsageDescription`). |
 
+**An iOS game with no ATT of its own:** a game restored from an Android build, or one whose ads / MMP SDKs were
+removed, has no ATT call and no `NSUserTrackingUsageDescription`. On iOS no prompt shows and nothing reports an error.
+Add the `att` module, make sure `AttModule` is listed in GameLibSettings, and ask for the prompt sentence.
+
 The Unity version must be 6000.4 or newer (`ProjectSettings/ProjectVersion.txt`).
 
 **Cloud Build only** (the human wants no ads, no tracking, only Unity Cloud Build): ask for nothing in the table above.
