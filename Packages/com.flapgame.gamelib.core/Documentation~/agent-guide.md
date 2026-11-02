@@ -17,6 +17,12 @@ the tag: `https://github.com/flap-game/GameLib/blob/v<version>/Packages/com.flap
   show it as missing.
 - **Ask for the game's interstitial rule.** GameLib only ships the time-based part (`AdsModule.Policy`). Conditions such
   as "from level 2" or "every win and every loss" are per game, live in game code, and must come from the human.
+- **Every game gets the `build` module and the App Store upload script.** All of the human's games build on Unity
+  Cloud Build, and the iOS targets run `BuildScripts/post-build-upload-appstore.bash` after the build. Add `build` to
+  the module list even when the human does not name it. Then run **GameLib > Cloud Build > Install App Store Upload
+  Script** (or `FlapGame.GameLib.Build.CloudBuildScripts.InstallAppStoreUpload(<project root>)` through `execute_code`), and commit
+  `BuildScripts/` and `.gitattributes` to **every branch Cloud Build builds**. When the file is missing, Cloud Build
+  stops at its config check with "Post-build script: File ... không có trên branch ...".
 - Install through `GameLibCli` or GameLib Setup only, never by hand:
   - no SDK installed as a `.unitypackage`;
   - no scripting define symbols — GameLib turns its SDK code on with asmdef `versionDefines`;
@@ -42,7 +48,7 @@ Check these, then ask the human everything missing in **one** message:
 
 | Need | For |
 |---|---|
-| Which modules | `haptics`, `save`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `rate`, `appicon`, `build`. The ids are in `GameLibModuleCatalog`. |
+| Which modules | `haptics`, `save`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `rate`, `appicon`, `build`. The ids are in `GameLibModuleCatalog`. `build` is always in (see Rules); do not ask about it. |
 | Placements | Id, format, and the Android and iOS ad unit id per network. Plus which placement is the app open one. |
 | Interstitial rule | The game's own conditions (see Rules). |
 | MAX SDK key / AdMob app ids | AppLovin Integration Manager / Google Mobile Ads settings. |
@@ -241,6 +247,7 @@ Say so in your report instead of calling the work verified. The human tests on a
 | A module does nothing, Doctor warns "never starts" | Its asset is not in `GameLibSettings`. Run Install for that module again. |
 | Firebase modules silent, one warning in the Editor | The config file for the build target is missing. |
 | `executeMethod` class not found | The project does not compile, or core is not installed. |
+| Cloud Build fails in seconds: "Post-build script: File `BuildScripts/post-build-upload-appstore.bash` không có trên branch ..." | The upload script was never committed on that branch. Install it (see Rules), commit, push, build again. |
 
 ## For the game's CLAUDE.md
 
