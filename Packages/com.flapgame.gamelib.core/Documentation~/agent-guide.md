@@ -18,7 +18,8 @@ the tag: `https://github.com/flap-game/GameLib/blob/v<version>/Packages/com.flap
 - **Ask for the game's interstitial rule.** GameLib only ships the time-based part (`AdsModule.Policy`). Conditions such
   as "from level 2" or "every win and every loss" are per game, live in game code, and must come from the human.
 - **Every game gets the `build` module and the App Store upload script.** All of the human's games build on Unity
-  Cloud Build, and the iOS targets run `BuildScripts/post-build-upload-appstore.bash` after the build. Add `build` to
+  Cloud Build: every target calls the Pre-Export method `GameLibCloudBuild.PreExport` (in the `build` module), and the
+  iOS targets run `BuildScripts/post-build-upload-appstore.bash` after the build. Add `build` to
   the module list even when the human does not name it. Then run **GameLib > Cloud Build > Install App Store Upload
   Script** (or `FlapGame.GameLib.Build.CloudBuildScripts.InstallAppStoreUpload(<project root>)` through `execute_code`), and commit
   `BuildScripts/` and `.gitattributes` to **every branch Cloud Build builds**. When the file is missing, Cloud Build
@@ -248,6 +249,7 @@ Say so in your report instead of calling the work verified. The human tests on a
 | Firebase modules silent, one warning in the Editor | The config file for the build target is missing. |
 | `executeMethod` class not found | The project does not compile, or core is not installed. |
 | Cloud Build fails in seconds: "Post-build script: File `BuildScripts/post-build-upload-appstore.bash` không có trên branch ..." | The upload script was never committed on that branch. Install it (see Rules), commit, push, build again. |
+| Cloud Build: `export method 'GameLibCloudBuild.PreExport' not found, aborting` | The `build` module is not installed on that branch. Install it with `-gamelibModules build`, commit `Packages/manifest.json` and `packages-lock.json`, push. |
 
 ## For the game's CLAUDE.md
 
