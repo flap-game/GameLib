@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.8.14] - Unreleased
+## [0.8.14] - 2026-11-03
 - An iOS build with the Editor compiled for another target fails instead of silently shipping without
   AppTrackingTransparency and NSUserTrackingUsageDescription.
 
