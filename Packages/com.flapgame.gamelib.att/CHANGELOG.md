@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.14] - Unreleased
+- An iOS build with the Editor compiled for another target fails instead of silently shipping without
+  AppTrackingTransparency and NSUserTrackingUsageDescription.
+
 ## [0.5.0] - 2026-10-26
 - The prompt waits for the app to be active however long it takes (it used to give up after 10 s and lose the prompt for the launch).
 - Info.plist gets NSUserTrackingUsageDescription only when AttModule is listed in GameLibSettings.

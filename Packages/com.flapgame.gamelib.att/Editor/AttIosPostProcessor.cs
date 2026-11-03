@@ -45,6 +45,12 @@ namespace FlapGame.GameLib.Att.Editor
             if (!plist.root.values.ContainsKey(UsageDescriptionKey))
                 plist.root.SetString(UsageDescriptionKey, description);
             plist.WriteToFile(plistPath);
+#else
+            // An iOS player with the Editor compiled for another target: the step above is compiled away, and iOS kills
+            // the app when the prompt shows. Fail loudly instead (GameLib Build's IosEditorTargetGuard stops it earlier).
+            throw new BuildFailedException("[GameLib][Att] iOS build with the Editor compiled for " +
+                                           EditorUserBuildSettings.activeBuildTarget + ": AppTrackingTransparency and " +
+                                           UsageDescriptionKey + " were NOT written. Switch the active build target to iOS, then build again.");
 #endif
         }
 
