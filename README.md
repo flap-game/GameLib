@@ -78,3 +78,7 @@ This repository is itself a Unity 6000.4 project; packages live embedded in `Pac
 - `Tools/new-module.ps1 -Module <name> -DisplayName <text> [-DependsOn <module>...]` scaffolds a package.
 - `Tools/release.ps1 -Version X.Y.Z` bumps every package; commit, then `-Tag` creates `vX.Y.Z` plus one
   `<package>/X.Y.Z` tag per package.
+- `python3 Tools/gamelib-pin.py <sha|tag> --project <game>` moves every GameLib line of a game's manifest to one
+  ref and drops their `packages-lock.json` entries so Unity really re-resolves (`--show` lists the refs in use).
+  Use it to test an unreleased fix in a game (stdlib only — the Mac can run it from a raw download); a commit pin
+  is for testing, pin the release tag before committing the game.
