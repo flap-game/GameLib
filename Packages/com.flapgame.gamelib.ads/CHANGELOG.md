@@ -1,6 +1,15 @@
 # Changelog
 
 ## [0.9.0] - 2026-11-06
+- Fix: an app open ad could show on the way back from an ad click. The SDK's click callback reaches the main thread
+  only after the resume when the click leaves the app at once (a store page, a system "open another app" prompt), so the
+  return looked like a real one. `AppOpenLauncher` now waits `LateClickGraceSeconds` (0.5 s) on a return and shows
+  nothing when an ad click arrives in that time.
+- Fix: a banner / MREC whose tap-opened page never got its close from the SDK (seen on Android when an "open another
+  app" system prompt was dismissed) kept counting as a fullscreen ad for the rest of the session - no app open ad on any
+  later return, interstitials refused with `AnotherAdShowing`. Back in the app, such a banner is back in its slot
+  (`CompositeAdsService.ReleaseExpandedBannersOnReturn`, called by `AdsModule` on every return, and once more 1 s later
+  unless the app paused again: the SDK's "opened" for the click that left the app can land just after the resume).
 - `AdPlacement.NativeBannerHeight` for a `NativeBanner`: `Adaptive` (default) is as tall as an anchored adaptive banner
   on the device (`BannerLayout.AdaptiveBannerHeightDp`, Google's rule, shared with the AdMob banner height estimate);
   `Smart` is AdMob's former smart banner height (`BannerLayout.SmartBannerHeightDp`: 32 dp on a phone in landscape,

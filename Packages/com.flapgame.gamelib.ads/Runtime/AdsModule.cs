@@ -699,6 +699,8 @@ namespace FlapGame.GameLib.Ads
             private readonly IAdsPlanSource planSource;
             private readonly IAnalytics analytics;
             private IDisposable fullscreenScope;
+            private int pauses;
+            private bool disposed;
 
             public Wiring(CompositeAdsService ads, IEntitlements entitlements, IAppLifecycle lifecycle, IAdsPlanSource planSource, IAnalytics analytics)
             {
@@ -715,8 +717,35 @@ namespace FlapGame.GameLib.Ads
                     ads.FullscreenShowingChanged += OnFullscreenShowingChanged;
                     ads.AdClicked += OnAdClicked;
                     ads.DebuggerOpening += OnDebuggerOpening;
+                    lifecycle.Resumed += OnResumed;
+                    lifecycle.PauseChanged += OnPauseChanged;
                 }
             }
+
+            // After the return was judged (AppResumeInfo is fixed before Resumed is raised): a banner page left open
+            // with no close from the SDK must not keep the session in "fullscreen ad showing".
+            // Once more a moment later: the SDK's "opened" for the click that left the app is marshalled to the main thread
+            // and can land just after the resume (measured: 0.09 s), which would mark the banner open again. Skipped when
+            // the app paused again meanwhile - a page really opening (browser, store, in-app AdActivity) pauses it.
+            private void OnResumed(AppResumeInfo info)
+            {
+                ads.ReleaseExpandedBannersOnReturn();
+                _ = ReleaseLateOpenAsync(pauses);
+            }
+
+            private void OnPauseChanged(bool paused)
+            {
+                if (paused) pauses++;
+            }
+
+            private async Task ReleaseLateOpenAsync(int pausesAtResume)
+            {
+                await Task.Delay(LateOpenReleaseMilliseconds);
+                if (disposed || pauses != pausesAtResume || lifecycle.IsPaused) return;
+                ads.ReleaseExpandedBannersOnReturn();
+            }
+
+            private const int LateOpenReleaseMilliseconds = 1000;
 
             private void OnEntitlementChanged(string key, bool owned)
             {
@@ -754,6 +783,12 @@ namespace FlapGame.GameLib.Ads
                 ads.FullscreenShowingChanged -= OnFullscreenShowingChanged;
                 ads.AdClicked -= OnAdClicked;
                 ads.DebuggerOpening -= OnDebuggerOpening;
+                disposed = true;
+                if (lifecycle != null)
+                {
+                    lifecycle.Resumed -= OnResumed;
+                    lifecycle.PauseChanged -= OnPauseChanged;
+                }
                 fullscreenScope?.Dispose();
                 fullscreenScope = null;
             }

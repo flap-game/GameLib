@@ -370,6 +370,26 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void ExpandedBanner_WithNoCloseFromTheSdk_IsReleasedOnReturn()
+        {
+            using var ads = Create();
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            max.MarkReady("inter");
+            var changes = new List<bool>();
+            ads.FullscreenShowingChanged += changes.Add;
+
+            max.Expand("banner", true); // a tap opened the ad's page; the SDK never sends the close
+            ads.ReleaseExpandedBannersOnReturn();
+            Assert.That(ads.IsShowingFullscreen, Is.False);
+            Assert.That(ads.CanShow("inter", out _), Is.True, "no AnotherAdShowing for the rest of the session");
+
+            max.Expand("banner", false); // a late close changes nothing
+            max.Expand("banner", true);  // the next click's page counts again
+            Assert.That(ads.IsShowingFullscreen, Is.True);
+            Assert.That(changes, Is.EqualTo(new[] { true, false, true }));
+        }
+
+        [Test]
         public void Validate_WarnsOnAnExtraParameterWithoutKey()
         {
             settings.MaxExtraParameters.Add(new AdKeyValue("", "1"));

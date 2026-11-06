@@ -1540,6 +1540,23 @@ namespace FlapGame.GameLib.Ads
             SetBannerExpanded(placementId, expanded);
         }
 
+        /// <summary>
+        /// (0.9.0) Called when the player is back in the app: a banner still counted as showing fullscreen content (the
+        /// page a tap opened) is back in its slot - that page was left to come back. Some SDK paths never send the close
+        /// (measured on Android: an MREC click whose "open another app" system prompt was dismissed), and the banner then
+        /// counted as a fullscreen ad for the rest of the session: no app open ad on any later return, and interstitials
+        /// refused with AnotherAdShowing. The return itself was already judged (from the ad) before this runs.
+        /// </summary>
+        public void ReleaseExpandedBannersOnReturn()
+        {
+            if (disposed || expandedBanners.Count == 0) return;
+            foreach (string placementId in new List<string>(expandedBanners))
+            {
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner '{placementId}': back in the app with no close from the SDK.");
+                SetBannerExpanded(placementId, false);
+            }
+        }
+
         private void SetBannerExpanded(string placementId, bool expanded)
         {
             bool was = IsShowingFullscreen;

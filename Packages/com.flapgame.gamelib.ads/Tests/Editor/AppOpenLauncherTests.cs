@@ -106,7 +106,7 @@ namespace FlapGame.GameLib.Ads.Tests
             using var nth = new CompositeAdsService(new IAdsProviderAdapter[] { adapter }, settings);
             nth.InitializeAsync().AsTask().GetAwaiter().GetResult();
             adapter.MarkReady("app_open");
-            using var launcher = new AppOpenLauncher(nth, lifecycle, "app_open") { IgnoreReturnsInEditor = false, ColdStartWaitSeconds = 0f };
+            using var launcher = new AppOpenLauncher(nth, lifecycle, "app_open") { IgnoreReturnsInEditor = false, ColdStartWaitSeconds = 0f, LateClickGraceSeconds = 0f };
             launcher.Start(); // first launch: none
             for (int i = 0; i < 3; i++) lifecycle.RaiseResumed(new AppResumeInfo(TimeSpan.FromSeconds(30), false, null));
             Assert.That(adapter.Shown, Is.EqualTo(new[] { "app_open" }), "the third return");
@@ -146,8 +146,34 @@ namespace FlapGame.GameLib.Ads.Tests
             Assert.That(PlayerPrefs.HasKey(AppOpenLauncher.LaunchCountKey), Is.False);
         }
 
+        // LateClickGraceSeconds 0: the return tests check the decision synchronously (the grace has its own tests).
         private AppOpenLauncher Launcher() =>
-            new(ads, lifecycle, "app_open") { IgnoreReturnsInEditor = false, ColdStartWaitSeconds = 0f };
+            new(ads, lifecycle, "app_open") { IgnoreReturnsInEditor = false, ColdStartWaitSeconds = 0f, LateClickGraceSeconds = 0f };
+
+        [Test]
+        public async Task Return_WithAClickArrivingJustAfterIt_ShowsNothing()
+        {
+            using AppOpenLauncher launcher = Launcher();
+            launcher.LateClickGraceSeconds = 0.3f;
+            launcher.Start();
+            lifecycle.RaiseResumed(new AppResumeInfo(TimeSpan.FromSeconds(6), false, null));
+            adapter.Click("mrec"); // the SDK's click callback, marshalled to the main thread, lands after the resume
+            await Task.Delay(600);
+            Assert.That(adapter.Shown, Is.Empty, "the return from that click");
+        }
+
+        [Test]
+        public async Task Return_WithoutAClick_ShowsAfterTheGrace()
+        {
+            using AppOpenLauncher launcher = Launcher();
+            launcher.LateClickGraceSeconds = 0.3f;
+            launcher.Start();
+            adapter.Click("banner"); // a click before the trip away does not count
+            lifecycle.RaiseResumed(new AppResumeInfo(TimeSpan.FromSeconds(30), false, null));
+            Assert.That(adapter.Shown, Is.Empty, "waits for a late click first");
+            for (int i = 0; i < 100 && adapter.Shown.Count == 0; i++) await Task.Delay(20);
+            Assert.That(adapter.Shown, Is.EqualTo(new[] { "app_open" }));
+        }
 
         [Test]
         public void FirstLaunch_ShowsNothing_ButAReturnDoes()
