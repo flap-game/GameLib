@@ -458,6 +458,12 @@ public final class GameLibNativeAds {
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                     top ? Gravity.TOP : Gravity.BOTTOM);
+            if (kind != KIND_BANNER) {
+                // The collapsible stays above the standard banners (GMA adds them to the same content view) and the
+                // native banners, whatever shows later: a ViewGroup draws and dispatches touches by Z first. The
+                // wrapper has no background, so it casts no shadow.
+                v.wrapper.setTranslationZ(dp(activity, COLLAPSIBLE_Z_DP));
+            }
             content.addView(v.wrapper, lp);
         } catch (Throwable t) {
             Log.w(TAG, "show failed", t);
@@ -515,6 +521,8 @@ public final class GameLibNativeAds {
      * circle nor the touch target covers the AdChoices icon in the ad's top-right corner.
      */
     private static final int COLLAPSE_BUTTON_TOP_DP = 20;
+    /** Z of the collapsible's overlay: above the banners (Z 0) in the same content view. */
+    private static final int COLLAPSIBLE_Z_DP = 16;
     /** AdMob's minimum media view size for video, both sides. */
     private static final int MIN_MEDIA_DP = 120;
 
