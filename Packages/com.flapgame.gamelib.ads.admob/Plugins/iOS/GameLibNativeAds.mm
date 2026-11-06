@@ -155,6 +155,10 @@ static UIView *GLNAMakeAdBadge(void)
 
     UILabel *label = GLNAMakeLabel(10.0, UIFontWeightBold, [UIColor colorWithWhite:0.13 alpha:1.0], 1);
     label.text = @"AD";
+    // The badge must hug "AD": with the default 251 hugging it ties with the row's labels and Auto Layout can
+    // stretch the badge (measured 140pt wide on iOS), pushing the icon and text to the right.
+    [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [label setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [badge addSubview:label];
     [NSLayoutConstraint activateConstraints:@[
         [badge.heightAnchor constraintEqualToConstant:GLNABadgeHeight],
@@ -737,6 +741,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     self.closeButton = GLNAMakeRoundGlyphButton(YES, 38.0, 44.0, [UIColor colorWithWhite:0.0 alpha:0.67], [UIColor whiteColor],
                                                 [UIColor colorWithWhite:1.0 alpha:0.35]);
     [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
+    self.closeButton.accessibilityLabel = @"Close ad";
     self.closeButton.hidden = YES;
     [root addSubview:self.closeButton];
 

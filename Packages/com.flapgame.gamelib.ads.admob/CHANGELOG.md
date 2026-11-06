@@ -15,6 +15,8 @@
   a fixed orientation: a shown ad keeps the layout of the orientation it was shown in.
 - Native bars under 40 dp (a `Smart` `NativeBanner` in landscape) are one line: icon, headline, "AD", body, rating /
   advertiser / store, button; what does not fit is dropped (price, store, rating, advertiser, then the body).
+- iOS native: the "AD" badge hugs its text (it could stretch to ~140pt and push the icon and text right), and the native
+  interstitial's close button has the accessibility label "Close ad".
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.
