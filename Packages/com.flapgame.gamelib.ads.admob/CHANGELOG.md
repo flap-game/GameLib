@@ -1,6 +1,9 @@
 # Changelog
 
 ## [0.9.0] - 2026-11-06
+- NativeCollapsible expanded in landscape: media on the left, an info column on the right - header (44dp icon,
+  headline 15sp, rating / store / price), the body on up to 2 lines, then the CTA across the column (40dp). The header
+  stops left of the collapse button; the body shrinks to 1 line or goes when the ad is short. Android; iOS to follow.
 - Native ads: `NativeBanner`, `NativeCollapsible` and `NativeInterstitial`, drawn by GameLib's own native views
   (Android Java / iOS Objective-C++, in `Plugins/`) through `AdMobNativeBridge` (README: Native ads).
 - `INativeCollapseSource`: a `NativeCollapsible` opened expanded / collapsed by the player.

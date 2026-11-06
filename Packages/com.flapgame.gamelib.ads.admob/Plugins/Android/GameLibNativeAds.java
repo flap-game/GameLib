@@ -238,6 +238,7 @@ public final class GameLibNativeAds {
         FrameLayout mediaBox;
         MediaView media;
         LinearLayout row;
+        LinearLayout side;           // collapsible: holds the row; expanded in landscape also the body and a wide CTA
         ImageView icon;
         LinearLayout textColumn;
         TextView cornerBadge;        // banner / collapsible: "AD" in the ad view's top-left corner
@@ -565,7 +566,12 @@ public final class GameLibNativeAds {
         v.content.addView(v.mediaBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         buildRow(activity, v, c);
-        v.content.addView(v.row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
+        v.side = new LinearLayout(activity);
+        v.side.setOrientation(LinearLayout.VERTICAL);
+        v.side.setClickable(true); // like content: a touch between assets is not a click
+        v.side.addView(v.row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
+        v.content.addView(v.side, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         v.cornerBadge = createAdBadge(activity);
         v.adView.addView(v.cornerBadge, badgeParams(activity));
 
@@ -585,17 +591,15 @@ public final class GameLibNativeAds {
         if (v.expanded) {
             int rowDp = Math.max(v.collapsedDp, 76);
             int rowPx = Math.min(dp(ctx, rowDp), v.expandedPx);
-            if (v.landscape) {
-                // the row fills the right column below the collapse button's touch target
-                int belowButtonPx = v.expandedPx - dp(ctx, COLLAPSE_BUTTON_TOP_DP + 48);
-                rowPx = Math.max(rowPx, Math.min(belowButtonPx, dp(ctx, 120)));
-                rowDp = Math.round(rowPx / density(ctx));
-            }
             setMediaAttached(v, true);
             v.mediaBox.setVisibility(View.VISIBLE);
             v.strip.setVisibility(View.VISIBLE);
             arrangeCollapsible(v, true);
-            layoutRow(ctx, v, rowDp, rowPx, 2, true, true);
+            if (v.landscape) {
+                layoutSide(ctx, v);
+            } else {
+                layoutRow(ctx, v, rowDp, rowPx, 2, true, true);
+            }
             setHeight(v.adView, v.expandedPx);
         } else {
             v.mediaBox.setVisibility(View.GONE);
@@ -610,7 +614,8 @@ public final class GameLibNativeAds {
 
     /**
      * Collapsible content: media above the row (portrait, and every collapsed bar) or, expanded in landscape,
-     * media column left and the row right (aligned to the bottom, clear of the collapse button).
+     * media column left and an info column right: header (icon | headline, meta), body, then a CTA as wide as
+     * the column (layoutSide). The body and the CTA move out of the row into that column and back.
      */
     private static void arrangeCollapsible(Views v, boolean expanded) {
         boolean side = expanded && v.landscape;
@@ -618,9 +623,86 @@ public final class GameLibNativeAds {
         v.mediaBox.setLayoutParams(side
                 ? new LinearLayout.LayoutParams(v.mediaWidthPx, ViewGroup.LayoutParams.MATCH_PARENT)
                 : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        v.row.setLayoutParams(side
-                ? new LinearLayout.LayoutParams(0, v.row.getLayoutParams().height, 1f)
-                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, v.row.getLayoutParams().height));
+        v.side.setLayoutParams(side
+                ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        v.side.setGravity(side ? Gravity.CENTER_VERTICAL : Gravity.NO_GRAVITY);
+        if (!side) {
+            v.side.setPadding(0, 0, 0, 0);
+        }
+        int rowHeight = v.row.getLayoutParams().height;
+        v.row.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowHeight));
+        // body: in the text column after the inline badge (headline, AD, body, meta), or under the header
+        reparent(v.body, side ? v.side : v.textColumn, side ? 1 : v.textColumn.indexOfChild(v.inlineBadge) + 1,
+                wrapLp());
+        // CTA: the row's last child, or the info column's last
+        reparent(v.cta, side ? v.side : v.row, -1, new LinearLayout.LayoutParams(0, 0));
+    }
+
+    private static void reparent(View view, ViewGroup to, int index, ViewGroup.LayoutParams lp) {
+        if (view.getParent() == to) {
+            return;
+        }
+        if (view.getParent() instanceof ViewGroup) {
+            ((ViewGroup) view.getParent()).removeView(view);
+        }
+        to.addView(view, index, lp);
+    }
+
+    /**
+     * Collapsible expanded in landscape, info column right of the media: header (icon 44dp | headline 15sp, meta),
+     * body (2 lines, 1 or none when the ad is too short), then the CTA across the column, 40dp tall. The header
+     * stops left of the collapse button's touch target; the whole column is centred vertically.
+     */
+    private static void layoutSide(Context ctx, Views v) {
+        arrangeTextLine(ctx, v, false);
+        int pad = dp(ctx, 12);
+        v.side.setPadding(pad, pad, pad, pad);
+        v.row.setPadding(0, 0, Math.max(0, dp(ctx, COLLAPSE_BUTTON_TOP_DP + 48) - pad), 0);
+        setHeight(v.row, ViewGroup.LayoutParams.WRAP_CONTENT);
+
+        int iconPx = dp(ctx, 44);
+        LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) v.icon.getLayoutParams();
+        ilp.width = iconPx;
+        ilp.height = iconPx;
+        v.icon.setLayoutParams(ilp);
+
+        v.headline.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        float meta = 11;
+        v.rating.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
+        v.advertiser.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
+        v.store.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
+        v.price.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
+        for (TextView sep : v.separators) {
+            sep.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
+        }
+        v.body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        v.cta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+
+        setShown(v.advertiser, hasText(v.advertiser));
+        setShown(v.store, hasText(v.store));
+        setShown(v.price, hasText(v.price));
+        setShown(v.rating, hasText(v.rating));
+        setShown(v.body, hasText(v.body));
+        updateSeparators(v);
+
+        int ctaPx = dp(ctx, 40);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ctaPx);
+        clp.topMargin = dp(ctx, 10);
+        v.cta.setLayoutParams(clp);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp(ctx, 8);
+        v.body.setLayoutParams(blp);
+
+        // the body gets what the header and the button leave: 2 lines, 1, or none
+        int room = v.expandedPx - 2 * pad - iconPx - clp.topMargin - ctaPx - blp.topMargin;
+        int lines = v.body.getLineHeight() > 0 ? Math.min(2, room / v.body.getLineHeight()) : 2;
+        if (lines <= 0) {
+            v.body.setVisibility(View.GONE);
+        } else {
+            v.body.setMaxLines(lines);
+        }
     }
 
     /**
