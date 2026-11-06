@@ -142,7 +142,8 @@ static const CGFloat GLNABadgeHeight = 15.0;
 static const CGFloat GLNABadgeInset = 2.0;   // badge offset from the ad view's top-left corner
 static const CGFloat GLNABadgeGap = 4.0;     // space between the badge and the asset row on its right
 
-static UIView *GLNAMakeAdBadge(void)
+// `inLine`: the 24x16pt badge of a one-line bar, placed in the text line right after the headline.
+static UIView *GLNAMakeAdBadge(BOOL inLine)
 {
     UIView *badge = [[UIView alloc] init];
     badge.translatesAutoresizingMaskIntoConstraints = NO;
@@ -160,6 +161,18 @@ static UIView *GLNAMakeAdBadge(void)
     [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [label setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [badge addSubview:label];
+    if (inLine)
+    {
+        [NSLayoutConstraint activateConstraints:@[
+            [badge.widthAnchor constraintEqualToConstant:24.0],
+            [badge.heightAnchor constraintEqualToConstant:16.0],
+            [label.centerXAnchor constraintEqualToAnchor:badge.centerXAnchor],
+            [label.centerYAnchor constraintEqualToAnchor:badge.centerYAnchor],
+        ]];
+        [badge setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [badge setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        return badge;
+    }
     [NSLayoutConstraint activateConstraints:@[
         [badge.heightAnchor constraintEqualToConstant:GLNABadgeHeight],
         [label.centerYAnchor constraintEqualToAnchor:badge.centerYAnchor],
@@ -330,19 +343,26 @@ static NSString *GLNAAdSource(GADResponseInfo *info)
 @property (nonatomic, strong) UIColor *secondaryColor;
 @property (nonatomic, assign) BOOL compactMetaFits; // NO: the bar is too short for the meta line in compact mode
 @property (nonatomic, assign) BOOL compactBodyFits; // NO: the bar (e.g. a 32pt smart banner) only fits the headline
+@property (nonatomic, strong) UIStackView *column;   // headline / body / meta: stacked, or side by side (oneLine)
+@property (nonatomic, strong) UIView *inlineBadge;   // oneLine only: "AD" right after the headline
+@property (nonatomic, assign) BOOL oneLine;          // bar under 40pt: headline | AD | body | meta | CTA on one line
 @end
 
 @implementation GLNARow
 @end
 
-static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UIColor *ctaText)
+// `allowOneLine`: a bar under 40pt (a landscape smart banner) lays its texts out on one line, as on Android:
+// icon 24 | headline 12 bold, AD badge 24x16 (6pt gap), body 10 (takes the room left, ellipsized, 8pt gap),
+// meta "rating • advertiser • store" 10 (8pt gap) | CTA 80 wide. GLNAFitOneLine drops what does not fit.
+static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UIColor *ctaText, BOOL allowOneLine)
 {
     // Bars <= 60pt: headline 12pt, body 10pt (one line), icon = bar - 8pt, CTA >= 32pt tall, and the meta line only
     // when headline + body + meta fit in the bar. Bars > 60pt keep 13 / 11 / 10.
     BOOL small = barHeight <= 60.0;
+    BOOL oneLine = allowOneLine && barHeight < 40.0;
     CGFloat headlineSize = small ? 12.0 : 13.0;
     CGFloat bodySize = small ? 10.0 : 11.0;
-    CGFloat metaSize = small ? 8.0 : 10.0;
+    CGFloat metaSize = (small && !oneLine) ? 8.0 : 10.0;
     CGFloat columnSpacing = 1.0;
     UIColor *secondary = [text colorWithAlphaComponent:CGColorGetAlpha(text.CGColor) * 0.6];
 
@@ -366,7 +386,10 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     [row.icon setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [row.icon setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
-    UIStackView *column = GLNAMakeStack(UILayoutConstraintAxisVertical, columnSpacing, UIStackViewAlignmentFill);
+    UIStackView *column = oneLine ? GLNAMakeStack(UILayoutConstraintAxisHorizontal, 0.0, UIStackViewAlignmentCenter)
+                                  : GLNAMakeStack(UILayoutConstraintAxisVertical, columnSpacing, UIStackViewAlignmentFill);
+    row.column = column;
+    row.oneLine = oneLine;
     [column setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
     [column setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
@@ -388,11 +411,34 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     [metaFiller setContentHuggingPriority:UILayoutPriorityDefaultLow - 1 forAxis:UILayoutConstraintAxisHorizontal];
     [row.meta addArrangedSubview:metaFiller];
 
-    [column addArrangedSubview:row.headline];
-    [column addArrangedSubview:row.body];
-    [column addArrangedSubview:row.meta];
+    if (oneLine)
+    {
+        // The meta hugs its texts (no filler); the body takes the room left and is the first to shrink, then the
+        // meta, then the headline. GLNAFitOneLine drops meta parts and the body after layout.
+        metaFiller.hidden = YES;
+        row.inlineBadge = GLNAMakeAdBadge(YES);
+        [column addArrangedSubview:row.headline];
+        [column addArrangedSubview:row.inlineBadge];
+        [column addArrangedSubview:row.body];
+        [column addArrangedSubview:row.meta];
+        [column setCustomSpacing:6.0 afterView:row.headline];
+        [column setCustomSpacing:8.0 afterView:row.inlineBadge];
+        [column setCustomSpacing:8.0 afterView:row.body];
+        [row.headline setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [row.headline setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh - 10 forAxis:UILayoutConstraintAxisHorizontal];
+        [row.body setContentHuggingPriority:UILayoutPriorityDefaultLow - 2 forAxis:UILayoutConstraintAxisHorizontal];
+        [row.body setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+        [row.meta setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [row.meta setContentCompressionResistancePriority:UILayoutPriorityDefaultLow + 50 forAxis:UILayoutConstraintAxisHorizontal];
+    }
+    else
+    {
+        [column addArrangedSubview:row.headline];
+        [column addArrangedSubview:row.body];
+        [column addArrangedSubview:row.meta];
+    }
 
-    if (small)
+    if (small && !oneLine)
     {
         // Row content area = bar - 4pt top / bottom margins.
         CGFloat needed = row.headline.font.lineHeight + row.body.font.lineHeight + row.rating.font.lineHeight + 2.0 * columnSpacing;
@@ -474,6 +520,59 @@ static void GLNASetRowCompact(GLNARow *row, GADNativeAd *ad, BOOL compact)
     {
         GLNAFillRow(row, ad, YES, YES);
     }
+}
+
+static NSString *const GLNAMetaSeparator = @"  •  ";
+
+// Re-prefixes the visible meta parts so only the ones after a visible part start with the separator.
+static void GLNAUpdateMetaSeparators(GLNARow *row)
+{
+    BOOL any = NO;
+    for (UILabel *label in @[ row.rating, row.advertiser, row.store, row.price ])
+    {
+        NSString *text = label.text;
+        if ([text hasPrefix:GLNAMetaSeparator])
+            text = [text substringFromIndex:GLNAMetaSeparator.length];
+        if (label.hidden || !GLNAHasText(text))
+            continue;
+        label.text = any ? [GLNAMetaSeparator stringByAppendingString:text] : text;
+        any = YES;
+    }
+    row.meta.hidden = !any;
+}
+
+static CGFloat GLNAFittingWidth(UIView *view)
+{
+    if (view == nil || view.hidden)
+        return 0.0;
+    return ceil([view systemLayoutSizeFittingSize:UILayoutFittingCompressedSize].width);
+}
+
+// One-line bar, after layout (the text line has its final width): drops what does not fit, lowest priority first -
+// price, store, rating, advertiser, then the body when 60pt of it no longer fits next to the meta. Headline, AD and the
+// button always stay. Same rule as Android's fitOneLine.
+static void GLNAFitOneLine(GLNARow *row)
+{
+    if (row == nil || !row.oneLine)
+        return;
+    CGFloat width = row.column.bounds.size.width;
+    if (width <= 0.0)
+        return;
+    CGFloat fixed = GLNAFittingWidth(row.headline) + GLNAFittingWidth(row.inlineBadge) + 6.0;
+    CGFloat minBody = row.body.hidden ? 0.0 : 60.0 + 8.0;
+    CGFloat (^metaWidth)(void) = ^CGFloat {
+        return row.meta.hidden ? 0.0 : GLNAFittingWidth(row.meta) + 8.0;
+    };
+    NSArray<UILabel *> *dropOrder = @[ row.price, row.store, row.rating, row.advertiser ];
+    NSUInteger i = 0;
+    while (fixed + minBody + metaWidth() > width && i < dropOrder.count)
+    {
+        dropOrder[i++].hidden = YES;
+        GLNAUpdateMetaSeparators(row);
+    }
+    if (fixed + minBody + metaWidth() > width)
+        row.body.hidden = YES;
+    [row.column setNeedsLayout];
 }
 
 static void GLNARegisterRow(GADNativeAdView *adView, GLNARow *row)
@@ -673,7 +772,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     [content addArrangedSubview:chips];
     [content addArrangedSubview:cta];
 
-    UIView *badge = GLNAMakeAdBadge();
+    UIView *badge = GLNAMakeAdBadge(NO);
     [adView addSubview:badge];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -1112,31 +1211,47 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     adView.backgroundColor = GLNAColor(bg);
     adView.clipsToBounds = YES;
 
-    GLNARow *row = GLNAMakeRow(height, GLNAColor(text), GLNAColor(cta), GLNAColor(ctaText));
+    GLNARow *row = GLNAMakeRow(height, GLNAColor(text), GLNAColor(cta), GLNAColor(ctaText), YES);
     [adView addSubview:row.stack];
-    UIView *badge = GLNAMakeAdBadge();
+    UIView *badge = GLNAMakeAdBadge(NO);
+    badge.hidden = row.oneLine; // one-line bars carry the badge inline, after the headline
     [adView addSubview:badge];
 
     [host addSubview:adView];
     UILayoutGuide *safe = host.safeAreaLayoutGuide;
-    NSLayoutConstraint *edge = top ? [adView.topAnchor constraintEqualToAnchor:safe.topAnchor]
-                                   : [adView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor];
-    NSLayoutConstraint *heightConstraint = [adView.heightAnchor constraintEqualToConstant:height];
+    // `content`: the bar's `height` tall content area inside the safe area. At the bottom the background reaches the
+    // physical bottom edge and the full screen width (under the home indicator, which auto-hides while the bar is up),
+    // while the row stays inside the safe area. At the top the bar keeps to the safe area.
+    UILayoutGuide *content = [[UILayoutGuide alloc] init];
+    [adView addLayoutGuide:content];
+    NSLayoutConstraint *heightConstraint = [content.heightAnchor constraintEqualToConstant:height];
+    NSArray<NSLayoutConstraint *> *placement = top
+        ? @[ [adView.topAnchor constraintEqualToAnchor:safe.topAnchor],
+             [adView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
+             [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+             [adView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+             [content.topAnchor constraintEqualToAnchor:adView.topAnchor] ]
+        : @[ [adView.bottomAnchor constraintEqualToAnchor:host.bottomAnchor],
+             [adView.topAnchor constraintEqualToAnchor:content.topAnchor],
+             [adView.leadingAnchor constraintEqualToAnchor:host.leadingAnchor],
+             [adView.trailingAnchor constraintEqualToAnchor:host.trailingAnchor],
+             [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor] ];
+    [NSLayoutConstraint activateConstraints:placement];
     [NSLayoutConstraint activateConstraints:@[
-        edge,
         heightConstraint,
-        [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
-        [adView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+        [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+        [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
 
-        // The row starts right of the AD badge so the badge never covers the icon / text.
-        [row.stack.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:GLNABadgeGap],
-        [row.stack.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-8.0],
-        [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:adView.topAnchor constant:4.0],
-        [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:adView.bottomAnchor constant:-4.0],
-        [row.stack.centerYAnchor constraintEqualToAnchor:adView.centerYAnchor],
+        // The row starts right of the AD badge so the badge never covers the icon / text (one-line: no corner badge).
+        row.oneLine ? [row.stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:8.0]
+                    : [row.stack.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:GLNABadgeGap],
+        [row.stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-8.0],
+        [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:content.topAnchor constant:4.0],
+        [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:content.bottomAnchor constant:-4.0],
+        [row.stack.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
 
-        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNABadgeInset],
-        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:GLNABadgeInset],
+        [badge.topAnchor constraintEqualToAnchor:content.topAnchor constant:GLNABadgeInset],
+        [badge.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:GLNABadgeInset],
     ]];
 
     GLNAFillRow(row, ad, NO, NO);
@@ -1144,6 +1259,11 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     ad.rootViewController = GLNATopViewController();
     adView.nativeAd = ad;
     [host bringSubviewToFront:adView];
+    if (row.oneLine)
+    {
+        [host layoutIfNeeded]; // the text line needs its final width
+        GLNAFitOneLine(row);
+    }
 
     state.adView = adView;
     state.row = row;
@@ -1247,10 +1367,10 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
     rowHost.backgroundColor = [UIColor clearColor];
     [adView addSubview:rowHost];
 
-    GLNARow *row = GLNAMakeRow(collapsed, GLNAColor(text), GLNAColor(cta), GLNAColor(ctaText));
+    GLNARow *row = GLNAMakeRow(collapsed, GLNAColor(text), GLNAColor(cta), GLNAColor(ctaText), NO);
     [rowHost addSubview:row.stack];
 
-    UIView *badge = GLNAMakeAdBadge();
+    UIView *badge = GLNAMakeAdBadge(NO);
     [adView addSubview:badge];
 
     // Collapse button: 28pt circle with a down chevron in a 44x44pt touch square (Apple HIG), inside the ad over its
@@ -1264,34 +1384,43 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
 
     [host addSubview:adView];
     UILayoutGuide *safe = host.safeAreaLayoutGuide;
-    NSLayoutConstraint *heightConstraint = [adView.heightAnchor constraintEqualToConstant:expanded ? expandedHeight : collapsed];
+    // `content`: the ad's content area, inside the safe area. The background reaches the physical bottom edge and the
+    // full screen width (under the home indicator, which auto-hides while the ad is up); media, row and buttons stay
+    // inside the safe area. The ad grows by the bottom inset, so the expanded media keeps its full height (>= 120pt).
+    UILayoutGuide *content = [[UILayoutGuide alloc] init];
+    [adView addLayoutGuide:content];
+    NSLayoutConstraint *heightConstraint = [content.heightAnchor constraintEqualToConstant:expanded ? expandedHeight : collapsed];
     NSLayoutConstraint *rowHeight = [rowHost.heightAnchor constraintEqualToConstant:expanded ? expandedRow : collapsed];
     // Collapsed, the row starts right of the AD badge (no asset under it); expanded, the badge sits over the media.
     NSLayoutConstraint *leadingCompact = [row.stack.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:GLNABadgeGap];
     NSLayoutConstraint *leadingFull = [row.stack.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:8.0];
     // The row spans the ad, except expanded in landscape where it sits right of the media column.
-    NSLayoutConstraint *rowHostFull = [rowHost.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor];
+    NSLayoutConstraint *rowHostFull = [rowHost.leadingAnchor constraintEqualToAnchor:content.leadingAnchor];
     NSLayoutConstraint *rowHostSide = [rowHost.leadingAnchor constraintEqualToAnchor:media.trailingAnchor];
     BOOL side = landscape && expanded;
     NSArray<NSLayoutConstraint *> *mediaShape = landscape
         ? @[ [media.widthAnchor constraintEqualToConstant:mediaWidth],
-             [media.bottomAnchor constraintEqualToAnchor:adView.bottomAnchor] ]
-        : @[ [media.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
+             [media.bottomAnchor constraintEqualToAnchor:content.bottomAnchor] ]
+        : @[ [media.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
              [media.bottomAnchor constraintEqualToAnchor:rowHost.topAnchor] ];
     [NSLayoutConstraint activateConstraints:mediaShape];
     [NSLayoutConstraint activateConstraints:@[
-        [adView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
-        [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
-        [adView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+        [adView.bottomAnchor constraintEqualToAnchor:host.bottomAnchor],
+        [adView.leadingAnchor constraintEqualToAnchor:host.leadingAnchor],
+        [adView.trailingAnchor constraintEqualToAnchor:host.trailingAnchor],
+        [adView.topAnchor constraintEqualToAnchor:content.topAnchor],
+        [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+        [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+        [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
         heightConstraint,
 
         side ? rowHostSide : rowHostFull,
-        [rowHost.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
-        [rowHost.bottomAnchor constraintEqualToAnchor:adView.bottomAnchor],
+        [rowHost.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [rowHost.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
         rowHeight,
 
-        [media.topAnchor constraintEqualToAnchor:adView.topAnchor],
-        [media.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor],
+        [media.topAnchor constraintEqualToAnchor:content.topAnchor],
+        [media.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
 
         expanded ? leadingFull : leadingCompact,
         [row.stack.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor constant:-8.0],
@@ -1299,12 +1428,12 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
         [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:rowHost.bottomAnchor constant:-4.0],
         [row.stack.centerYAnchor constraintEqualToAnchor:rowHost.centerYAnchor],
 
-        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNABadgeInset],
-        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:GLNABadgeInset],
+        [badge.topAnchor constraintEqualToAnchor:content.topAnchor constant:GLNABadgeInset],
+        [badge.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:GLNABadgeInset],
 
-        // Circle as far from the top edge as from the right edge - same spot as on Android.
-        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNACollapseButtonTop],
-        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-GLNACollapseButtonTop],
+        // Circle as far from the top edge as from the right edge (of the content area) - same spot as on Android.
+        [collapseButton.topAnchor constraintEqualToAnchor:content.topAnchor constant:GLNACollapseButtonTop],
+        [collapseButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-GLNACollapseButtonTop],
     ]];
 
     GLNAFillRow(row, ad, YES, YES);

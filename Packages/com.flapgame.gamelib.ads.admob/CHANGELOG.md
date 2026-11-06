@@ -17,6 +17,11 @@
   advertiser / store, button; what does not fit is dropped (price, store, rating, advertiser, then the body).
 - iOS native: the "AD" badge hugs its text (it could stretch to ~140pt and push the icon and text right), and the native
   interstitial's close button has the accessibility label "Close ad".
+- iOS native bars at the bottom (`NativeBanner`, `NativeCollapsible` collapsed and expanded) reach the physical bottom
+  edge across the full screen width; their content stays inside the safe area (the ad grows by the bottom inset).
+  While one is up the home indicator auto-hides (it comes back on touch) and the bottom edge gesture is deferred;
+  the game's `Device.hideHomeButton` / `deferSystemGesturesMode` come back when the last bar hides. The one-line
+  layout of bars under 40 pt is on iOS too (`NativeBanner`).
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.
