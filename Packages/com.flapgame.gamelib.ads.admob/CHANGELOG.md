@@ -13,6 +13,8 @@
 - Landscape: an expanded `NativeCollapsible` shows its media in a left column and the texts on the right (the media
   stays at least 120 dp, AdMob's video minimum, which the stacked layout missed on a landscape screen). For games with
   a fixed orientation: a shown ad keeps the layout of the orientation it was shown in.
+- Native bars under 40 dp (a `Smart` `NativeBanner` in landscape) are one line: icon, headline, "AD", body, rating /
+  advertiser / store, button; what does not fit is dropped (price, store, rating, advertiser, then the body).
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.

@@ -240,6 +240,8 @@ public final class GameLibNativeAds {
         LinearLayout row;
         ImageView icon;
         LinearLayout textColumn;
+        TextView cornerBadge;        // banner / collapsible: "AD" in the ad view's top-left corner
+        TextView inlineBadge;        // one-line bars (< 40dp): "AD" right after the headline instead
         TextView headline;
         TextView body;
         LinearLayout metaRow;
@@ -494,7 +496,8 @@ public final class GameLibNativeAds {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         buildRow(activity, v, c);
         v.content.addView(v.row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
-        v.adView.addView(createAdBadge(activity), badgeParams(activity));
+        v.cornerBadge = createAdBadge(activity);
+        v.adView.addView(v.cornerBadge, badgeParams(activity));
 
         int heightPx = dp(activity, heightDp);
         v.collapsedDp = heightDp; // banner: the bar height
@@ -558,7 +561,8 @@ public final class GameLibNativeAds {
 
         buildRow(activity, v, c);
         v.content.addView(v.row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
-        v.adView.addView(createAdBadge(activity), badgeParams(activity));
+        v.cornerBadge = createAdBadge(activity);
+        v.adView.addView(v.cornerBadge, badgeParams(activity));
 
         column.addView(v.adView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 v.expanded ? v.expandedPx : v.collapsedPx));
@@ -729,6 +733,9 @@ public final class GameLibNativeAds {
 
         v.headline = text(ctx, c.text, 13, Typeface.DEFAULT_BOLD, 1);
         v.textColumn.addView(v.headline, wrapLp());
+        v.inlineBadge = createAdBadge(ctx);
+        v.inlineBadge.setVisibility(View.GONE);
+        v.textColumn.addView(v.inlineBadge, new LinearLayout.LayoutParams(dp(ctx, BADGE_W_DP), dp(ctx, BADGE_H_DP)));
         v.body = text(ctx, c.text, 11, Typeface.DEFAULT, 1);
         v.textColumn.addView(v.body, wrapLp());
 
@@ -770,9 +777,12 @@ public final class GameLibNativeAds {
                                   boolean showAdvertiserStore, boolean showPrice) {
         setHeight(v.row, rowPx);
         boolean small = rowDp <= 60;
+        // Bars under 40dp (a landscape smart banner) are one line: headline, AD, body, meta, then the button.
+        boolean oneLine = rowDp < 40 && v.inlineBadge != null;
+        arrangeTextLine(ctx, v, oneLine);
         // The "AD" badge sits in the ad view's top-left corner. When the row is the top of the ad view
         // (banner, collapsed bar) it starts right of the badge so no asset is covered.
-        boolean rowAtTop = v.mediaBox == null || v.mediaBox.getVisibility() != View.VISIBLE;
+        boolean rowAtTop = !oneLine && (v.mediaBox == null || v.mediaBox.getVisibility() != View.VISIBLE);
         int padV = dp(ctx, 3);
         int padH = dp(ctx, 8);
         v.row.setPadding(rowAtTop ? dp(ctx, BADGE_MARGIN_DP + BADGE_W_DP + 4) : padH, padV, padH, padV);
@@ -815,6 +825,17 @@ public final class GameLibNativeAds {
         setShown(v.body, hasText(v.body));
         updateSeparators(v);
 
+        if (oneLine) {
+            setShown(v.price, showPrice && hasText(v.price)); // as on the other bars; fitOneLine drops what does not fit
+            updateSeparators(v);
+            v.textColumn.post(new Runnable() {
+                @Override
+                public void run() {
+                    fitOneLine(v);
+                }
+            });
+            return;
+        }
         if (small && v.metaRow.getVisibility() == View.VISIBLE) {
             // small bar: drop the meta line (rating / store) when the three lines do not fit
             int need = v.rating.getLineHeight() + dp(ctx, 2);
@@ -833,6 +854,73 @@ public final class GameLibNativeAds {
             // tiny bar (e.g. a 32dp smart banner in landscape): the headline alone
             v.body.setVisibility(View.GONE);
         }
+    }
+
+    /** Text column of the row: stacked lines, or (one-line bars) headline | AD | body | meta side by side. */
+    private static void arrangeTextLine(Context ctx, Views v, boolean oneLine) {
+        if (v.inlineBadge == null) {
+            return;
+        }
+        v.textColumn.setOrientation(oneLine ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        v.inlineBadge.setVisibility(oneLine ? View.VISIBLE : View.GONE);
+        if (v.cornerBadge != null) {
+            v.cornerBadge.setVisibility(oneLine ? View.GONE : View.VISIBLE);
+        }
+        int gap = dp(ctx, 8);
+        LinearLayout.LayoutParams badge = (LinearLayout.LayoutParams) v.inlineBadge.getLayoutParams();
+        badge.leftMargin = dp(ctx, 6);
+        v.inlineBadge.setLayoutParams(badge);
+        LinearLayout.LayoutParams body = oneLine
+                ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                : wrapLp();
+        body.leftMargin = oneLine ? gap : 0;
+        v.body.setLayoutParams(body);
+        LinearLayout.LayoutParams meta = wrapLp();
+        meta.leftMargin = oneLine ? gap : 0;
+        v.metaRow.setLayoutParams(meta);
+    }
+
+    /**
+     * One-line bar, after layout: drops what does not fit, lowest priority first - price, store, rating, advertiser,
+     * then the body (which otherwise takes the room left and ellipsizes). Headline, AD and the button always stay.
+     */
+    private static void fitOneLine(Views v) {
+        int width = v.textColumn.getWidth();
+        if (width <= 0 || v.textColumn.getOrientation() != LinearLayout.HORIZONTAL) {
+            return;
+        }
+        Context ctx = v.textColumn.getContext();
+        int fixed = wrapWidth(v.headline) + wrapWidth(v.inlineBadge) + dp(ctx, 6);
+        int minBody = v.body.getVisibility() == View.VISIBLE ? dp(ctx, 60) + dp(ctx, 8) : 0;
+        TextView[] dropOrder = new TextView[] {v.price, v.store, v.rating, v.advertiser};
+        int i = 0;
+        while (fixed + minBody + metaWidth(v, ctx) > width && i < dropOrder.length) {
+            setShown(dropOrder[i++], false);
+            updateSeparators(v);
+        }
+        boolean anyMeta = v.rating.getVisibility() == View.VISIBLE || v.advertiser.getVisibility() == View.VISIBLE
+                || v.store.getVisibility() == View.VISIBLE || v.price.getVisibility() == View.VISIBLE;
+        v.metaRow.setVisibility(anyMeta ? View.VISIBLE : View.GONE);
+        if (fixed + minBody + metaWidth(v, ctx) > width) {
+            v.body.setVisibility(View.GONE);
+        }
+        v.textColumn.requestLayout();
+    }
+
+    private static int metaWidth(Views v, Context ctx) {
+        if (v.metaRow.getVisibility() != View.VISIBLE) {
+            return 0;
+        }
+        return wrapWidth(v.metaRow) + dp(ctx, 8);
+    }
+
+    private static int wrapWidth(View view) {
+        if (view.getVisibility() != View.VISIBLE) {
+            return 0;
+        }
+        view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        return view.getMeasuredWidth();
     }
 
     private static void updateSeparators(Views v) {
