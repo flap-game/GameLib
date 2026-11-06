@@ -17,11 +17,16 @@
   advertiser / store, button; what does not fit is dropped (price, store, rating, advertiser, then the body).
 - iOS native: the "AD" badge hugs its text (it could stretch to ~140pt and push the icon and text right), and the native
   interstitial's close button has the accessibility label "Close ad".
-- iOS native bars at the bottom (`NativeBanner`, `NativeCollapsible` collapsed and expanded) reach the physical bottom
-  edge across the full screen width; their content stays inside the safe area (the ad grows by the bottom inset).
-  While one is up the home indicator auto-hides (it comes back on touch) and the bottom edge gesture is deferred;
-  the game's `Device.hideHomeButton` / `deferSystemGesturesMode` come back when the last bar hides. The one-line
-  layout of bars under 40 pt is on iOS too (`NativeBanner`).
+- iOS: ad bars at the bottom sit on the screen's bottom edge (over the home indicator area) instead of the safe area's,
+  which leaves the game the most room: `NativeBanner` (background across the full screen width, content between the
+  safe area's left and right) and standard banners (`Bottom` / `BottomLeft` / `BottomRight`, not collapsible banners,
+  whose expanded panel needs the SDK's anchored position; moved with a custom position once loaded, so a banner keeps
+  the position of the orientation it loaded in). While one is up the home indicator auto-hides (it comes back on
+  touch) and the bottom edge gesture is deferred; the game's `Device.hideHomeButton` / `deferSystemGesturesMode`
+  come back when the last bar hides. A `NativeCollapsible` (collapsed and expanded) reaches the bottom edge with its
+  background only: its content stays above the bottom inset, which it grows by. The one-line layout of bars under 40 pt is on iOS too (`NativeBanner`).
+- Fix (iOS): `BannerSize.SmallFullWidth` never filled ("Ad request doesn't meet size requirements"): iOS refuses
+  `AdSize.FullWidth` at any height. The width is now the safe area's in dp.
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.

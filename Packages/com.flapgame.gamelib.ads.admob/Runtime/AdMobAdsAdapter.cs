@@ -301,6 +301,7 @@ namespace FlapGame.GameLib.Ads
                 return;
             }
             unit.Banner?.Hide();
+            HomeIndicator.Set(IndicatorOwner + unit.Id, false);
 #endif
         }
 
@@ -760,6 +761,7 @@ namespace FlapGame.GameLib.Ads
 
         private static void ReleaseBanner(Unit unit)
         {
+            HomeIndicator.Set(IndicatorOwner + unit.Id, false);
             unit.BannerExpanded = false;
             unit.BannerExpansionReported = false;
             unit.Banner?.Destroy();
@@ -978,7 +980,11 @@ namespace FlapGame.GameLib.Ads
                 return AdShowResult.Completed;
             }
 
-            if (unit.BannerLoaded) unit.Banner.Show();
+            if (unit.BannerLoaded)
+            {
+                unit.Banner.Show();
+                HomeIndicator.Set(IndicatorOwner + unit.Id, OnBottomEdge(unit.Placement));
+            }
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing banner {unit.Id}.");
             return AdShowResult.Completed;
         }
@@ -1015,7 +1021,9 @@ namespace FlapGame.GameLib.Ads
                 bool firstLoad = !unit.BannerLoaded;
                 unit.BannerLoaded = true;
                 // Also fires on every auto-refresh: only honour the desired visibility, never force-hide.
+                bool bottomEdge = OnBottomEdge(p) && MoveToBottomEdge(banner, p);
                 if (unit.BannerVisible) banner.Show(); else banner.Hide();
+                HomeIndicator.Set(IndicatorOwner + unit.Id, unit.BannerVisible && bottomEdge);
                 if (firstLoad)
                 {
                     RememberBannerHeight(unit);
@@ -1063,6 +1071,47 @@ namespace FlapGame.GameLib.Ads
 
             banner.Hide(); // created hidden; OnBannerAdLoaded applies the desired visibility
             banner.LoadAd(GetBannerRequest(p));
+        }
+
+        private const string IndicatorOwner = "banner:";
+
+        // (0.9.0) iOS: a banner at the bottom (not collapsible: its expanded panel needs the SDK's anchored position) sits
+        // on the screen's bottom edge instead of the safe area's, over the home indicator area, which leaves the game the
+        // most room; the indicator auto-hides while it is up (HomeIndicator). AdPosition.Bottom keeps to the safe area,
+        // so the loaded banner is moved with a custom position; the content stays between the safe area's left and right.
+        private static bool OnBottomEdge(AdPlacement p)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            return p.Format == AdFormat.Banner && p.Size != BannerSize.Collapsible && p.Size != BannerSize.MediumRectangle
+                && p.Position is BannerPosition.Bottom or BannerPosition.BottomLeft or BannerPosition.BottomRight;
+#else
+            return false;
+#endif
+        }
+
+        // Custom positions are dp from the safe area's top-left on iOS. Placed when loaded (the real size is known then),
+        // so a game that rotates while the banner is up keeps the position of the orientation it loaded in until the
+        // next refresh. Returns false when the size is unknown (the banner stays where AdPosition put it).
+        private static bool MoveToBottomEdge(BannerView banner, AdPlacement p)
+        {
+            try
+            {
+                float scale = MobileAds.Utils.GetDeviceScale();
+                float width = banner.GetWidthInPixels(), height = banner.GetHeightInPixels();
+                if (scale <= 0f || width <= 0f || height <= 0f) return false;
+                Rect safe = Screen.safeArea; // pixels, origin bottom-left: yMax is the safe area's top
+                float x = p.Position == BannerPosition.BottomLeft  ? 0f
+                        : p.Position == BannerPosition.BottomRight ? safe.width - width
+                        : (safe.width - width) / 2f;
+                float y = safe.yMax - height; // from the safe area's top down to the screen's bottom edge, minus the banner
+                banner.SetPosition(Mathf.RoundToInt(Mathf.Max(0f, x) / scale), Mathf.CeilToInt(y / scale));
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Banner {p.Id} not moved to the bottom edge: {e.Message}");
+                return false;
+            }
         }
 
         // Expected height of a banner before it loads. A fixed size carries its height in dp; an anchored adaptive size
@@ -1115,11 +1164,23 @@ namespace FlapGame.GameLib.Ads
 
         private const int SmallBannerHeightDp = 32;
 
+        private static int SmallBannerWidthDp()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            int width = Mathf.FloorToInt(MobileAds.Utils.GetDeviceSafeWidth());
+            return width > 0 ? width : AdSize.FullWidth;
+#else
+            return AdSize.FullWidth;
+#endif
+        }
+
         private static AdSize GetAdSize(AdPlacement p) => p.Format == AdFormat.Mrec ? AdSize.MediumRectangle : p.Size switch
         {
             BannerSize.MediumRectangle                    => AdSize.MediumRectangle,
-            // A custom size: full width (FullWidth = -1, the safe area on iOS) at a fixed 32 dp.
-            BannerSize.SmallFullWidth                     => new AdSize(AdSize.FullWidth, SmallBannerHeightDp),
+            // A custom size: full width at a fixed 32 dp. (0.9.0) On iOS the width is given in dp (the safe area's): a request
+            // with AdSize.FullWidth (-1) is refused there with "Ad request doesn't meet size requirements" at any height,
+            // while the same width as a number is filled (430x32 / 814x32 on an iPhone 14 Pro Max).
+            BannerSize.SmallFullWidth                     => new AdSize(SmallBannerWidthDp(), SmallBannerHeightDp),
             BannerSize.Adaptive or BannerSize.Collapsible =>
                 AdSize.GetCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(AdSize.FullWidth),
             _                                             => AdSize.Banner,

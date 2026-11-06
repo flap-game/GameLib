@@ -1219,9 +1219,10 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 
     [host addSubview:adView];
     UILayoutGuide *safe = host.safeAreaLayoutGuide;
-    // `content`: the bar's `height` tall content area inside the safe area. At the bottom the background reaches the
-    // physical bottom edge and the full screen width (under the home indicator, which auto-hides while the bar is up),
-    // while the row stays inside the safe area. At the top the bar keeps to the safe area.
+    // `content`: the bar's `height` tall content area, between the safe area's left and right. At the bottom the whole
+    // bar sits on the physical bottom edge (over the home indicator area; the indicator auto-hides while the bar is up),
+    // so the game keeps the most room, with the background across the full screen width. At the top the bar keeps to
+    // the safe area.
     UILayoutGuide *content = [[UILayoutGuide alloc] init];
     [adView addLayoutGuide:content];
     NSLayoutConstraint *heightConstraint = [content.heightAnchor constraintEqualToConstant:height];
@@ -1235,7 +1236,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
              [adView.topAnchor constraintEqualToAnchor:content.topAnchor],
              [adView.leadingAnchor constraintEqualToAnchor:host.leadingAnchor],
              [adView.trailingAnchor constraintEqualToAnchor:host.trailingAnchor],
-             [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor] ];
+             [content.bottomAnchor constraintEqualToAnchor:host.bottomAnchor] ];
     [NSLayoutConstraint activateConstraints:placement];
     [NSLayoutConstraint activateConstraints:@[
         heightConstraint,

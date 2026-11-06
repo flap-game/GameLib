@@ -1,6 +1,5 @@
 #if GAMELIB_ADMOB
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -52,15 +51,6 @@ namespace FlapGame.GameLib.Ads
         private bool ready;
         private bool disposed;
 
-        // iOS: keys of the native bars shown at the bottom. While there is one, the home indicator auto-hides over it
-        // (it comes back on touch) and the bottom edge gesture is deferred, so a swipe over the bar does not leave the
-        // game. The game's own values are restored when the last bar goes.
-        private readonly HashSet<string> bottomBars = new HashSet<string>();
-        private bool indicatorOverridden;
-#if UNITY_IOS && !UNITY_EDITOR
-        private bool savedHideHomeButton;
-        private UnityEngine.iOS.SystemGestureDeferMode savedDeferMode;
-#endif
 
         /// <param name="runOnMain">Runs an action on the Unity main thread (the adapter's dispatcher).</param>
         /// <param name="onEvent">(key, event, data), always on the main thread.</param>
@@ -197,8 +187,7 @@ namespace FlapGame.GameLib.Ads
         /// <summary>Stops delivering events. Destroy the keys first.</summary>
         public void Dispose()
         {
-            bottomBars.Clear();
-            UpdateHomeIndicator();
+            HomeIndicator.ReleaseAll(IndicatorOwner);
             disposed = true;
             if (ReferenceEquals(current, this)) current = null;
         }
@@ -231,44 +220,10 @@ namespace FlapGame.GameLib.Ads
             }
         }
 
-        private void SetBottomBar(string key, bool shownAtBottom)
-        {
-            if (shownAtBottom) bottomBars.Add(key);
-            else bottomBars.Remove(key);
-            UpdateHomeIndicator();
-        }
+        private const string IndicatorOwner = "native:";
 
-        // Unity's root view controller answers prefersHomeIndicatorAutoHidden / preferredScreenEdgesDeferringSystemGestures
-        // from these two settings (PlayerSettings.iOS.hideHomeButton / deferSystemGesturesMode at launch); setting them
-        // at runtime makes Unity call setNeedsUpdateOfHomeIndicatorAutoHidden / ...ScreenEdgesDeferringSystemGestures.
-        // A game that changes them itself while a bar is up gets its values overwritten when the last bar goes.
-        private void UpdateHomeIndicator()
-        {
-            bool want = bottomBars.Count > 0;
-            if (want == indicatorOverridden) return;
-            indicatorOverridden = want;
-#if UNITY_IOS && !UNITY_EDITOR
-            try
-            {
-                if (want)
-                {
-                    savedHideHomeButton = UnityEngine.iOS.Device.hideHomeButton;
-                    savedDeferMode = UnityEngine.iOS.Device.deferSystemGesturesMode;
-                    UnityEngine.iOS.Device.hideHomeButton = true;
-                    UnityEngine.iOS.Device.deferSystemGesturesMode = savedDeferMode | UnityEngine.iOS.SystemGestureDeferMode.BottomEdge;
-                }
-                else
-                {
-                    UnityEngine.iOS.Device.hideHomeButton = savedHideHomeButton;
-                    UnityEngine.iOS.Device.deferSystemGesturesMode = savedDeferMode;
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"{LogPrefix} Home indicator update failed: {e.Message}");
-            }
-#endif
-        }
+        // iOS: a native bar at the bottom reaches the screen's bottom edge; the home indicator auto-hides while one is up.
+        private static void SetBottomBar(string key, bool shownAtBottom) => HomeIndicator.Set(IndicatorOwner + key, shownAtBottom);
 
         // A failure found on the C# side is reported like a native one, one frame later: callers never see the event
         // inside the call that caused it.
