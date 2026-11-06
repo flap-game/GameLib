@@ -249,7 +249,7 @@ public final class GameLibNativeAds {
         TextView price;
         TextView[] separators;
         TextView cta;
-        FrameLayout strip;           // collapsible: transparent strip above the ad holding the collapse button
+        FrameLayout strip;           // collapsible: holder of the collapse button, over the ad's top-right (below AdChoices)
         View collapseButton;
         TextView countdown;          // interstitial
         View closeButton;            // interstitial
@@ -503,6 +503,9 @@ public final class GameLibNativeAds {
         return v;
     }
 
+    /** Collapse button touch target's distance from the ad's top edge: clear of the top-right AdChoices icon. */
+    private static final int COLLAPSE_BUTTON_TOP_DP = 24;
+
     private static Views buildCollapsible(Activity activity, ViewGroup content, int collapsedDp,
                                           boolean startExpanded, Colors c) {
         Views v = new Views();
@@ -518,18 +521,14 @@ public final class GameLibNativeAds {
         v.wrapper.addView(column, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // Transparent strip above the ad for the collapse button: AdChoices owns the ad's top-right corner.
-        // The strip is not clickable, so touches on it fall through to the game.
+        // The collapse button sits inside the ad, over its top-right corner but below the AdChoices icon (which
+        // owns the corner itself and must not be covered): a 28dp visual circle inside a 48dp touch target.
         v.strip = new FrameLayout(activity);
-        // 28dp visual circle inside a 48dp touch target; the strip is as tall as the touch target.
         v.collapseButton = new RoundIconButton(activity, RoundIconButton.CHEVRON_DOWN, 0xAA000000, Color.WHITE,
                 dp(activity, 28));
         v.collapseButton.setVisibility(View.GONE);
         int touchPx = dp(activity, 48);
-        FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(touchPx, touchPx,
-                Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        v.strip.addView(v.collapseButton, blp);
-        column.addView(v.strip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, touchPx));
+        v.strip.addView(v.collapseButton, new FrameLayout.LayoutParams(touchPx, touchPx, Gravity.CENTER));
 
         v.adView = new NativeAdView(activity);
         v.adView.setBackgroundColor(c.bg);
@@ -553,6 +552,9 @@ public final class GameLibNativeAds {
 
         column.addView(v.adView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 v.expanded ? v.expandedPx : v.collapsedPx));
+        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(touchPx, touchPx, Gravity.TOP | Gravity.RIGHT);
+        slp.topMargin = dp(activity, COLLAPSE_BUTTON_TOP_DP);
+        v.wrapper.addView(v.strip, slp); // over the ad view (added after the column)
         applyCollapsibleState(activity, v);
         registerAssetViews(v);
         return v;

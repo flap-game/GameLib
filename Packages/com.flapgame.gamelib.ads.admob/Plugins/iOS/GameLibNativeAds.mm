@@ -1218,8 +1218,8 @@ static const CGFloat GLNAMinMediaSide = 120.0;
     UIView *badge = GLNAMakeAdBadge();
     [adView addSubview:badge];
 
-    // Collapse button: 28pt circle with a down chevron in a 44x44pt touch square (Apple HIG); kept left of the
-    // AdChoices corner (top-right of the ad view).
+    // Collapse button: 28pt circle with a down chevron in a 44x44pt touch square (Apple HIG), inside the ad over its
+    // top-right corner but below the AdChoices icon, which owns the corner itself and must not be covered.
     UIColor *buttonBg = [UIColor colorWithWhite:0.0 alpha:0.55];
     UIButton *collapseButton = GLNAMakeRoundGlyphButton(NO, 28.0, 44.0, buttonBg, [UIColor whiteColor], nil);
     [collapseButton addTarget:self action:@selector(collapseTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -1259,9 +1259,9 @@ static const CGFloat GLNAMinMediaSide = 120.0;
         [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNABadgeInset],
         [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:GLNABadgeInset],
 
-        // Touch square at the top edge, 26pt clear of the right edge (AdChoices); the circle sits 8pt inside it.
-        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor],
-        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-26.0],
+        // Touch square at the right edge, 24pt below the top edge (clear of AdChoices) - same spot as on Android.
+        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor constant:24.0],
+        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
     ]];
 
     GLNAFillRow(row, ad, YES, YES);
