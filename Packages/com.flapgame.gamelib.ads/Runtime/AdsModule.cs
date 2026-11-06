@@ -71,6 +71,14 @@ namespace FlapGame.GameLib.Ads
                  "(e.g. GameAds_LaunchCount) so its players keep their count.")]
         public string AppOpenLaunchCountKey;
 
+        [Header("Banners")]
+        [Tooltip("(0.9.0) On: GetBannerHeightPixels / GetExpectedBannerHeightPixels report only the part of a bar above the " +
+                 "safe area - the space a UI laid out in the safe area must leave free. On iOS a bottom NativeBanner and " +
+                 "bottom standard banners sit on the screen's bottom edge, over the home indicator area, so their full " +
+                 "height would leave an extra gap the size of that inset. Off: the bar's full height. No difference on " +
+                 "Android, where bars end where Unity's screen ends.")]
+        public bool BannerHeightAboveSafeArea = true;
+
         [Header("While A Fullscreen Ad Is Up")]
         [Tooltip("Time.timeScale = 0 while an interstitial, rewarded or app open ad is on screen; put back when it closes. " +
                  "Leave off when the game already pauses on FullscreenShowingChanged.")]

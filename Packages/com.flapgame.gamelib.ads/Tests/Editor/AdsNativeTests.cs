@@ -238,6 +238,14 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void BannerHeight_IsThePartAboveTheSafeArea_ByDefault()
+        {
+            var module = ScriptableObject.CreateInstance<AdsModule>();
+            try { Assert.That(module.BannerHeightAboveSafeArea, Is.True); }
+            finally { Object.DestroyImmediate(module); }
+        }
+
+        [Test]
         public void NativeBanner_MatchesTheBannerHeight_ByDefault()
         {
             var p = new AdPlacement { Format = AdFormat.NativeBanner };

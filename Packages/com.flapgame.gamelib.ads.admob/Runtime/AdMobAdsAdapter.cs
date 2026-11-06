@@ -239,9 +239,58 @@ namespace FlapGame.GameLib.Ads
         }
 
         /// <inheritdoc />
+        /// <remarks>(0.9.0) With <see cref="AdsModule.BannerHeightAboveSafeArea"/> (default) a bar sitting on the screen's
+        /// bottom edge reports only its part above the safe area: the space the game's UI, laid out in the safe area, has
+        /// to leave free.</remarks>
         public float GetBannerHeightPixels(string placementId)
         {
 #if GAMELIB_ADMOB
+            return placementId != null && units.TryGetValue(placementId, out Unit unit)
+                ? AboveSafeArea(unit, RawBannerHeightPixels(placementId))
+                : RawBannerHeightPixels(placementId);
+#else
+            return 0f;
+#endif
+        }
+
+        /// <inheritdoc />
+        /// <remarks>(0.9.0) Same safe-area rule as <see cref="GetBannerHeightPixels"/>.</remarks>
+        public float GetExpectedBannerHeightPixels(string placementId)
+        {
+#if GAMELIB_ADMOB
+            return placementId != null && units.TryGetValue(placementId, out Unit unit)
+                ? AboveSafeArea(unit, RawExpectedBannerHeightPixels(placementId))
+                : RawExpectedBannerHeightPixels(placementId);
+#else
+            return 0f;
+#endif
+        }
+
+#if GAMELIB_ADMOB
+        // (0.9.0) The part of a bar's height under the bottom safe-area inset, left out of the reported heights when
+        // AdsModule.BannerHeightAboveSafeArea is on. Only bars that sit on the screen's bottom edge have one: on iOS a
+        // bottom NativeBanner and the bottom standard banners (OnBottomEdge). A NativeCollapsible keeps its content above
+        // the inset (its reported height is already the part above it); Android bars end where Unity's screen ends.
+        private float AboveSafeArea(Unit unit, float heightPixels)
+        {
+            if (heightPixels <= 0f || (settings != null && !settings.BannerHeightAboveSafeArea)) return heightPixels;
+            return Mathf.Max(0f, heightPixels - BottomInsetUnderPixels(unit));
+        }
+
+        private static float BottomInsetUnderPixels(Unit unit)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            AdPlacement p = unit.Placement;
+            bool bottom = p.Position is BannerPosition.Bottom or BannerPosition.BottomLeft or BannerPosition.BottomRight;
+            bool onEdge = unit.NativeKey != null ? p.Format == AdFormat.NativeBanner && bottom : OnBottomEdge(p);
+            return onEdge ? Mathf.Max(0f, Screen.safeArea.yMin) : 0f;
+#else
+            return 0f;
+#endif
+        }
+
+        private float RawBannerHeightPixels(string placementId)
+        {
             if (disposed || placementId == null || !units.TryGetValue(placementId, out Unit unit)) return 0f;
             // A native bar reports its height only while it is on screen (NativeCollapsible: the collapsed bar).
             if (unit.NativeKey != null) return unit.NativeOnScreen ? NativeHeightPixels(unit) : 0f;
@@ -254,19 +303,14 @@ namespace FlapGame.GameLib.Ads
                 Debug.LogWarning($"{LogPrefix} Banner {placementId} height unknown: {e.Message}");
                 return 0f;
             }
-#else
-            return 0f;
-#endif
         }
 
-        /// <inheritdoc />
-        public float GetExpectedBannerHeightPixels(string placementId)
+        private float RawExpectedBannerHeightPixels(string placementId)
         {
-#if GAMELIB_ADMOB
             if (disposed || !initialized || placementId == null || !units.TryGetValue(placementId, out Unit unit) || !unit.Active)
                 return 0f;
             if (unit.NativeKey != null) return NativeHeightPixels(unit); // the bar height is fixed by the placement
-            float loaded = GetBannerHeightPixels(placementId);
+            float loaded = RawBannerHeightPixels(placementId);
             if (loaded > 0f) return loaded;
             if (unit.ExpectedHeightPixels > 0f) return unit.ExpectedHeightPixels;
             try
@@ -280,10 +324,8 @@ namespace FlapGame.GameLib.Ads
                 Debug.LogWarning($"{LogPrefix} Banner {placementId} expected height unknown: {e.Message}");
             }
             return unit.ExpectedHeightPixels;
-#else
-            return 0f;
-#endif
         }
+#endif
 
         /// <inheritdoc />
         public void HideBanner(string placementId)

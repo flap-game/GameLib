@@ -1,6 +1,10 @@
 # Changelog
 
 ## [0.9.0] - 2026-11-06
+- `AdsModule.BannerHeightAboveSafeArea` (default on): `GetBannerHeightPixels` / `GetExpectedBannerHeightPixels` report
+  only the part of a bar above the safe area. On iOS bottom native banners and bottom standard banners sit on the screen's
+  bottom edge (over the home indicator area); their full height would leave an inset-sized gap under a UI laid out in the
+  safe area. Off = the full height. Android is unchanged (its bars end where Unity's screen ends).
 - Fix: an app open ad could show on the way back from an ad click. The SDK's click callback reaches the main thread
   only after the resume when the click leaves the app at once (a store page, a system "open another app" prompt), so the
   return looked like a real one. `AppOpenLauncher` now waits `LateClickGraceSeconds` (0.5 s) on a return and shows
