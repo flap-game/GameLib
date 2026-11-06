@@ -101,6 +101,13 @@ Left out: `hyprmx.*`, `csj.ios`, `tencentgdt.ios`, `maio.*`, `mytarget.*` - MAX 
 - Install only networks that are live in the AdMob mediation groups / MAX ad units; the set guarantees they agree, not
   that each is needed.
 
+## A game's own subset
+
+`python Tools/mediation_versions.py manifest <project> --gamehub <release-config.json> --platform android|ios` writes
+the manifest with only the networks a game enables on GameHub (`max_mediation` / `admob_mediation` of
+`GET /api/public/release-config?package=<bundle id>&platform=<platform>`, header `X-Api-Key`), at this set's versions.
+Networks MAX treats as obsolete are skipped with a warning.
+
 ## Updating the set
 
 1. `python Tools/mediation_versions.py check` lists newer versions published since the pins.

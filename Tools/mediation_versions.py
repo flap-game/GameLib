@@ -5,8 +5,9 @@ The set lives in Packages/com.flapgame.gamelib.ads/Documentation~/mediation-vers
 
   python Tools/mediation_versions.py check            # re-read every pinned package's native pins, flag conflicts,
                                                       # list newer versions that would still agree
-  python Tools/mediation_versions.py manifest <dir>   # Packages/manifest.json of a test project with every adapter
-                                                      # of both stacks (GameLib packages as file: references)
+  python Tools/mediation_versions.py manifest <dir> [--gamehub <release-config.json>] [--platform android|ios]
+      # Packages/manifest.json of a test project (GameLib packages as file: references): every adapter of both
+      # stacks, or only the networks a GameHub release config enables (GET /api/public/release-config).
 
 Why the pins matter: on iOS both Google's and AppLovin's adapter pods pin the network SDK exactly ('= x.y.z'), so two
 adapters for one network that want different SDK versions make `pod install` fail. On Android Gradle takes the highest
@@ -197,8 +198,39 @@ def check():
     return 1 if failures else 0
 
 
-def manifest(project):
+# GameHub release config keys (max_mediation / admob_mediation) -> package suffixes of the set.
+GAMEHUB_MAX = {
+    "bidmachine": "bidmachine", "bigo_ads": "bigoads", "chartboost": "chartboost", "dt_exchange": "fyber",
+    "facebook": "facebook", "google_ad_manager": "googleadmanager", "google_admob": "google", "inmobi": "inmobi",
+    "ironsource": "ironsource", "liftoff_monetize": "vungle", "line": "line", "mintegral": "mintegral",
+    "mobilefuse": "mobilefuse", "moloco": "moloco", "ogury": "ogurypresage", "pangle": "bytedance",
+    "pubmatic": "pubmatic", "smaato": "smaato", "unity_ads": "unityads", "verve": "verve", "yandex": "yandex",
+    "yso_network": "ysonetwork",
+}
+GAMEHUB_MAX_UNSUPPORTED = {"csj", "hyprmx", "maio", "tencent", "vk_ad_network"}  # obsolete in MAX 8.6.6
+GAMEHUB_ADMOB = {
+    "applovin": "applovin", "bidmachine": "bidmachine", "bigo": "bigo", "chartboost": "chartboost",
+    "dt_exchange": "dtexchange", "i_mobile": "imobile", "inmobi": "inmobi", "ironsource": "ironsource",
+    "liftoff_monetize": "liftoffmonetize", "line": "line", "maio": "maio", "meta_audience_network": "metaaudiencenetwork",
+    "mintegral": "mintegral", "moloco": "moloco", "mytarget": "mytarget", "pangle": "pangle", "pubmatic": "pubmatic",
+    "unity_ads": "unity", "verve": "verve",
+}
+
+
+def gamehub_selection(config_path):
+    """(admob keys, max keys) a GameHub release config enables, as package suffixes of the set."""
+    cfg = json.load(open(config_path, encoding="utf-8"))
+    on = lambda sec: {k for k, v in (cfg.get(sec) or {}).items() if str(v).lower() == "true"}
+    max_on, admob_on = on("max_mediation") - {"max"}, on("admob_mediation")
+    for k in sorted((max_on - set(GAMEHUB_MAX)) | (admob_on - set(GAMEHUB_ADMOB))):
+        why = "obsolete in MAX 8.6.6, skipped" if k in GAMEHUB_MAX_UNSUPPORTED else "unknown key, skipped"
+        print(f"WARN GameHub network '{k}': {why}")
+    return {GAMEHUB_ADMOB[k] for k in admob_on if k in GAMEHUB_ADMOB}, {GAMEHUB_MAX[k] for k in max_on if k in GAMEHUB_MAX}
+
+
+def manifest(project, gamehub=None, platform=None):
     data = json.load(open(MATRIX, encoding="utf-8"))
+    admob_keys, max_keys = gamehub_selection(gamehub) if gamehub else (None, None)
     pk = lambda n: "file:" + os.path.join(ROOT, "Packages", n).replace("\\", "/")
     deps = {
         "com.unity.ugui": "2.0.0", "com.unity.modules.unitywebrequest": "1.0.0", "com.unity.modules.androidjni": "1.0.0",
@@ -211,10 +243,15 @@ def manifest(project):
     deps.update(data["core"])
     for n in data["networks"]:
         for key, ver in (n.get("admob") or {}).items():
-            deps[GMA_PREFIX + key] = ver
+            if admob_keys is None or key in admob_keys:
+                deps[GMA_PREFIX + key] = ver
         for key, (va, vi) in (n.get("max") or {}).items():
-            deps[f"{MAX_PREFIX}{key}.android"] = va
-            deps[f"{MAX_PREFIX}{key}.ios"] = vi
+            if max_keys is not None and key not in max_keys:
+                continue
+            if platform in (None, "android"):
+                deps[f"{MAX_PREFIX}{key}.android"] = va
+            if platform in (None, "ios"):
+                deps[f"{MAX_PREFIX}{key}.ios"] = vi
     out = {
         "scopedRegistries": [
             {"name": "AppLovin MAX Unity", "url": APPLOVIN + "/",
@@ -235,7 +272,9 @@ if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "check":
         sys.exit(check())
     if len(sys.argv) >= 3 and sys.argv[1] == "manifest":
-        manifest(sys.argv[2])
+        args = sys.argv[3:]
+        opt = lambda name: args[args.index(name) + 1] if name in args else None
+        manifest(sys.argv[2], opt("--gamehub"), opt("--platform"))
         sys.exit(0)
     print(__doc__)
     sys.exit(2)
