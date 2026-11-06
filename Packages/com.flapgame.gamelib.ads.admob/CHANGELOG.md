@@ -5,6 +5,8 @@
   (Android Java / iOS Objective-C++, in `Plugins/`) through `AdMobNativeBridge` (README: Native ads).
 - `INativeCollapseSource`: a `NativeCollapsible` opened expanded / collapsed by the player.
 - Test mode uses Google's native demo units for native placements without a unit id.
+- Fix: hiding a collapsible banner while it is expanded left the SDK's expanded overlay on screen. The view is now
+  destroyed (the next show loads a new one) and the expansion is reported closed, also when the placement is turned off.
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.

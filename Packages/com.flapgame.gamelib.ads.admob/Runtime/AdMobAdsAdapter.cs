@@ -183,8 +183,10 @@ namespace FlapGame.GameLib.Ads
                 ReleaseFullscreen(unit.Slot);
                 ReleaseNative(unit.Slot);
             }
+            bool wasExpanded = unit.BannerExpanded;
             ReleaseBanner(unit);
             ReleaseNative(unit);
+            if (wasExpanded) BannerExpandedChanged?.Invoke(placementId, false);
             if (wasReady) RaiseReadyChanged(placementId);
 #endif
         }
@@ -287,6 +289,14 @@ namespace FlapGame.GameLib.Ads
             if (placementId == null || !units.TryGetValue(placementId, out Unit unit)) return;
             unit.BannerVisible = false;
             if (unit.NativeKey != null) { HideNative(unit); return; }
+            if (unit.Banner != null && unit.BannerExpanded)
+            {
+                // (0.9.0) BannerView.Hide() leaves the SDK's expanded overlay of a collapsible banner on screen, and the
+                // SDK has no collapse call: drop the view (which takes the overlay with it); the next show loads a new one.
+                DropExpandedBanner(unit);
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {placementId} was expanded: destroyed instead of hidden.");
+                return;
+            }
             unit.Banner?.Hide();
 #endif
         }
@@ -299,11 +309,13 @@ namespace FlapGame.GameLib.Ads
             if (unit.NativeKey != null) { DestroyNative(unit); return; }
             if (unit.Banner == null) return;
             bool wasLoaded = unit.BannerLoaded;
+            bool wasExpanded = unit.BannerExpanded;
             unit.Generation++; // a pending banner retry belongs to the destroyed view
             unit.RetryPending = false;
             unit.RetryAttempt = 0;
             ReleaseBanner(unit);
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {placementId} destroyed.");
+            if (wasExpanded) BannerExpandedChanged?.Invoke(placementId, false); // the destroyed view never reports it closed
             if (wasLoaded) RaiseReadyChanged(placementId);
 #endif
         }
@@ -729,8 +741,22 @@ namespace FlapGame.GameLib.Ads
             slot.AppOpen = null;
         }
 
+        // (0.9.0) Destroys an expanded banner view (and the overlay it opened), reporting the expansion closed: the destroyed
+        // view never raises OnAdFullScreenContentClosed, and the service would keep counting a fullscreen ad on screen.
+        private void DropExpandedBanner(Unit unit)
+        {
+            bool wasLoaded = unit.BannerLoaded;
+            unit.Generation++;
+            unit.RetryPending = false;
+            unit.RetryAttempt = 0;
+            ReleaseBanner(unit);
+            BannerExpandedChanged?.Invoke(unit.Id, false);
+            if (wasLoaded) RaiseReadyChanged(unit.Id);
+        }
+
         private static void ReleaseBanner(Unit unit)
         {
+            unit.BannerExpanded = false;
             unit.Banner?.Destroy();
             unit.Banner        = null;
             unit.BannerLoaded  = false;
@@ -1005,8 +1031,18 @@ namespace FlapGame.GameLib.Ads
             });
             banner.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(banner.GetResponseInfo)));
             banner.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
-            banner.OnAdFullScreenContentOpened += () => RunOnMain(() => BannerExpandedChanged?.Invoke(unit.Id, true));
-            banner.OnAdFullScreenContentClosed += () => RunOnMain(() => BannerExpandedChanged?.Invoke(unit.Id, false));
+            banner.OnAdFullScreenContentOpened += () => RunOnMain(() =>
+            {
+                if (disposed || !ReferenceEquals(unit.Banner, banner)) return;
+                unit.BannerExpanded = true;
+                BannerExpandedChanged?.Invoke(unit.Id, true);
+            });
+            banner.OnAdFullScreenContentClosed += () => RunOnMain(() =>
+            {
+                if (disposed || !ReferenceEquals(unit.Banner, banner) || !unit.BannerExpanded) return;
+                unit.BannerExpanded = false;
+                BannerExpandedChanged?.Invoke(unit.Id, false);
+            });
 
             banner.Hide(); // created hidden; OnBannerAdLoaded applies the desired visibility
             banner.LoadAd(GetBannerRequest(p));
@@ -1511,6 +1547,7 @@ namespace FlapGame.GameLib.Ads
             public float LoadedHeightPixels;   // measured height of the loaded view; 0 = not measured / no view
             // Desired visibility: Show() before the ad finished loading must still win.
             public bool BannerVisible;
+            public bool BannerExpanded; // (0.9.0) the banner's fullscreen content (collapsible expansion, in-app page) is open
 
             // Banner-like native (NativeBanner / NativeCollapsible) only; BannerLoaded = an unspent native ad is loaded.
             /// <summary>Bridge key; null for every other format.</summary>
