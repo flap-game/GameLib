@@ -7,6 +7,9 @@ present (asmdef `versionDefines` -> `GAMELIB_MAX`), then registers itself - noth
 ## Configure
 
 1. **AppLovin > Integration Manager**: SDK key, mediated network adapters, AdMob app id when AdMob is mediated.
+   In a game that also ships Google Mobile Ads with AdMob mediation adapters, do not take the Integration Manager's
+   newest adapters: use the versions of [the AdMob + MAX version set](../com.flapgame.gamelib.ads/Documentation~/mediation-versions.md)
+   (on iOS both stacks pin each network SDK exactly, a mismatch fails `pod install`).
 2. **AppLovin > Integration Manager > Terms and Privacy Policy Flow**: turn it on to use MAX's consent flow
    (Google UMP). It is a build-time setting; GameLib runs it before any ad loads. When the AdMob provider is installed
    too, its UMP takes over and the MAX flow must be off, otherwise the player sees two forms.

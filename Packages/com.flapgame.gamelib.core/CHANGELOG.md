@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+- Setup: AdMob mediation adapter pins follow the AdMob + MAX version set (`com.flapgame.gamelib.ads/Documentation~/mediation-versions.json`).
+  Verve 3.38.0 -> 1.1.3 (3.38.0 is a broken publish: myTarget's adapter inside, an iOS pod that does not exist, so
+  `pod install` failed); BidMachine 1.5.3, DT Exchange 3.7.0, InMobi 5.4.1, ironSource 4.9.0, Mintegral 2.2.7, Moloco
+  3.11.0, myTarget 3.43.0.
+
 ## [0.8.11] - 2026-10-27
 - Agent guide: "Cloud Build only" setup (core + `build`, no modules, no Setup; GameHub presets for the post-build script and
   the Pre-Export Method).

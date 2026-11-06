@@ -61,7 +61,10 @@ The network's own ids (app id, placement ids) go into the AdMob console's mediat
 (`ads.OpenDebuggerAsync()`) shows whether each adapter initialized.
 
 A game that also uses MAX installs MAX's adapters through AppLovin's Integration Manager (**AppLovin > Integration
-Manager**), not here. Both kinds for the same network bring that network's SDK twice; keep their versions compatible.
+Manager**), not here. Both kinds for the same network bring that network's SDK twice, and on iOS both pin it exactly:
+a mismatch fails `pod install`. The Setup pins above already pair with MAX adapters; take the MAX side's versions from
+[the AdMob + MAX version set](../com.flapgame.gamelib.ads/Documentation~/mediation-versions.md) instead of the
+Integration Manager's newest.
 
 ## External Dependency Manager
 

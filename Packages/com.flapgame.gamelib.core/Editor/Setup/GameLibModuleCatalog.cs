@@ -113,8 +113,12 @@ namespace FlapGame.GameLib.Editor
 
         /// <summary>
         /// Google's mediation adapter for one network, from OpenUPM (<c>com.google.ads.mobile.mediation.&lt;network&gt;</c>,
-        /// under the <c>com.google.ads.mobile</c> scope). Versions pinned 2026-10-27: the newest, each needing Google Mobile Ads
-        /// 11.0.0 or later (Verve 11.2.0) - GameLib installs 11.6.0.
+        /// under the <c>com.google.ads.mobile</c> scope). Versions pinned 2026-11-06 from the AdMob + MAX version set
+        /// (<c>com.flapgame.gamelib.ads/Documentation~/mediation-versions.json</c>, checked by
+        /// <c>Tools/mediation_versions.py check</c>): each one's native SDK equals what the matching MAX adapter pins, so a
+        /// game with both stacks still passes pod install. Change them there first. Each needs Google Mobile Ads 11.0.0 or
+        /// later (Verve 11.2.0) - GameLib installs 11.6.0. Verve is 1.1.3, not OpenUPM's "latest" 3.38.0: that is a broken
+        /// publish (myTarget's adapter inside, an iOS pod that does not exist).
         /// </summary>
         public static SdkRequirement AdMobMediation(string network, string displayName, string version) => new()
         {
@@ -208,24 +212,24 @@ namespace FlapGame.GameLib.Editor
                 OptionalSdks = new[]
                 {
                     AdMobMediation("applovin", "AppLovin", "8.7.7"),
-                    AdMobMediation("bidmachine", "BidMachine", "1.5.1"),
+                    AdMobMediation("bidmachine", "BidMachine", "1.5.3"),
                     AdMobMediation("bigo", "Bigo", "3.1.0"),
                     AdMobMediation("chartboost", "Chartboost", "4.15.2"),
-                    AdMobMediation("dtexchange", "DT Exchange", "3.6.0"),
+                    AdMobMediation("dtexchange", "DT Exchange", "3.7.0"),
                     AdMobMediation("imobile", "i-mobile", "1.3.16"),
-                    AdMobMediation("inmobi", "InMobi", "5.4.0"),
-                    AdMobMediation("ironsource", "ironSource", "4.8.1"),
+                    AdMobMediation("inmobi", "InMobi", "5.4.1"),
+                    AdMobMediation("ironsource", "ironSource", "4.9.0"),
                     AdMobMediation("liftoffmonetize", "Liftoff Monetize", "5.7.10"),
                     AdMobMediation("line", "LINE", "2.2.1"),
                     AdMobMediation("maio", "maio", "3.1.11"),
                     AdMobMediation("metaaudiencenetwork", "Meta Audience Network", "3.20.1"),
-                    AdMobMediation("mintegral", "Mintegral", "2.2.6"),
-                    AdMobMediation("moloco", "Moloco", "3.10.1"),
-                    AdMobMediation("mytarget", "myTarget", "3.42.0"),
+                    AdMobMediation("mintegral", "Mintegral", "2.2.7"),
+                    AdMobMediation("moloco", "Moloco", "3.11.0"),
+                    AdMobMediation("mytarget", "myTarget", "3.43.0"),
                     AdMobMediation("pangle", "Pangle", "7.2.2"),
                     AdMobMediation("pubmatic", "PubMatic", "2.4.1"),
                     AdMobMediation("unity", "Unity Ads", "3.22.0"),
-                    AdMobMediation("verve", "Verve", "3.38.0"),
+                    AdMobMediation("verve", "Verve", "1.1.3"),
                 },
             },
             new GameLibModuleInfo
