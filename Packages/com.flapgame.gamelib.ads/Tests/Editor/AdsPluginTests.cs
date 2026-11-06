@@ -750,6 +750,22 @@ namespace FlapGame.GameLib.Ads.Tests
             Assert.That(AdsModule.ToAdRevenue(withCountry).CountryCode, Is.EqualTo("VN"), "AppsFlyer's 'country': two letters, upper case");
         }
 
+        [TestCase(AdFormat.NativeBanner)]
+        [TestCase(AdFormat.NativeCollapsible)]
+        [TestCase(AdFormat.NativeInterstitial)]
+        public void NativeImpression_MapsToNativeAdRevenue(AdFormat format)
+        {
+            var impression = new AdImpression("p", "admob", format, "ca-app-pub-x/1", "Reservation campaign", 0.004, "USD", "estimated");
+            AdRevenue r = AdsModule.ToAdRevenue(impression);
+            Assert.That(r.Format, Is.EqualTo(AdFormatKind.Native));
+            Assert.That(r.Platform, Is.EqualTo("AdMob"));
+            Assert.That(r.Network, Is.EqualTo("Reservation campaign"));
+            Assert.That(r.Placement, Is.EqualTo("p"));
+            Assert.That(r.AdUnitId, Is.EqualTo("ca-app-pub-x/1"));
+            Assert.That(r.Value, Is.EqualTo(0.004));
+            Assert.That(r.Precision, Is.EqualTo("estimated"));
+        }
+
         [Test]
         public void Dispose_DisposesAdapters_AndStopsForwarding()
         {

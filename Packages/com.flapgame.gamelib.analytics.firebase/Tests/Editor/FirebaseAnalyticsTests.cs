@@ -169,6 +169,28 @@ namespace FlapGame.GameLib.Analytics.Firebase.Tests
         }
 
         [Test]
+        public void NativeAdRevenue_FromAdMob_IsSkipped_UnlessLogAdMobImpressions_ThenFormatIsNative()
+        {
+            var native = new AdRevenue
+            {
+                Platform = "AdMob", Network = "AdMob Network", Format = AdFormatKind.Native, AdUnitId = "n1",
+                Placement = "home_native", Value = 0.004, Currency = "USD", Precision = "estimated",
+            };
+            var linked = new FakeBackend();
+            Sink(linked).TrackAdRevenue(native);
+            Assert.That(linked.Events, Is.Empty, "the linked Firebase SDK logs AdMob ad_impression itself (natives too)");
+
+            var notLinked = new FakeBackend();
+            new FirebaseAnalyticsSink(notLinked, false, logAdMobImpressions: true).TrackAdRevenue(native);
+            var (name, p) = notLinked.Events[0];
+            Assert.That(name, Is.EqualTo("ad_impression"));
+            Assert.That(p["ad_format"], Is.EqualTo("native"));
+            Assert.That(p["ad_platform"], Is.EqualTo("AdMob"));
+            Assert.That(p["placement"], Is.EqualTo("home_native"));
+            Assert.That(p["value"], Is.EqualTo(0.004));
+        }
+
+        [Test]
         public void AdMobImpressions_AreLeftToFirebase_UnlessTurnedOn()
         {
             var admob = new AdRevenue { Platform = "AdMob", Network = "AdMob Network", Format = AdFormatKind.Banner, Value = 0.001, Currency = "USD" };
