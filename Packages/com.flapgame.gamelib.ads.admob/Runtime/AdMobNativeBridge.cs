@@ -165,6 +165,25 @@ namespace FlapGame.GameLib.Ads
             }
         }
 
+        /// <summary>
+        /// iOS: puts the shown NativeCollapsible views back on top of their superview, after a standard banner was
+        /// shown (GMA adds it to the same root view, above them). Android needs none: the collapsible is raised by Z.
+        /// </summary>
+        public void KeepCollapsiblesOnTop()
+        {
+            if (disposed || !ready) return;
+#if UNITY_IOS && !UNITY_EDITOR
+            try
+            {
+                GameLibNativeAds_RaiseCollapsibles();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"{LogPrefix} Native raise threw: {e.Message}");
+            }
+#endif
+        }
+
         /// <summary>Hides the view, destroys the native ad and forgets the key. No event.</summary>
         public void Destroy(string key)
         {
@@ -303,6 +322,7 @@ namespace FlapGame.GameLib.Ads
             int bg, int text, int cta, int ctaText);
         [DllImport("__Internal")] private static extern void GameLibNativeAds_Hide(string key);
         [DllImport("__Internal")] private static extern void GameLibNativeAds_Destroy(string key);
+        [DllImport("__Internal")] private static extern void GameLibNativeAds_RaiseCollapsibles();
 
         // The strings are valid only during the call: copied before anything else.
         [AOT.MonoPInvokeCallback(typeof(NativeCallback))]

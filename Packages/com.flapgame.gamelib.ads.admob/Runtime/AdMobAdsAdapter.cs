@@ -1026,6 +1026,7 @@ namespace FlapGame.GameLib.Ads
             {
                 unit.Banner.Show();
                 HomeIndicator.Set(IndicatorOwner + unit.Id, OnBottomEdge(unit.Placement));
+                nativeBridge?.KeepCollapsiblesOnTop(); // a NativeCollapsible stays above the banners
             }
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing banner {unit.Id}.");
             return AdShowResult.Completed;
@@ -1064,7 +1065,15 @@ namespace FlapGame.GameLib.Ads
                 unit.BannerLoaded = true;
                 // Also fires on every auto-refresh: only honour the desired visibility, never force-hide.
                 bool bottomEdge = OnBottomEdge(p) && MoveToBottomEdge(banner, p);
-                if (unit.BannerVisible) banner.Show(); else banner.Hide();
+                if (unit.BannerVisible)
+                {
+                    banner.Show();
+                    nativeBridge?.KeepCollapsiblesOnTop(); // a NativeCollapsible stays above the banners
+                }
+                else
+                {
+                    banner.Hide();
+                }
                 HomeIndicator.Set(IndicatorOwner + unit.Id, unit.BannerVisible && bottomEdge);
                 if (firstLoad)
                 {

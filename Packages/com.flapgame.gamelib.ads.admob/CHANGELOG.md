@@ -34,6 +34,13 @@
   background only: its content stays above the bottom inset, which it grows by. The one-line layout of bars under 40 pt is on iOS too (`NativeBanner`).
 - Fix (iOS): `BannerSize.SmallFullWidth` never filled ("Ad request doesn't meet size requirements"): iOS refuses
   `AdSize.FullWidth` at any height. The width is now the safe area's in dp.
+- iOS native: only the ad's assets (headline, body, icon, button, media, rating, advertiser, store, price) take a click;
+  the "AD" badge, the gaps between them, the background, the collapse / close buttons do not (as on Android). A touch on
+  a native ad's background no longer reaches the game under it either.
+- iOS `NativeCollapsible`: the expanded landscape layout of Android (media left; icon, headline, meta, body, a full-width
+  button on the right), Android's text and icon / button sizes for the bar and the expanded row, and it stays above
+  banners and native banners shown after it. In landscape the background spans the screen's width while the media,
+  "AD", collapse button and AdChoices stay inside the left / right safe area (clear of the Dynamic Island / notch).
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.

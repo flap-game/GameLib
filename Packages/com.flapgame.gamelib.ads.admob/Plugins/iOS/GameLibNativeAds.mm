@@ -143,9 +143,205 @@ static const CGFloat GLNABadgeInset = 2.0;   // badge offset from the ad view's 
 static const CGFloat GLNABadgeGap = 4.0;     // space between the badge and the asset row on its right
 
 // `inLine`: the 24x16pt badge of a one-line bar, placed in the text line right after the headline.
+// AdChoices in the top-right corner of the content (inside the safe area), not the SDK's default corner of the ad view,
+// which spans the full screen width: in landscape the top of an expanded collapsible or of the interstitial is level
+// with the Dynamic Island / notch. In portrait the two corners are the same. Bars at the bottom keep the SDK's corner
+// (below the island; the content's corner would be over the CTA). Set before -setNativeAd:, as the SDK requires.
+static NSLayoutConstraint *GLNAPlaceAdChoices(GADNativeAdView *adView, NSLayoutYAxisAnchor *top, NSLayoutXAxisAnchor *trailing)
+{
+    GADAdChoicesView *choices = [[GADAdChoicesView alloc] init];
+    choices.translatesAutoresizingMaskIntoConstraints = NO;
+    [adView addSubview:choices];
+    NSLayoutConstraint *trailingConstraint = [choices.trailingAnchor constraintEqualToAnchor:trailing];
+    [NSLayoutConstraint activateConstraints:@[
+        [choices.topAnchor constraintEqualToAnchor:top],
+        trailingConstraint,
+        [choices.widthAnchor constraintEqualToConstant:15.0],
+        [choices.heightAnchor constraintEqualToConstant:15.0],
+    ]];
+    adView.adChoicesView = choices;
+    return trailingConstraint;
+}
+
+// The bar's content between the left and right safe-area insets (the notch / Dynamic Island side in landscape). Both
+// the host view's and its window's safe areas bound it: after the app comes back from another app (e.g. the App
+// Store, opened by an ad click) the host can report portrait insets (left / right 0) for a while in landscape, which
+// put the media, the AD badge and the collapse button under the screen's rounded corners.
+static void GLNAInsetSides(UILayoutGuide *content, UIView *host)
+{
+    NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray array];
+    NSMutableArray<UILayoutGuide *> *guides = [NSMutableArray arrayWithObject:host.safeAreaLayoutGuide];
+    if (host.window != nil)
+        [guides addObject:host.window.safeAreaLayoutGuide];
+    for (UILayoutGuide *guide in guides)
+    {
+        [constraints addObject:[content.leadingAnchor constraintGreaterThanOrEqualToAnchor:guide.leadingAnchor]];
+        [constraints addObject:[content.trailingAnchor constraintLessThanOrEqualToAnchor:guide.trailingAnchor]];
+    }
+    // as wide as the insets allow
+    NSLayoutConstraint *leading = [content.leadingAnchor constraintEqualToAnchor:host.leadingAnchor];
+    NSLayoutConstraint *trailing = [content.trailingAnchor constraintEqualToAnchor:host.trailingAnchor];
+    leading.priority = UILayoutPriorityRequired - 1;
+    trailing.priority = UILayoutPriorityRequired - 1;
+    [constraints addObjectsFromArray:@[ leading, trailing ]];
+    [NSLayoutConstraint activateConstraints:constraints];
+}
+
+// ----- click area -----
+// Only the asset views of a native ad register a click, as on Android. GMA counts a touch on any subview of the
+// GADNativeAdView, so the views GameLib lays out around the assets (stacks, panels, chips, fillers, the "AD" badge,
+// the meta separators) are "inside" a point only where an asset under them is; elsewhere the touch falls through to
+// the ad view's own background, which GMA does not count.
+static BOOL GLNAIsAsset(UIView *view)
+{
+    UIView *ad = view.superview;
+    while (ad != nil && ![ad isKindOfClass:[GADNativeAdView class]])
+        ad = ad.superview;
+    if (ad == nil)
+        return NO;
+    GADNativeAdView *adView = (GADNativeAdView *)ad;
+    return view == adView.headlineView || view == adView.bodyView || view == adView.iconView
+        || view == adView.callToActionView || view == adView.starRatingView || view == adView.advertiserView
+        || view == adView.storeView || view == adView.priceView || view == adView.mediaView || view == adView.imageView;
+}
+
+@protocol GLNAAssetOnly
+@end
+
+static BOOL GLNAPointOnAsset(UIView *container, CGPoint point, UIEvent *event)
+{
+    for (UIView *sub in container.subviews.reverseObjectEnumerator)
+    {
+        if (sub.hidden || sub.alpha < 0.01)
+            continue;
+        CGPoint inSub = [container convertPoint:point toView:sub];
+        if ([sub conformsToProtocol:@protocol(GLNAAssetOnly)])
+        {
+            if ([sub pointInside:inSub withEvent:event])
+                return YES;
+        }
+        else if ([sub pointInside:inSub withEvent:event] && (GLNAIsAsset(sub) || [sub isKindOfClass:[UIControl class]]))
+        {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+@interface GLNAAssetOnlyView : UIView <GLNAAssetOnly>
+@end
+
+@implementation GLNAAssetOnlyView
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event
+{
+    return [super pointInside:point withEvent:event] && GLNAPointOnAsset(self, point, event);
+}
+@end
+
+@interface GLNAAssetOnlyStackView : UIStackView <GLNAAssetOnly>
+@end
+
+@implementation GLNAAssetOnlyStackView
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event
+{
+    return [super pointInside:point withEvent:event] && GLNAPointOnAsset(self, point, event);
+}
+@end
+
+// The bottom-most subview of every GADNativeAdView, filling it: a touch that no asset takes lands here, and this view
+// refuses to let the ad view's gesture recognizers (GMA's click detection) begin for it - the way a UIControl keeps a
+// tap on itself from reaching its superview's tap recognizer. A touch on the bare ad view would not click either, but
+// GMA also counts a touch inside the frame of any of the ad view's subviews (the stacks around the assets, the badge).
+@interface GLNATouchSink : UIView
+@end
+
+@implementation GLNATouchSink
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer
+{
+    return gestureRecognizer.view == self;
+}
+
+// The touch ends here: not passed up the responder chain to the game's view under the ad.
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event
+{
+}
+
+- (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event
+{
+}
+
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event
+{
+}
+
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event
+{
+}
+@end
+
+// The "AD" badge: takes the touches on itself (see GLNANativeAdView), so none reaches an asset under it.
+@interface GLNABadgeView : GLNATouchSink
+@end
+
+@implementation GLNABadgeView
+@end
+
+static UIView *GLNAFindBadge(UIView *view, CGPoint point, UIEvent *event)
+{
+    for (UIView *sub in view.subviews.reverseObjectEnumerator)
+    {
+        if (sub.hidden || sub.alpha < 0.01)
+            continue;
+        CGPoint inSub = [view convertPoint:point toView:sub];
+        if ([sub isKindOfClass:[GLNABadgeView class]])
+        {
+            if ([sub pointInside:inSub withEvent:event])
+                return sub;
+        }
+        else if (![sub isKindOfClass:[GADMediaView class]])
+        {
+            UIView *found = GLNAFindBadge(sub, inSub, event);
+            if (found != nil)
+                return found;
+        }
+    }
+    return nil;
+}
+
+// GADNativeAdView that hands a touch on the AD badge to the badge, whatever the SDK did to the subviews' order (it
+// moves asset views such as the media view to the front, over the badge).
+@interface GLNANativeAdView : GADNativeAdView
+@end
+
+@implementation GLNANativeAdView
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
+{
+    UIView *hit = [super hitTest:point withEvent:event];
+    if (hit == nil || !self.userInteractionEnabled || self.hidden)
+        return hit;
+    UIView *badge = GLNAFindBadge(self, point, event);
+    return badge != nil ? badge : hit;
+}
+@end
+
+static void GLNAAddTouchSink(GADNativeAdView *adView)
+{
+    GLNATouchSink *sink = [[GLNATouchSink alloc] init];
+    sink.translatesAutoresizingMaskIntoConstraints = NO;
+    sink.backgroundColor = [UIColor clearColor];
+    sink.isAccessibilityElement = NO;
+    [adView insertSubview:sink atIndex:0];
+    [NSLayoutConstraint activateConstraints:@[
+        [sink.topAnchor constraintEqualToAnchor:adView.topAnchor],
+        [sink.bottomAnchor constraintEqualToAnchor:adView.bottomAnchor],
+        [sink.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor],
+        [sink.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
+    ]];
+}
+
 static UIView *GLNAMakeAdBadge(BOOL inLine)
 {
-    UIView *badge = [[UIView alloc] init];
+    UIView *badge = [[GLNABadgeView alloc] init];
     badge.translatesAutoresizingMaskIntoConstraints = NO;
     badge.backgroundColor = [UIColor colorWithWhite:0.97 alpha:1.0];
     badge.layer.cornerRadius = 3.0;
@@ -299,7 +495,7 @@ static UIButton *GLNAMakeRoundGlyphButton(BOOL cross, CGFloat size, CGFloat touc
 
 static UIStackView *GLNAMakeStack(UILayoutConstraintAxis axis, CGFloat spacing, UIStackViewAlignment alignment)
 {
-    UIStackView *stack = [[UIStackView alloc] init];
+    UIStackView *stack = [[GLNAAssetOnlyStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = axis;
     stack.spacing = spacing;
@@ -351,13 +547,49 @@ static NSString *GLNAAdSource(GADResponseInfo *info)
 @implementation GLNARow
 @end
 
+// Android's line height for a text size (about 4/3 of the size, e.g. 16 for 12sp, 14 for 10sp): the line-fit rules
+// below use it so iOS keeps and drops the same lines as Android on the same bar.
+static CGFloat GLNAAndroidLineHeight(UIFont *font)
+{
+    return ceil(font.pointSize * 4.0 / 3.0);
+}
+
+// Sizes a row for a bar `barHeight` tall - Android's layoutRow rules:
+// - bars <= 60pt ("small"): headline 12, body 10 (1 line), meta 10, CTA text 11; icon = bar - 16 (bar - 8 under
+//   40pt); CTA max(32, bar * 0.55) tall (at most bar - 6); the meta line goes when headline + body + meta + 2 do not
+//   fit in bar - 6, the body when headline + body do not;
+// - taller bars: headline 13, body 11, meta 10, CTA text 13; icon = clamp(bar * 0.7, 24, 72); CTA
+//   clamp(bar * 0.55, 24, 44) tall;
+// - CTA width clamp(bar * 1.2, 52, 96), 80 under 40pt.
+// Called when the row is built and again when a collapsible changes height (expanded 76pt row, collapsed bar).
+static void GLNASizeRow(GLNARow *row, CGFloat barHeight)
+{
+    BOOL small = barHeight <= 60.0;
+    CGFloat inner = MAX(0.0, barHeight - 6.0);
+    row.headline.font = [UIFont systemFontOfSize:small ? 12.0 : 13.0 weight:UIFontWeightBold];
+    row.body.font = [UIFont systemFontOfSize:small ? 10.0 : 11.0 weight:UIFontWeightRegular];
+    UIFont *meta = [UIFont systemFontOfSize:10.0 weight:UIFontWeightRegular];
+    for (UILabel *label in @[ row.rating, row.advertiser, row.store, row.price ])
+        label.font = meta;
+    row.cta.titleLabel.font = [UIFont systemFontOfSize:small ? 11.0 : 13.0 weight:UIFontWeightSemibold];
+
+    row.iconSize.constant = small ? MAX(16.0, barHeight - 2.0 * (barHeight < 40.0 ? 4.0 : 8.0))
+                                  : GLNAClamp(round(barHeight * 0.7), 24.0, 72.0);
+    row.ctaWidth.constant = barHeight < 40.0 ? 80.0 : GLNAClamp(round(barHeight * 1.2), 52.0, 96.0);
+    row.ctaHeight.constant = small ? MIN(MAX(32.0, round(barHeight * 0.55)), inner)
+                                   : GLNAClamp(round(barHeight * 0.55), 24.0, 44.0);
+
+    CGFloat headline = GLNAAndroidLineHeight(row.headline.font), body = GLNAAndroidLineHeight(row.body.font);
+    row.compactMetaFits = !small || row.oneLine || headline + body + GLNAAndroidLineHeight(meta) + 2.0 <= inner;
+    row.compactBodyFits = !small || row.oneLine || headline + body <= inner;
+}
+
 // `allowOneLine`: a bar under 40pt (a landscape smart banner) lays its texts out on one line, as on Android:
 // icon 24 | headline 12 bold, AD badge 24x16 (6pt gap), body 10 (takes the room left, ellipsized, 8pt gap),
 // meta "rating • advertiser • store" 10 (8pt gap) | CTA 80 wide. GLNAFitOneLine drops what does not fit.
 static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UIColor *ctaText, BOOL allowOneLine)
 {
-    // Bars <= 60pt: headline 12pt, body 10pt (one line), icon = bar - 8pt, CTA >= 32pt tall, and the meta line only
-    // when headline + body + meta fit in the bar. Bars > 60pt keep 13 / 11 / 10.
+    // Initial sizes; GLNASizeRow (called at the end) sets the final ones for the bar.
     BOOL small = barHeight <= 60.0;
     BOOL oneLine = allowOneLine && barHeight < 40.0;
     CGFloat headlineSize = small ? 12.0 : 13.0;
@@ -406,7 +638,7 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     [row.meta addArrangedSubview:row.advertiser];
     [row.meta addArrangedSubview:row.store];
     [row.meta addArrangedSubview:row.price];
-    UIView *metaFiller = [[UIView alloc] init];
+    UIView *metaFiller = [[GLNAAssetOnlyView alloc] init];
     metaFiller.translatesAutoresizingMaskIntoConstraints = NO;
     [metaFiller setContentHuggingPriority:UILayoutPriorityDefaultLow - 1 forAxis:UILayoutConstraintAxisHorizontal];
     [row.meta addArrangedSubview:metaFiller];
@@ -438,14 +670,6 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
         [column addArrangedSubview:row.meta];
     }
 
-    if (small && !oneLine)
-    {
-        // Row content area = bar - 4pt top / bottom margins.
-        CGFloat needed = row.headline.font.lineHeight + row.body.font.lineHeight + row.rating.font.lineHeight + 2.0 * columnSpacing;
-        row.compactMetaFits = ceil(needed) <= barHeight - 8.0;
-        row.compactBodyFits = ceil(row.headline.font.lineHeight + row.body.font.lineHeight + columnSpacing) <= barHeight - 8.0;
-    }
-
     row.cta = GLNAMakeCta(headlineSize, cta, ctaText);
     // tiny bars (< 40pt) get a wider button: the label is the only text room left besides the headline
     row.ctaWidth = [row.cta.widthAnchor constraintEqualToConstant:barHeight < 40.0 ? 80.0 : GLNAClamp(barHeight * 1.2, 52.0, 96.0)];
@@ -459,6 +683,7 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     [row.stack addArrangedSubview:row.icon];
     [row.stack addArrangedSubview:column];
     [row.stack addArrangedSubview:row.cta];
+    GLNASizeRow(row, barHeight);
     return row;
 }
 
@@ -619,6 +844,10 @@ typedef NS_ENUM(NSInteger, GLNAShownFormat) {
 @property (nonatomic, strong) NSLayoutConstraint *rowHostLeadingSide; // collapsible expanded in landscape: row right of the media
 @property (nonatomic, assign) CGFloat collapsedHeight;
 @property (nonatomic, assign) BOOL expanded;
+@property (nonatomic, strong) UIView *rowHost;           // collapsible: holds the row (or the info column)
+@property (nonatomic, strong) UIView *cornerBadge;       // banner / collapsible: "AD" in the top-left corner
+@property (nonatomic, strong) NSLayoutConstraint *adChoicesTrailing; // collapsible: AdChoices' right edge
+@property (nonatomic, strong) UIStackView *side;         // collapsible expanded in landscape: header / body / CTA column
 @property (nonatomic, strong) NSTimer *collapseButtonTimer;
 @property (nonatomic, strong) GLNAInterstitialController *interstitial;
 @end
@@ -650,7 +879,7 @@ typedef NS_ENUM(NSInteger, GLNAShownFormat) {
 
 static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 {
-    UIView *chip = [[UIView alloc] init];
+    UIView *chip = [[GLNAAssetOnlyView alloc] init];
     chip.translatesAutoresizingMaskIntoConstraints = NO;
     chip.layer.cornerRadius = 4.0;
     chip.layer.borderWidth = 1.0;
@@ -703,10 +932,11 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     UIColor *secondary = [self.textColor colorWithAlphaComponent:CGColorGetAlpha(self.textColor.CGColor) * 0.6];
 
     // The ad view starts below the close row so the SDK's AdChoices icon (top-right) never sits under the button.
-    GADNativeAdView *adView = [[GADNativeAdView alloc] init];
+    GADNativeAdView *adView = [[GLNANativeAdView alloc] init];
     adView.translatesAutoresizingMaskIntoConstraints = NO;
     adView.backgroundColor = [UIColor blackColor];
     [root addSubview:adView];
+    GLNAAddTouchSink(adView);
     self.adView = adView;
 
     GADMediaView *media = [[GADMediaView alloc] init];
@@ -718,7 +948,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     [media setContentCompressionResistancePriority:UILayoutPriorityDefaultLow - 10 forAxis:UILayoutConstraintAxisVertical];
     [adView addSubview:media];
 
-    UIView *panel = [[UIView alloc] init];
+    UIView *panel = [[GLNAAssetOnlyView alloc] init];
     panel.translatesAutoresizingMaskIntoConstraints = NO;
     panel.backgroundColor = self.bgColor;
     panel.layer.cornerRadius = 14.0;
@@ -757,7 +987,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     UILabel *price = GLNAMakeLabel(12.0, UIFontWeightRegular, secondary, 1);
     UIView *storeChip = GLNAMakeChip(store, self.textColor);
     UIView *priceChip = GLNAMakeChip(price, self.textColor);
-    UIView *chipFiller = [[UIView alloc] init];
+    UIView *chipFiller = [[GLNAAssetOnlyView alloc] init];
     chipFiller.translatesAutoresizingMaskIntoConstraints = NO;
     [chipFiller setContentHuggingPriority:UILayoutPriorityDefaultLow - 1 forAxis:UILayoutConstraintAxisHorizontal];
     [chips addArrangedSubview:storeChip];
@@ -798,6 +1028,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
         [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:6.0],
         [badge.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:6.0],
     ]];
+    GLNAPlaceAdChoices(adView, adView.topAnchor, safe.trailingAnchor);
 
     // Bind assets; hide the views whose asset is missing.
     headline.text = ad.headline;
@@ -1169,6 +1400,28 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 
 // ----- banner -----
 
+// A shown NativeCollapsible stays above the banners - native banners and GMA's standard banners, which all go on the
+// root view: its view goes back to the front of its superview (front = drawn on top AND first to take touches).
+// Called when a native banner shows and, from C#, when a standard banner shows; again on the next run loop turn in
+// case the banner's view is added asynchronously.
+- (void)raiseCollapsibles
+{
+    for (GLNAState *state in self.states.allValues)
+    {
+        UIView *view = state.adView;
+        if (state.format == GLNAShownCollapsible && view.superview != nil)
+            [view.superview bringSubviewToFront:view];
+    }
+}
+
+- (void)raiseCollapsiblesNowAndLater
+{
+    [self raiseCollapsibles];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self raiseCollapsibles];
+    });
+}
+
 - (void)showBannerKey:(NSString *)key heightDp:(int)heightDp top:(BOOL)top
                    bg:(int)bg text:(int)text cta:(int)cta ctaText:(int)ctaText
 {
@@ -1182,6 +1435,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
         state.shownAd = ad;
         if (![self buildBanner:state ad:ad heightDp:heightDp top:top bg:bg text:text cta:cta ctaText:ctaText])
             [self tearDownView:state];
+        [self raiseCollapsibles];
         return;
     }
 
@@ -1194,6 +1448,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
         GLNAEmit(key, @"show_failed", @{ @"error" : @"no_root_view" });
         return;
     }
+    [self raiseCollapsibles];
     GLNAEmit(key, @"shown", nil);
 }
 
@@ -1206,7 +1461,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 
     CGFloat height = heightDp > 0 ? (CGFloat)heightDp : 100.0;
 
-    GADNativeAdView *adView = [[GADNativeAdView alloc] init];
+    GADNativeAdView *adView = [[GLNANativeAdView alloc] init];
     adView.translatesAutoresizingMaskIntoConstraints = NO;
     adView.backgroundColor = GLNAColor(bg);
     adView.clipsToBounds = YES;
@@ -1218,6 +1473,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     [adView addSubview:badge];
 
     [host addSubview:adView];
+    GLNAAddTouchSink(adView);
     UILayoutGuide *safe = host.safeAreaLayoutGuide;
     // `content`: the bar's `height` tall content area, between the safe area's left and right. At the bottom the whole
     // bar sits on the physical bottom edge (over the home indicator area; the indicator auto-hides while the bar is up),
@@ -1225,6 +1481,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     // the safe area.
     UILayoutGuide *content = [[UILayoutGuide alloc] init];
     [adView addLayoutGuide:content];
+    GLNAInsetSides(content, host);
     NSLayoutConstraint *heightConstraint = [content.heightAnchor constraintEqualToConstant:height];
     NSArray<NSLayoutConstraint *> *placement = top
         ? @[ [adView.topAnchor constraintEqualToAnchor:safe.topAnchor],
@@ -1240,8 +1497,6 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     [NSLayoutConstraint activateConstraints:placement];
     [NSLayoutConstraint activateConstraints:@[
         heightConstraint,
-        [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
-        [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
 
         // The row starts right of the AD badge so the badge never covers the icon / text (one-line: no corner badge).
         row.oneLine ? [row.stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:8.0]
@@ -1291,13 +1546,109 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
     return MAX(height, landscape ? GLNAMinMediaSide : MAX(collapsed, 76.0) + GLNAMinMediaSide);
 }
 
-// Landscape: the row fills the right column below the collapse button (at most 120pt).
-- (CGFloat)expandedRowHeightFor:(CGFloat)collapsed expanded:(CGFloat)expanded landscape:(BOOL)landscape
+// Expanded portrait: the row under the media. (Expanded landscape uses the info column, GLNAEnterSide.)
+- (CGFloat)expandedRowHeightFor:(CGFloat)collapsed expanded:(CGFloat)expanded
 {
-    CGFloat row = MIN(MAX(collapsed, 76.0), expanded);
-    if (landscape)
-        row = MAX(row, MIN(expanded - GLNACollapseButtonTop - GLNACollapseButtonTouch, 120.0));
-    return row;
+    return MIN(MAX(collapsed, 76.0), expanded);
+}
+
+// Row inside the collapsible's rowHost: right of the AD badge (collapsed) or across the host (expanded portrait).
+static void GLNAPinRow(GLNAState *state, BOOL full)
+{
+    GLNARow *row = state.row;
+    UIView *rowHost = state.rowHost;
+    state.rowLeadingCompact = [row.stack.leadingAnchor constraintEqualToAnchor:state.cornerBadge.trailingAnchor constant:GLNABadgeGap];
+    state.rowLeadingFull = [row.stack.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:8.0];
+    [NSLayoutConstraint activateConstraints:@[
+        full ? state.rowLeadingFull : state.rowLeadingCompact,
+        [row.stack.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor constant:-8.0],
+        [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:rowHost.topAnchor constant:4.0],
+        [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:rowHost.bottomAnchor constant:-4.0],
+        [row.stack.centerYAnchor constraintEqualToAnchor:rowHost.centerYAnchor],
+    ]];
+}
+
+// Collapsible expanded in landscape, right of the media: an info column like an app-store card, centred vertically
+// with 12pt padding - header (icon 44 | headline 15 bold, meta 11), body 12 on up to 2 lines (8pt below), then the
+// CTA across the column (40pt, 10pt below). The header stops 68pt from the ad's right edge, clear of the collapse
+// button's touch target. The body and the CTA move out of the row into the column; GLNALeaveSide puts them back.
+// Same layout as Android's layoutSide.
+static void GLNAEnterSide(GLNAState *state, CGFloat adHeight)
+{
+    GLNARow *row = state.row;
+    const CGFloat pad = 12.0, icon = 44.0, bodyGap = 8.0, ctaGap = 10.0, ctaHeight = 40.0;
+
+    UIView *header = [[GLNAAssetOnlyView alloc] init];
+    header.translatesAutoresizingMaskIntoConstraints = NO;
+    [header addSubview:row.stack]; // drops the row's constraints in the host
+    [row.stack removeArrangedSubview:row.cta];
+    [row.cta removeFromSuperview];
+    [row.column removeArrangedSubview:row.body];
+    [row.body removeFromSuperview];
+
+    row.iconSize.constant = icon;
+    row.headline.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightBold];
+    UIFont *meta = [UIFont systemFontOfSize:11.0 weight:UIFontWeightRegular];
+    for (UILabel *label in @[ row.rating, row.advertiser, row.store, row.price ])
+        label.font = meta;
+    row.body.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular];
+    row.cta.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
+    row.ctaWidth.active = NO;
+    // across the column: its required hugging would otherwise shrink the whole content to the button's text
+    [row.cta setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    row.ctaHeight.constant = ctaHeight;
+
+    // the body gets what the header and the button leave: 2 lines, 1, or none
+    CGFloat room = adHeight - 2.0 * pad - icon - ctaGap - ctaHeight - bodyGap;
+    NSInteger lines = MIN(2, (NSInteger)floor(room / row.body.font.lineHeight));
+    row.body.numberOfLines = MAX(lines, 1);
+    if (lines <= 0)
+        row.body.hidden = YES;
+
+    UIStackView *side = GLNAMakeStack(UILayoutConstraintAxisVertical, 0.0, UIStackViewAlignmentFill);
+    [side addArrangedSubview:header];
+    [side addArrangedSubview:row.body];
+    [side addArrangedSubview:row.cta];
+    [side setCustomSpacing:bodyGap afterView:header];
+    [side setCustomSpacing:ctaGap afterView:row.body];
+    [state.rowHost addSubview:side];
+    UIView *rowHost = state.rowHost;
+    [NSLayoutConstraint activateConstraints:@[
+        [row.stack.topAnchor constraintEqualToAnchor:header.topAnchor],
+        [row.stack.bottomAnchor constraintEqualToAnchor:header.bottomAnchor],
+        [row.stack.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
+        // rowHost ends at the content's right edge, where the collapse button is measured from
+        [row.stack.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor
+                                                 constant:-(GLNACollapseButtonTop + GLNACollapseButtonTouch + 4.0)],
+        [side.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:pad],
+        [side.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor constant:-pad],
+        [side.centerYAnchor constraintEqualToAnchor:rowHost.centerYAnchor],
+        [side.topAnchor constraintGreaterThanOrEqualToAnchor:rowHost.topAnchor constant:pad],
+        [side.bottomAnchor constraintLessThanOrEqualToAnchor:rowHost.bottomAnchor constant:-pad],
+    ]];
+    state.side = side;
+}
+
+// Back to the bar: body into the text column (after the headline), CTA at the row's end. The caller re-sizes the row
+// for the bar (GLNASizeRow).
+static void GLNALeaveSide(GLNAState *state)
+{
+    if (state.side == nil)
+        return;
+    GLNARow *row = state.row;
+    UIView *header = row.stack.superview;
+    [state.side removeArrangedSubview:row.body];
+    [state.side removeArrangedSubview:row.cta];
+    [row.column insertArrangedSubview:row.body atIndex:1];
+    [row.stack addArrangedSubview:row.cta];
+    [state.rowHost addSubview:row.stack];
+    [header removeFromSuperview];
+    [state.side removeFromSuperview];
+    state.side = nil;
+
+    row.ctaWidth.active = YES;
+    [row.cta setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    GLNAPinRow(state, NO);
 }
 
 - (void)showCollapsibleKey:(NSString *)key collapsedDp:(int)collapsedDp startExpanded:(BOOL)startExpanded
@@ -1347,11 +1698,11 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
         hostSize = [UIScreen mainScreen].bounds.size;
     BOOL landscape = hostSize.width > hostSize.height;
     CGFloat expandedHeight = [self expandedHeightFor:collapsed screenHeight:hostSize.height landscape:landscape];
-    CGFloat expandedRow = [self expandedRowHeightFor:collapsed expanded:expandedHeight landscape:landscape];
+    CGFloat expandedRow = [self expandedRowHeightFor:collapsed expanded:expandedHeight];
     // landscape media column: 16:9 of the ad height, at most half the width
     CGFloat mediaWidth = MAX(GLNAMinMediaSide, MIN(floor(expandedHeight * 16.0 / 9.0), floor(hostSize.width / 2.0)));
 
-    GADNativeAdView *adView = [[GADNativeAdView alloc] init];
+    GADNativeAdView *adView = [[GLNANativeAdView alloc] init];
     adView.translatesAutoresizingMaskIntoConstraints = NO;
     adView.backgroundColor = GLNAColor(bg);
     adView.clipsToBounds = YES;
@@ -1363,7 +1714,7 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
     media.clipsToBounds = YES;
     [adView addSubview:media];
 
-    UIView *rowHost = [[UIView alloc] init];
+    UIView *rowHost = [[GLNAAssetOnlyView alloc] init];
     rowHost.translatesAutoresizingMaskIntoConstraints = NO;
     rowHost.backgroundColor = [UIColor clearColor];
     [adView addSubview:rowHost];
@@ -1384,21 +1735,21 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
     [adView addSubview:collapseButton];
 
     [host addSubview:adView];
+    GLNAAddTouchSink(adView);
     UILayoutGuide *safe = host.safeAreaLayoutGuide;
     // `content`: the ad's content area, inside the safe area. The background reaches the physical bottom edge and the
     // full screen width (under the home indicator, which auto-hides while the ad is up); media, row and buttons stay
     // inside the safe area. The ad grows by the bottom inset, so the expanded media keeps its full height (>= 120pt).
     UILayoutGuide *content = [[UILayoutGuide alloc] init];
     [adView addLayoutGuide:content];
+    GLNAInsetSides(content, host);
     NSLayoutConstraint *heightConstraint = [content.heightAnchor constraintEqualToConstant:expanded ? expandedHeight : collapsed];
-    NSLayoutConstraint *rowHeight = [rowHost.heightAnchor constraintEqualToConstant:expanded ? expandedRow : collapsed];
-    // Collapsed, the row starts right of the AD badge (no asset under it); expanded, the badge sits over the media.
-    NSLayoutConstraint *leadingCompact = [row.stack.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:GLNABadgeGap];
-    NSLayoutConstraint *leadingFull = [row.stack.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:8.0];
+    BOOL side = landscape && expanded;
+    // Expanded in landscape the host is the info column right of the media, the ad's full height.
+    NSLayoutConstraint *rowHeight = [rowHost.heightAnchor constraintEqualToConstant:side ? expandedHeight : expanded ? expandedRow : collapsed];
     // The row spans the ad, except expanded in landscape where it sits right of the media column.
     NSLayoutConstraint *rowHostFull = [rowHost.leadingAnchor constraintEqualToAnchor:content.leadingAnchor];
     NSLayoutConstraint *rowHostSide = [rowHost.leadingAnchor constraintEqualToAnchor:media.trailingAnchor];
-    BOOL side = landscape && expanded;
     NSArray<NSLayoutConstraint *> *mediaShape = landscape
         ? @[ [media.widthAnchor constraintEqualToConstant:mediaWidth],
              [media.bottomAnchor constraintEqualToAnchor:content.bottomAnchor] ]
@@ -1411,8 +1762,6 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
         [adView.trailingAnchor constraintEqualToAnchor:host.trailingAnchor],
         [adView.topAnchor constraintEqualToAnchor:content.topAnchor],
         [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
-        [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
-        [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
         heightConstraint,
 
         side ? rowHostSide : rowHostFull,
@@ -1423,12 +1772,6 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
         [media.topAnchor constraintEqualToAnchor:content.topAnchor],
         [media.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
 
-        expanded ? leadingFull : leadingCompact,
-        [row.stack.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor constant:-8.0],
-        [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:rowHost.topAnchor constant:4.0],
-        [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:rowHost.bottomAnchor constant:-4.0],
-        [row.stack.centerYAnchor constraintEqualToAnchor:rowHost.centerYAnchor],
-
         [badge.topAnchor constraintEqualToAnchor:content.topAnchor constant:GLNABadgeInset],
         [badge.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:GLNABadgeInset],
 
@@ -1437,9 +1780,27 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
         [collapseButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-GLNACollapseButtonTop],
     ]];
 
+    // expanded: in the content's corner; collapsed (a bar at the bottom): the ad view's corner, clear of the CTA
+    state.adChoicesTrailing = GLNAPlaceAdChoices(adView, content.topAnchor,
+                                                 expanded ? content.trailingAnchor : adView.trailingAnchor);
+    state.adView = adView;
+    state.row = row;
+    state.rowHost = rowHost;
+    state.cornerBadge = badge;
     GLNAFillRow(row, ad, YES, YES);
     if (!expanded)
         GLNASetRowCompact(row, ad, YES);
+    // Collapsed, the row starts right of the AD badge (no asset under it); expanded, the badge sits over the media.
+    if (side)
+    {
+        GLNAEnterSide(state, expandedHeight);
+    }
+    else
+    {
+        if (expanded)
+            GLNASizeRow(row, expandedRow); // the 76pt row under the media: Android's sizes for that height
+        GLNAPinRow(state, expanded);
+    }
     media.hidden = !expanded;
 
     GLNARegisterRow(adView, row);
@@ -1464,8 +1825,6 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
     state.collapseButton = collapseButton;
     state.heightConstraint = heightConstraint;
     state.rowHeightConstraint = rowHeight;
-    state.rowLeadingCompact = leadingCompact;
-    state.rowLeadingFull = leadingFull;
     state.rowHostLeadingFull = rowHostFull;
     state.rowHostLeadingSide = rowHostSide;
     state.collapsedHeight = collapsed;
@@ -1529,8 +1888,22 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
 
     state.heightConstraint.constant = state.collapsedHeight;
     state.rowHeightConstraint.constant = state.collapsedHeight;
-    state.rowLeadingFull.active = NO;
-    state.rowLeadingCompact.active = YES;
+    if (state.side != nil)
+    {
+        GLNALeaveSide(state); // pins the row compact
+    }
+    else
+    {
+        state.rowLeadingFull.active = NO;
+        state.rowLeadingCompact.active = YES;
+    }
+    if (state.adChoicesTrailing != nil && adView.adChoicesView != nil)
+    {
+        state.adChoicesTrailing.active = NO;
+        state.adChoicesTrailing = [adView.adChoicesView.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor];
+        state.adChoicesTrailing.active = YES;
+    }
+    GLNASizeRow(row, state.collapsedHeight); // back to the bar's sizes (fonts, icon, CTA, which lines fit)
     state.rowHostLeadingSide.active = NO; // deactivate before activating: never two leading constraints at once
     state.rowHostLeadingFull.active = YES;
     [UIView animateWithDuration:0.25
@@ -1733,6 +2106,15 @@ void GameLibNativeAds_Destroy(const char *key)
     });
 #else
     (void)key;
+#endif
+}
+
+void GameLibNativeAds_RaiseCollapsibles(void)
+{
+#if GLNA_HAS_GMA
+    GLNAOnMain(^{
+        [[GLNAManager shared] raiseCollapsiblesNowAndLater];
+    });
 #endif
 }
 
