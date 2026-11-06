@@ -778,8 +778,9 @@ public final class GameLibNativeAds {
         v.row.setPadding(rowAtTop ? dp(ctx, BADGE_MARGIN_DP + BADGE_W_DP + 4) : padH, padV, padH, padV);
         int innerPx = Math.max(0, rowPx - 2 * padV);
 
-        // small bars: icon = bar height minus 8dp top + bottom; otherwise ~70% of the bar (24..72dp)
-        int iconPx = small ? Math.max(dp(ctx, 16), rowPx - 2 * dp(ctx, 8))
+        // small bars: icon = bar height minus 8dp top + bottom (4dp under 40dp, e.g. a 32dp landscape smart
+        // banner); otherwise ~70% of the bar (24..72dp)
+        int iconPx = small ? Math.max(dp(ctx, 16), rowPx - 2 * dp(ctx, rowDp < 40 ? 4 : 8))
                 : dp(ctx, clamp(Math.round(rowDp * 0.7f), 24, 72));
         LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) v.icon.getLayoutParams();
         ilp.width = iconPx;
@@ -787,7 +788,8 @@ public final class GameLibNativeAds {
         v.icon.setLayoutParams(ilp);
 
         LinearLayout.LayoutParams clp = (LinearLayout.LayoutParams) v.cta.getLayoutParams();
-        clp.width = dp(ctx, clamp(Math.round(rowDp * 1.2f), 52, 96));
+        // tiny bars (< 40dp) get a wider button: the label is the only text room left besides the headline
+        clp.width = dp(ctx, rowDp < 40 ? 80 : clamp(Math.round(rowDp * 1.2f), 52, 96));
         clp.height = small ? Math.min(dp(ctx, Math.max(32, Math.round(rowDp * 0.55f))), innerPx)
                 : dp(ctx, clamp(Math.round(rowDp * 0.55f), 24, 44));
         v.cta.setLayoutParams(clp);
@@ -810,6 +812,7 @@ public final class GameLibNativeAds {
         setShown(v.store, showAdvertiserStore && hasText(v.store));
         setShown(v.price, showPrice && hasText(v.price));
         setShown(v.rating, hasText(v.rating));
+        setShown(v.body, hasText(v.body));
         updateSeparators(v);
 
         if (small && v.metaRow.getVisibility() == View.VISIBLE) {
@@ -824,6 +827,11 @@ public final class GameLibNativeAds {
             if (need > innerPx) {
                 v.metaRow.setVisibility(View.GONE);
             }
+        }
+        if (small && v.body.getVisibility() == View.VISIBLE && v.headline.getVisibility() == View.VISIBLE
+                && v.headline.getLineHeight() + v.body.getLineHeight() > innerPx) {
+            // tiny bar (e.g. a 32dp smart banner in landscape): the headline alone
+            v.body.setVisibility(View.GONE);
         }
     }
 

@@ -4,6 +4,17 @@ using UnityEngine;
 
 namespace FlapGame.GameLib.Ads
 {
+    /// <summary>(0.9.0) How tall a <see cref="AdFormat.NativeBanner"/> bar is (<see cref="AdPlacement.NativeBannerHeight"/>).</summary>
+    public enum NativeBannerHeight
+    {
+        /// <summary>As tall as an anchored adaptive banner (<see cref="BannerLayout.AdaptiveBannerHeightDp(float, float)"/>).</summary>
+        Adaptive = 0,
+        /// <summary>AdMob's former smart banner height (<see cref="BannerLayout.SmartBannerHeightDp(float, float)"/>): compact in landscape.</summary>
+        Smart = 1,
+        /// <summary><see cref="AdPlacement.NativeHeightDp"/>.</summary>
+        Fixed = 2,
+    }
+
     /// <summary>
     /// A named spot in the game where an ad shows. Gameplay only knows the <see cref="Id"/>;
     /// which SDK and unit id fill it is decided here (and may be overridden by remote config).
@@ -55,13 +66,15 @@ namespace FlapGame.GameLib.Ads
         public Color BannerBackgroundColor = Color.clear;
 
         [Header("Native only (AdMob)")]
-        [Tooltip("NativeBanner: the bar is as tall as an anchored adaptive banner on this device (Google's rule: width x " +
-                 "50 / 320 dp, 50..90 dp, at most 15% of the screen), so it can swap with a standard banner without moving " +
-                 "the layout. Off = Native Height Dp.")]
-        public bool NativeMatchBannerHeight = true;
+        [Tooltip("NativeBanner bar height. Adaptive: as tall as an anchored adaptive banner on this device (Google's rule: " +
+                 "width x 50 / 320 dp, 50..90 dp, at most 15% of the screen), so it swaps with a standard banner without " +
+                 "moving the layout. Smart: AdMob's former smart banner, compact in landscape (32 dp on a phone in landscape, " +
+                 "50 dp in portrait, 90 dp on a tablet; under 40 dp the bar shows icon, headline and button only). " +
+                 "Fixed: Native Height Dp.")]
+        public NativeBannerHeight NativeBannerHeight = NativeBannerHeight.Adaptive;
 
         [Tooltip("NativeBanner / NativeCollapsible: bar height in dp (the collapsed bar for NativeCollapsible). 0 = default " +
-                 "(NativeBanner 100, NativeCollapsible 50). Ignored for a NativeBanner with Native Match Banner Height on.")]
+                 "(NativeBanner 100, NativeCollapsible 50). For a NativeBanner only with Native Banner Height = Fixed.")]
         [Min(0)] public int NativeHeightDp;
 
         [Tooltip("NativeInterstitial: seconds before the close button appears (a 'Close in Ns' countdown shows meanwhile). " +
@@ -103,8 +116,9 @@ namespace FlapGame.GameLib.Ads
 
         /// <summary>
         /// (0.9.0) <see cref="NativeHeightDp"/>, or the format's default when 0 (NativeBanner 100, NativeCollapsible 50).
-        /// Does not apply <see cref="NativeMatchBannerHeight"/> (that needs the device width: see
-        /// <see cref="BannerLayout.AdaptiveBannerHeightDp(float, float)"/>).
+        /// Does not apply <see cref="NativeBannerHeight"/> Adaptive / Smart (they need the device's screen: see
+        /// <see cref="BannerLayout.AdaptiveBannerHeightDp(float, float)"/> and
+        /// <see cref="BannerLayout.SmartBannerHeightDp(float, float)"/>).
         /// </summary>
         public int EffectiveNativeHeightDp => NativeHeightDp > 0 ? NativeHeightDp : Format == AdFormat.NativeCollapsible ? 50 : 100;
 

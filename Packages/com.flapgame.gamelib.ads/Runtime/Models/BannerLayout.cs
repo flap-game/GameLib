@@ -13,6 +13,13 @@ namespace FlapGame.GameLib.Ads
             Mathf.Max(50f, Mathf.Min(Mathf.Round(widthDp * 50f / 320f), Mathf.Min(90f, screenHeightDp * 0.15f)));
 
         /// <summary>
+        /// (0.9.0) Height in dp of AdMob's former smart banner: 90 dp on a tablet (shortest screen side >= 600 dp),
+        /// otherwise 32 dp when the screen is at most 400 dp tall (a phone in landscape) and 50 dp above that.
+        /// </summary>
+        public static float SmartBannerHeightDp(float screenWidthDp, float screenHeightDp) =>
+            Mathf.Min(screenWidthDp, screenHeightDp) >= 600f ? 90f : screenHeightDp <= 400f ? 32f : 50f;
+
+        /// <summary>
         /// Top-left corner, in dp from the top-left of the safe area, of an ad of <paramref name="sizeDp"/> centred at
         /// <paramref name="centerFraction"/> of the safe area (<see cref="BannerPosition.Custom"/>), kept inside it.
         /// </summary>

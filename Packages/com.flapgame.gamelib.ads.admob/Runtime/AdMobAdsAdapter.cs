@@ -1078,13 +1078,17 @@ namespace FlapGame.GameLib.Ads
             return Mathf.Round(BannerLayout.AdaptiveBannerHeightDp(widthDp, Screen.height / scale) * scale);
         }
 
-        // (0.9.0) Bar height in dp of a banner-like native: an adaptive banner's height for a NativeBanner that matches it.
+        // (0.9.0) Bar height in dp of a banner-like native: for a NativeBanner, an adaptive banner's height (Adaptive) or
+        // the former smart banner's (Smart); otherwise NativeHeightDp.
         private static int NativeBarHeightDp(AdPlacement p)
         {
-            if (p.Format != AdFormat.NativeBanner || !p.NativeMatchBannerHeight) return p.EffectiveNativeHeightDp;
+            if (p.Format != AdFormat.NativeBanner || p.NativeBannerHeight == NativeBannerHeight.Fixed) return p.EffectiveNativeHeightDp;
             float scale = MobileAds.Utils.GetDeviceScale();
             if (scale <= 0f) return p.EffectiveNativeHeightDp;
-            return Mathf.RoundToInt(BannerLayout.AdaptiveBannerHeightDp(MobileAds.Utils.GetDeviceSafeWidth(), Screen.height / scale));
+            float screenHeightDp = Screen.height / scale;
+            return Mathf.RoundToInt(p.NativeBannerHeight == NativeBannerHeight.Smart
+                ? BannerLayout.SmartBannerHeightDp(Screen.width / scale, screenHeightDp)
+                : BannerLayout.AdaptiveBannerHeightDp(MobileAds.Utils.GetDeviceSafeWidth(), screenHeightDp));
         }
 
         // Per placement and screen size, so a rotation / resolution change never reuses a wrong height.

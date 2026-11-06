@@ -228,12 +228,21 @@ namespace FlapGame.GameLib.Ads.Tests
             Assert.That(BannerLayout.AdaptiveBannerHeightDp(widthDp, screenDp), Is.EqualTo(expected).Within(0.01f));
         }
 
+        [TestCase(393f, 810f, 50f, TestName = "SmartHeight_PhonePortrait_Is50")]
+        [TestCase(858f, 393f, 32f, TestName = "SmartHeight_PhoneLandscape_Is32")]
+        [TestCase(1280f, 800f, 90f, TestName = "SmartHeight_Tablet_Is90")]
+        [TestCase(800f, 1280f, 90f, TestName = "SmartHeight_TabletPortrait_Is90")]
+        public void SmartBannerHeightDp_FollowsTheFormerSmartBanner(float widthDp, float heightDp, float expected)
+        {
+            Assert.That(BannerLayout.SmartBannerHeightDp(widthDp, heightDp), Is.EqualTo(expected));
+        }
+
         [Test]
         public void NativeBanner_MatchesTheBannerHeight_ByDefault()
         {
             var p = new AdPlacement { Format = AdFormat.NativeBanner };
-            Assert.That(p.NativeMatchBannerHeight, Is.True);
-            Assert.That(p.EffectiveNativeHeightDp, Is.EqualTo(100), "the fixed height used when matching is turned off");
+            Assert.That(p.NativeBannerHeight, Is.EqualTo(NativeBannerHeight.Adaptive));
+            Assert.That(p.EffectiveNativeHeightDp, Is.EqualTo(100), "the Fixed height");
         }
     }
 }

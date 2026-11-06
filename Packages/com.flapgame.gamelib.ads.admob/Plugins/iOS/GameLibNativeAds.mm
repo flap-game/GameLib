@@ -321,6 +321,7 @@ static NSString *GLNAAdSource(GADResponseInfo *info)
 @property (nonatomic, strong) NSLayoutConstraint *ctaHeight;
 @property (nonatomic, strong) UIColor *secondaryColor;
 @property (nonatomic, assign) BOOL compactMetaFits; // NO: the bar is too short for the meta line in compact mode
+@property (nonatomic, assign) BOOL compactBodyFits; // NO: the bar (e.g. a 32pt smart banner) only fits the headline
 @end
 
 @implementation GLNARow
@@ -340,6 +341,7 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     GLNARow *row = [[GLNARow alloc] init];
     row.secondaryColor = secondary;
     row.compactMetaFits = YES;
+    row.compactBodyFits = YES;
     row.stack = GLNAMakeStack(UILayoutConstraintAxisHorizontal, 8.0, UIStackViewAlignmentCenter);
 
     row.icon = [[UIImageView alloc] init];
@@ -387,10 +389,12 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
         // Row content area = bar - 4pt top / bottom margins.
         CGFloat needed = row.headline.font.lineHeight + row.body.font.lineHeight + row.rating.font.lineHeight + 2.0 * columnSpacing;
         row.compactMetaFits = ceil(needed) <= barHeight - 8.0;
+        row.compactBodyFits = ceil(row.headline.font.lineHeight + row.body.font.lineHeight + columnSpacing) <= barHeight - 8.0;
     }
 
     row.cta = GLNAMakeCta(headlineSize, cta, ctaText);
-    row.ctaWidth = [row.cta.widthAnchor constraintEqualToConstant:GLNAClamp(barHeight * 1.2, 52.0, 96.0)];
+    // tiny bars (< 40pt) get a wider button: the label is the only text room left besides the headline
+    row.ctaWidth = [row.cta.widthAnchor constraintEqualToConstant:barHeight < 40.0 ? 80.0 : GLNAClamp(barHeight * 1.2, 52.0, 96.0)];
     CGFloat ctaHeight = small ? MIN(GLNAClamp(barHeight - 16.0, 32.0, 40.0), barHeight - 8.0)
                               : GLNAClamp(barHeight - 16.0, 22.0, 40.0);
     row.ctaHeight = [row.cta.heightAnchor constraintEqualToConstant:ctaHeight];
@@ -411,7 +415,7 @@ static void GLNAFillRow(GLNARow *row, GADNativeAd *ad, BOOL full, BOOL showPrice
     row.headline.text = ad.headline;
     row.headline.hidden = !GLNAHasText(ad.headline);
     row.body.text = ad.body;
-    row.body.hidden = !GLNAHasText(ad.body);
+    row.body.hidden = !GLNAHasText(ad.body) || (!full && !row.compactBodyFits);
     row.body.numberOfLines = full ? 2 : 1;
 
     UIImage *iconImage = ad.icon.image;
@@ -452,6 +456,7 @@ static void GLNASetRowCompact(GLNARow *row, GADNativeAd *ad, BOOL compact)
     if (compact)
     {
         row.body.numberOfLines = 1;
+        row.body.hidden = !GLNAHasText(ad.body) || !row.compactBodyFits;
         row.advertiser.hidden = YES;
         row.store.hidden = YES;
         row.price.hidden = YES;

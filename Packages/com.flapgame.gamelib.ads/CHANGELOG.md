@@ -1,8 +1,10 @@
 # Changelog
 
 ## [0.9.0] - 2026-11-06
-- `AdPlacement.NativeMatchBannerHeight` (default on): a `NativeBanner` is as tall as an anchored adaptive banner on
-  the device, from `BannerLayout.AdaptiveBannerHeightDp` (Google's rule, shared with the AdMob banner height estimate).
+- `AdPlacement.NativeBannerHeight` for a `NativeBanner`: `Adaptive` (default) is as tall as an anchored adaptive banner
+  on the device (`BannerLayout.AdaptiveBannerHeightDp`, Google's rule, shared with the AdMob banner height estimate);
+  `Smart` is AdMob's former smart banner height (`BannerLayout.SmartBannerHeightDp`: 32 dp on a phone in landscape,
+  50 dp in portrait, 90 dp on a tablet), compact for landscape games; `Fixed` is `NativeHeightDp`.
 - AdMob native ads: placement formats `NativeBanner`, `NativeCollapsible` and `NativeInterstitial` (`AdPlacement.IsNative`,
   `Native*` fields: height, close / collapse-button delays, start expanded, hide on collapse, colors). Native bars go
   through the banner API (`IsBannerLike`); `NativeInterstitial` follows the interstitial pacing rules and shares their timer.
