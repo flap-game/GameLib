@@ -88,16 +88,16 @@ Left out: `hyprmx.*`, `csj.ios`, `tencentgdt.ios`, `maio.*`, `mytarget.*` - MAX 
   (2026-08-08): its Android dependency is the **myTarget** adapter and its iOS pod `GoogleMobileAdsMediationVerve
   5.43.0.0` does not exist, so `pod install` fails. The real line is 1.1.x. GameLib Setup pinned 3.38.0 until this set (core CHANGELOG, Unreleased).
 - **Do not pick by "latest" on either registry.** Sort by publish date and read the native pins; `check` does.
-- **MAX Integration Manager installs the newest adapter**, which breaks the pairing above. In a game with both stacks
-  write the MAX adapter versions into `Packages/manifest.json` (or fix them after the Integration Manager), and do not
-  press its *Upgrade All*.
+- **MAX Integration Manager installs the newest adapter**, which breaks the pairing above. Install MAX adapters from
+  GameLib Setup (below) and do not press the Integration Manager's *Upgrade All*.
 
 ## Installing
 
 - AdMob adapters: GameLib > Setup > Ads - AdMob > Optional (the catalog carries these pins), or
   `-gamelibOptional bidmachine,unity,...`.
-- MAX adapters: add to `Packages/manifest.json` under the AppLovin scoped registry, e.g.
-  `"com.applovin.mediation.adapters.unityads.android": "4210001.0.0"`, `"...unityads.ios": "4210001.0.0"`.
+- MAX adapters: GameLib > Setup > Ads - AppLovin MAX > Optional - one row per network, Install / Remove adds or
+  removes its `.android` and `.ios` packages together at these pins - or `-gamelibOptional max-unityads,max-bytedance,...`
+  (MAX keys are `max-` + the package's network name). Setup also pins MAX core to 8.6.6.
 - Install only networks that are live in the AdMob mediation groups / MAX ad units; the set guarantees they agree, not
   that each is needed.
 
@@ -112,6 +112,7 @@ Networks MAX treats as obsolete are skipped with a warning.
 
 1. `python Tools/mediation_versions.py check` lists newer versions published since the pins.
 2. Edit `mediation-versions.json` (both sides of a network together), re-run `check` until no `FAIL`.
-3. Copy the AdMob pins into `GameLibModuleCatalog` (`check` fails while they differ), update this page.
+3. Copy the pins into `GameLibModuleCatalog` - `AdMobMediation(...)`, `MaxMediation(...)`, `MaxVersion` (`check` fails
+   while they differ) - and update this page.
 4. `python Tools/mediation_versions.py manifest <test project>` writes a manifest with every adapter; build it for
    Android and iOS (`MediationCheckBuild.Android` / `.IOS` in `D:\Funnii\UnityProjects\mediation-check`).

@@ -181,6 +181,15 @@ def check():
     for k in sorted(set(pinned) | set(want)):
         if pinned.get(k) != want.get(k):
             failures.append(f"GameLibModuleCatalog AdMobMediation {k}: catalog {pinned.get(k)}, version set {want.get(k)}")
+    max_pinned = {k: [a, i] for k, a, i in re.findall(
+        r'MaxMediation\("([^"]+)",\s*"[^"]*",\s*"([^"]+)",\s*"([^"]+)"\)', catalog)}
+    max_want = {k: list(v) for n in data["networks"] for k, v in (n.get("max") or {}).items()}
+    for k in sorted(set(max_pinned) | set(max_want)):
+        if max_pinned.get(k) != max_want.get(k):
+            failures.append(f"GameLibModuleCatalog MaxMediation {k}: catalog {max_pinned.get(k)}, version set {max_want.get(k)}")
+    core_pin = (re.search(r'MaxVersion\s*=\s*"([^"]+)"', catalog) or [None, None])[1]
+    if core_pin != data["core"]["com.applovin.mediation.ads"]:
+        failures.append(f"GameLibModuleCatalog.MaxVersion {core_pin}, version set {data['core']['com.applovin.mediation.ads']}")
     print(f"Checked {len(jobs)} packages of {MATRIX}")
     for w in warnings:
         print("WARN", w)

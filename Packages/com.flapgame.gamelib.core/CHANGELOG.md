@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+- Setup: Ads - AppLovin MAX offers MAX's mediation adapters (22 networks) as optional SDKs, each network's `.android`
+  and `.ios` package installed / removed together (`SdkRequirement.Companions`), pinned with the AdMob + MAX version
+  set; CLI keys `max-<network>` (`SdkRequirement.Key`). MAX core is pinned to 8.6.6 (`GameLibModuleCatalog.MaxVersion`)
+  instead of the registry's newest.
 - Setup: AdMob mediation adapter pins follow the AdMob + MAX version set (`com.flapgame.gamelib.ads/Documentation~/mediation-versions.json`).
   Verve 3.38.0 -> 1.1.3 (3.38.0 is a broken publish: myTarget's adapter inside, an iOS pod that does not exist, so
   `pod install` failed); BidMachine 1.5.3, DT Exchange 3.7.0, InMobi 5.4.1, ironSource 4.9.0, Mintegral 2.2.7, Moloco

@@ -83,7 +83,11 @@ Add core to `Packages/manifest.json`. Use the tag the human names, else the newe
 
 Then run Install with the modules. Dependencies are added on their own: `appsflyer` brings `att`, and the Firebase
 modules bring `firebase`. AdMob mediation adapters are optional: add `-gamelibOptional pangle,unity,...` (the networks
-of the AdMob mediation groups; an unknown name lists the valid ones).
+of the AdMob mediation groups; an unknown name lists the valid ones). MAX adapters the same way with `max-` keys
+(`max-unityads,max-bytedance,...`; each installs the network's `.android` + `.ios` package). Both lists are pinned to the
+AdMob + MAX version set (`com.flapgame.gamelib.ads/Documentation~/mediation-versions.json`), so a game with both stacks
+builds: never install an adapter at another version, nor via MAX's Integration Manager. A game's GameHub release config
+(`max_mediation` / `admob_mediation`) says which networks it enables.
 
 ```sh
 Unity -batchmode -quit -projectPath <project> -buildTarget Android \
