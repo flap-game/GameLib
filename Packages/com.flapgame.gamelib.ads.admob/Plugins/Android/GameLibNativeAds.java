@@ -1436,9 +1436,9 @@ public final class GameLibNativeAds {
             return;
         }
         final FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) raw;
-        if (v.strip != null) {
-            // collapsible: the background reaches the screen's side edges (no empty strip by a cutout in landscape),
-            // the content, the AD badge and the collapse button stay inside the safe area
+        if (v.content != null) {
+            // banner / collapsible: the background reaches the screen's side edges (no empty strip by a cutout in
+            // landscape); the content, the AD badge and the collapse button stay inside the safe area
             applyContentInsets(v, left, right);
             left = 0;
             right = 0;
@@ -1462,7 +1462,7 @@ public final class GameLibNativeAds {
         }
     }
 
-    /** Collapsible: side insets as padding of the content and offsets of the AD badge and the collapse button. */
+    /** Banner / collapsible: side insets as padding of the content and offsets of the AD badge and collapse button. */
     private static void applyContentInsets(final Views v, final int left, final int right) {
         if (v.content.getPaddingLeft() == left && v.content.getPaddingRight() == right) {
             return;
@@ -1477,7 +1477,7 @@ public final class GameLibNativeAds {
                     b.leftMargin = dp(ctx, BADGE_MARGIN_DP) + left;
                     v.cornerBadge.setLayoutParams(b);
                 }
-                if (v.strip.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                if (v.strip != null && v.strip.getLayoutParams() instanceof FrameLayout.LayoutParams) {
                     FrameLayout.LayoutParams b = (FrameLayout.LayoutParams) v.strip.getLayoutParams();
                     b.rightMargin = dp(ctx, COLLAPSE_BUTTON_TOP_DP) + right;
                     v.strip.setLayoutParams(b);

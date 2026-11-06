@@ -1,8 +1,8 @@
 # Changelog
 
 ## [0.9.0] - 2026-11-06
-- NativeCollapsible in landscape: the ad's background reaches both side edges of the screen (no empty strip next to a
-  camera cutout); the content, the AD badge and the collapse button stay inside the safe area (Android; iOS to follow).
+- NativeCollapsible and NativeBanner in landscape: the ad's background reaches both side edges of the screen (no empty
+  strip next to a camera cutout); the content, the AD badge and the collapse button stay inside the safe area.
 - NativeCollapsible is drawn above standard banners and native banners, whichever shows first, and takes the touches
   where they overlap (Android: the overlay's Z; iOS to follow).
 - NativeCollapsible expanded in landscape: media on the left, an info column on the right - header (44dp icon,
