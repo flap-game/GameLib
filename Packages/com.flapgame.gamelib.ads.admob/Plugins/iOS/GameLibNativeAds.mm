@@ -242,8 +242,10 @@ static UIButton *GLNAMakeCta(CGFloat fontSize, UIColor *background, UIColor *tex
 
 // Round glyph button: a `size` circle centred in a transparent `touchSize` square that takes the touches
 // (touchSize <= size: the button is the circle itself).
+// The circle sits centred in its touch square, or (cornerAnchored) in the square's top-right corner so the touch area
+// extends left and down only (the collapse button next to the AdChoices corner).
 static UIButton *GLNAMakeRoundGlyphButton(BOOL cross, CGFloat size, CGFloat touchSize, UIColor *background, UIColor *glyphColor,
-                                          UIColor *borderColor)
+                                          UIColor *borderColor, BOOL cornerAnchored)
 {
     CGFloat side = MAX(size, touchSize);
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -270,8 +272,10 @@ static UIButton *GLNAMakeRoundGlyphButton(BOOL cross, CGFloat size, CGFloat touc
         [button.heightAnchor constraintEqualToConstant:side],
         [circle.widthAnchor constraintEqualToConstant:size],
         [circle.heightAnchor constraintEqualToConstant:size],
-        [circle.centerXAnchor constraintEqualToAnchor:button.centerXAnchor],
-        [circle.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
+        cornerAnchored ? [circle.trailingAnchor constraintEqualToAnchor:button.trailingAnchor]
+                       : [circle.centerXAnchor constraintEqualToAnchor:button.centerXAnchor],
+        cornerAnchored ? [circle.topAnchor constraintEqualToAnchor:button.topAnchor]
+                       : [circle.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
         [glyph.topAnchor constraintEqualToAnchor:circle.topAnchor],
         [glyph.bottomAnchor constraintEqualToAnchor:circle.bottomAnchor],
         [glyph.leadingAnchor constraintEqualToAnchor:circle.leadingAnchor],
@@ -739,7 +743,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 
     // 38pt circle in a 44pt touch square (Apple HIG minimum).
     self.closeButton = GLNAMakeRoundGlyphButton(YES, 38.0, 44.0, [UIColor colorWithWhite:0.0 alpha:0.67], [UIColor whiteColor],
-                                                [UIColor colorWithWhite:1.0 alpha:0.35]);
+                                                [UIColor colorWithWhite:1.0 alpha:0.35], NO);
     [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
     self.closeButton.accessibilityLabel = @"Close ad";
     self.closeButton.hidden = YES;
@@ -1153,8 +1157,9 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 // The media view of the expanded collapsible must be >= GLNAMinMediaSide tall (AdMob's video minimum, 120x120pt).
 static const CGFloat GLNAMinMediaSide = 120.0;
 
-// Collapse button touch square: 24pt below the ad's top edge (clear of AdChoices), 44pt tall.
-static const CGFloat GLNACollapseButtonTop = 24.0;
+// Collapse button: its circle is GLNACollapseButtonTop from the ad's top edge AND from its right edge; the 44pt touch
+// square extends left and down from there, so neither covers the AdChoices icon in the ad's top-right corner.
+static const CGFloat GLNACollapseButtonTop = 20.0;
 static const CGFloat GLNACollapseButtonTouch = 44.0;
 
 // Portrait: media above the row, so the ad is at least row + 120pt. Landscape: media column left of the row, the
@@ -1251,7 +1256,7 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
     // Collapse button: 28pt circle with a down chevron in a 44x44pt touch square (Apple HIG), inside the ad over its
     // top-right corner but below the AdChoices icon, which owns the corner itself and must not be covered.
     UIColor *buttonBg = [UIColor colorWithWhite:0.0 alpha:0.55];
-    UIButton *collapseButton = GLNAMakeRoundGlyphButton(NO, 28.0, 44.0, buttonBg, [UIColor whiteColor], nil);
+    UIButton *collapseButton = GLNAMakeRoundGlyphButton(NO, 28.0, 44.0, buttonBg, [UIColor whiteColor], nil, YES);
     [collapseButton addTarget:self action:@selector(collapseTapped:) forControlEvents:UIControlEventTouchUpInside];
     collapseButton.accessibilityLabel = @"Collapse ad";
     collapseButton.hidden = YES;
@@ -1297,9 +1302,9 @@ static const CGFloat GLNACollapseButtonTouch = 44.0;
         [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNABadgeInset],
         [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:GLNABadgeInset],
 
-        // Touch square at the right edge, 24pt below the top edge (clear of AdChoices) - same spot as on Android.
+        // Circle as far from the top edge as from the right edge - same spot as on Android.
         [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNACollapseButtonTop],
-        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
+        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-GLNACollapseButtonTop],
     ]];
 
     GLNAFillRow(row, ad, YES, YES);

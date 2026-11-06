@@ -508,8 +508,12 @@ public final class GameLibNativeAds {
         return v;
     }
 
-    /** Collapse button touch target's distance from the ad's top edge: clear of the top-right AdChoices icon. */
-    private static final int COLLAPSE_BUTTON_TOP_DP = 24;
+    /**
+     * Gap between the collapse button's circle and the ad's top edge, and its right edge (the same on both sides). The
+     * circle sits in the top-right corner of its 48dp touch target, which reaches left and down only, so neither the
+     * circle nor the touch target covers the AdChoices icon in the ad's top-right corner.
+     */
+    private static final int COLLAPSE_BUTTON_TOP_DP = 20;
     /** AdMob's minimum media view size for video, both sides. */
     private static final int MIN_MEDIA_DP = 120;
 
@@ -541,6 +545,7 @@ public final class GameLibNativeAds {
                 dp(activity, 28));
         v.collapseButton.setVisibility(View.GONE);
         int touchPx = dp(activity, 48);
+        ((RoundIconButton) v.collapseButton).cornerAnchored = true;
         v.strip.addView(v.collapseButton, new FrameLayout.LayoutParams(touchPx, touchPx, Gravity.CENTER));
 
         v.adView = new NativeAdView(activity);
@@ -568,6 +573,7 @@ public final class GameLibNativeAds {
                 v.expanded ? v.expandedPx : v.collapsedPx));
         FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(touchPx, touchPx, Gravity.TOP | Gravity.RIGHT);
         slp.topMargin = dp(activity, COLLAPSE_BUTTON_TOP_DP);
+        slp.rightMargin = dp(activity, COLLAPSE_BUTTON_TOP_DP);
         v.wrapper.addView(v.strip, slp); // over the ad view (added after the column)
         applyCollapsibleState(activity, v);
         registerAssetViews(v);
@@ -1421,6 +1427,8 @@ public final class GameLibNativeAds {
             this(ctx, glyph, fillColor, glyphColor, 0);
         }
 
+        boolean cornerAnchored;
+
         RoundIconButton(Context ctx, int glyph, int fillColor, int glyphColor, int circlePx) {
             super(ctx);
             this.glyph = glyph;
@@ -1439,12 +1447,13 @@ public final class GameLibNativeAds {
         protected void onDraw(Canvas canvas) {
             float w = getWidth();
             float h = getHeight();
-            float cx = w / 2f;
-            float cy = h / 2f;
             float r = Math.min(w, h) / 2f;
             if (circlePx > 0) {
                 r = Math.min(r, circlePx / 2f);
             }
+            // centred, or (cornerAnchored) in the view's top-right corner so the touch area extends left and down
+            float cx = cornerAnchored ? w - r : w / 2f;
+            float cy = cornerAnchored ? r : h / 2f;
             canvas.drawCircle(cx, cy, r, fill);
             float g = r * 0.42f;
             if (glyph == CROSS) {
