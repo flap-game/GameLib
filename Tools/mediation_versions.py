@@ -216,14 +216,14 @@ GAMEHUB_MAX = {
     "pubmatic": "pubmatic", "smaato": "smaato", "unity_ads": "unityads", "verve": "verve", "yandex": "yandex",
     "yso_network": "ysonetwork",
 }
-GAMEHUB_MAX_UNSUPPORTED = {"csj", "hyprmx", "maio", "tencent", "vk_ad_network"}  # obsolete in MAX 8.6.6
+GAMEHUB_MAX_UNSUPPORTED = {"csj", "hyprmx", "maio", "tencent", "vk_ad_network"}  # obsolete in / removed from MAX 8.6.6
 GAMEHUB_ADMOB = {
-    "applovin": "applovin", "bidmachine": "bidmachine", "bigo": "bigo", "chartboost": "chartboost",
+    "applovin": "applovin", "bidmachine": "bidmachine", "chartboost": "chartboost",
     "dt_exchange": "dtexchange", "i_mobile": "imobile", "inmobi": "inmobi", "ironsource": "ironsource",
     "liftoff_monetize": "liftoffmonetize", "line": "line", "maio": "maio", "meta_audience_network": "metaaudiencenetwork",
     "mintegral": "mintegral", "moloco": "moloco", "mytarget": "mytarget", "pangle": "pangle", "pubmatic": "pubmatic",
-    "unity_ads": "unity", "verve": "verve",
-}
+    "unity_ads": "unity",
+}  # keys as GameHub's admob_mediation has them (2026-11-06); it offers no AdMob Bigo / Verve switch
 
 
 def gamehub_selection(config_path):

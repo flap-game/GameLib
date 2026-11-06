@@ -58,6 +58,29 @@ Check these, then ask the human everything missing in **one** message:
 | AppsFlyer | Dev key and the numeric iOS app id. |
 | ATT | The prompt sentence (`NSUserTrackingUsageDescription`). |
 
+**Most of these values are on GameHub.** Each of the human's games has a release config per platform there. Ask the
+human for the GameHub address, the API key (never write either into the project or a commit) and the bundle ids, then
+read:
+
+```sh
+curl -H "X-Api-Key: <key>" "<GameHub address>/api/public/release-config?package=<bundle id>&platform=android"
+```
+
+(`platform=ios` with the iOS bundle id for iOS; the two configs differ.) What each section gives:
+
+| GameHub section | Goes to |
+|---|---|
+| `player_setting.package_name` | The bundle id of that platform. |
+| `max_id.sdk_key`, `max_id.<inter / reward / open / banner_top / banner_bottom / mrec>` | MAX SDK key; MAX ad unit ids of that platform. |
+| `admob_id.app_id`, `admob_id.<open / inter / reward / banner_* / native_*>` | AdMob app id; AdMob ad unit ids (`native_*` = the native formats, AdMob only). |
+| `max_mediation`, `admob_mediation` (`"true"` = on) | Which mediation adapters to install: the table in [mediation-versions.md](../../com.flapgame.gamelib.ads/Documentation~/mediation-versions.md) maps each key to its `-gamelibOptional` key. |
+| `ads_setting.adUnits` + `ad_config.placements` | The game's ad plan: which unit each placement uses. Propose AdsModule placements from it and confirm with the human. |
+| `appsflyer.dev_key`, `appsflyer.game_id` | AppsFlyer dev key; on iOS `game_id` is the numeric App Store id. |
+| `firebase.data` | The content of `google-services.json` (Android) / `GoogleService-Info.plist` (iOS). `data_dev` is a second (dev) project: ask which one the build uses. |
+| `bytebrew` | No GameLib module: ask the human. |
+
+An empty value means "not set": ask, do not fill it in. Still ask the interstitial rule and the products.
+
 **An iOS game with no ATT of its own:** a game restored from an Android build, or one whose ads / MMP SDKs were
 removed, has no ATT call and no `NSUserTrackingUsageDescription`. On iOS no prompt shows and nothing reports an error.
 Add the `att` module, make sure `AttModule` is listed in GameLibSettings, and ask for the prompt sentence.
@@ -127,7 +150,7 @@ Each value goes to one place:
 | Value | Where |
 |---|---|
 | Placements, providers, app open placement, ad policy | `Assets/GameLib/Modules/AdsModule.asset` ([Ads README](../../com.flapgame.gamelib.ads/README.md)) |
-| MAX SDK key, mediated adapters, MAX consent flow | AppLovin > Integration Manager ([MAX README](../../com.flapgame.gamelib.ads.max/README.md)) |
+| MAX SDK key, AdMob app id for MAX's Google adapter, MAX consent flow | AppLovin > Integration Manager ([MAX README](../../com.flapgame.gamelib.ads.max/README.md)). Not its adapters: those come from Install (`max-` keys), at the version set's pins. |
 | AdMob app ids | Assets > Google Mobile Ads > Settings ([AdMob README](../../com.flapgame.gamelib.ads.admob/README.md)) |
 | Products | `IapModule.asset` ([IAP README](../../com.flapgame.gamelib.iap/README.md)) |
 | Dev key, iOS app id, purchase mode | `AppsFlyerModule.asset` ([AppsFlyer README](../../com.flapgame.gamelib.appsflyer/README.md)) |
@@ -192,6 +215,7 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 |---|---|---|
 | Show interstitial / rewarded / banner | `IAdsService.ShowInterstitialAsync(placement, onCompleted)`, `ShowRewardedAsync`, `ShowBannerAsync` / `HideBanner`. Continue the game in `onCompleted`, which always fires. | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Game's interstitial rule | Check the condition in game code, then call `ShowInterstitialAsync` | Ads |
+| Native ads (AdMob only) | Placement format `NativeBanner` / `NativeCollapsible` (`ShowBannerAsync`) or `NativeInterstitial` (`ShowInterstitialAsync`), AdMob route; never a MAX route | [Ads](../../com.flapgame.gamelib.ads/README.md) |
 | Extra app open condition | `services.Resolve<AppOpenLauncher>().Gate = () => !inTutorial;` | Ads |
 | Remove ads | IAP product with `Entitlement = Entitlements.NoAds`. Nothing else to do. | IAP |
 | Buy / grant / restore | `PurchaseAsync(id, placement)`, grant in `PurchaseGranted`, `RestoreAsync` (show the button on iOS only), `GetPriceString` after `Ready` | [IAP](../../com.flapgame.gamelib.iap/README.md) |
@@ -241,6 +265,18 @@ Doctor does **not** check:
 
 Say so in your report instead of calling the work verified. The human tests on a device.
 
+**Testing ads on a device with the game's real ad units:** register the device as a test device on both SDKs first,
+or the test requests count as live traffic on the game's accounts. AdsModule `Test Mode` on, plus:
+
+| SDK | Android id | iOS id |
+|---|---|---|
+| AdMob (`AdMob Test Device Ids`) | MD5 of `Settings.Secure.ANDROID_ID`, uppercase hex (also printed in logcat on the first request) | MD5 of the IDFA string, lowercase hex. The IDFA needs the ATT prompt answered "Allow". |
+| MAX (`Max Test Device Ids`) | The GAID | The IDFA |
+
+Then `ads.OpenDebuggerAsync("max")` (Mediation Debugger: every network the game enables must be under *Completed SDK
+Integrations*) and `ads.OpenDebuggerAsync("admob")` (Ad Inspector, Adapters tab). Ads served show a "Test Ad" label.
+Turn Test Mode off and clear the ids before a store build. Do not tap ads.
+
 ## Symptoms
 
 | Symptom | Cause |
@@ -249,6 +285,11 @@ Say so in your report instead of calling the work verified. The human tests on a
 | No app open ad when coming back from an ad, a purchase or a link | Intended: those are not returns. |
 | Banner / interstitial never shows, rewarded works | The `no_ads` entitlement is owned (a test purchase). |
 | Only mock ads in the Editor | Intended: the networks only run on a device. |
+| Ad Inspector > Adapters: "No adapters found", although the adapters are installed | The AdMob app's mediation groups have no third-party source for these units. Console work for the human, not code. |
+| AdMob adapter `NotReady`: "No SDK keys are found. Please add valid SDK keys in the AdMob UI" / "Invalid account id" | That network's keys are missing or wrong in the AdMob mediation setup. Console work for the human. |
+| iOS crash a few seconds after start, `EXC_BAD_ACCESS` in `DTXRemoteConfigDTO.Spot.init(from:)` (sometimes a SIGKILL in `MTGCrashManager`) | DT Exchange with MAX test mode on (seen on DT 8.5.0 and 8.5.1). On a test device run without DT Exchange; keep it in the game. |
+| `pod install`: "could not find compatible versions" for a network pod | An adapter outside the AdMob + MAX version set (e.g. MAX Integration Manager's newest). Reinstall it through Install. |
+| A MAX adapter (HyprMX, maio, myTarget, CSJ, Tencent) disappears from the manifest | MAX 8.6.6 removes networks it treats as obsolete. Use AdMob's adapter for maio / myTarget. |
 | A module does nothing, Doctor warns "never starts" | Its asset is not in `GameLibSettings`. Run Install for that module again. |
 | Firebase modules silent, one warning in the Editor | The config file for the build target is missing. |
 | `executeMethod` class not found | The project does not compile, or core is not installed. |

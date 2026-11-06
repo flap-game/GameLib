@@ -114,6 +114,42 @@ the manifest with only the networks a game enables on GameHub (`max_mediation` /
 `GET /api/public/release-config?package=<bundle id>&platform=<platform>`, header `X-Api-Key`), at this set's versions.
 Networks MAX treats as obsolete are skipped with a warning.
 
+GameHub key -> GameLib `-gamelibOptional` key (in `max_mediation` / `admob_mediation`):
+
+| GameHub key | `max_mediation` | `admob_mediation` |
+|---|---|---|
+| `applovin` | - | `applovin` |
+| `bidmachine` | `max-bidmachine` | `bidmachine` |
+| `bigo_ads` | `max-bigoads` | - |
+| `chartboost` | `max-chartboost` | `chartboost` |
+| `csj` | - (not in MAX 8.6.6) | - |
+| `dt_exchange` | `max-fyber` | `dtexchange` |
+| `facebook` | `max-facebook` | - |
+| `google_ad_manager` | `max-googleadmanager` | - |
+| `google_admob` | `max-google` | - |
+| `hyprmx` | - (not in MAX 8.6.6) | - |
+| `i_mobile` | - | `imobile` |
+| `inmobi` | `max-inmobi` | `inmobi` |
+| `ironsource` | `max-ironsource` | `ironsource` |
+| `liftoff_monetize` | `max-vungle` | `liftoffmonetize` |
+| `line` | `max-line` | `line` |
+| `maio` | - (not in MAX 8.6.6) | `maio` |
+| `meta_audience_network` | - | `metaaudiencenetwork` |
+| `mintegral` | `max-mintegral` | `mintegral` |
+| `mobilefuse` | `max-mobilefuse` | - |
+| `moloco` | `max-moloco` | `moloco` |
+| `mytarget` | - | `mytarget` |
+| `ogury` | `max-ogurypresage` | - |
+| `pangle` | `max-bytedance` | `pangle` |
+| `pubmatic` | `max-pubmatic` | `pubmatic` |
+| `smaato` | `max-smaato` | - |
+| `tencent` | - (not in MAX 8.6.6) | - |
+| `unity_ads` | `max-unityads` | `unity` |
+| `verve` | `max-verve` | - |
+| `vk_ad_network` | - (not in MAX 8.6.6) | - |
+| `yandex` | `max-yandex` | - |
+| `yso_network` | `max-ysonetwork` | - |
+
 ## Updating the set
 
 1. `python Tools/mediation_versions.py check` lists newer versions published since the pins.
