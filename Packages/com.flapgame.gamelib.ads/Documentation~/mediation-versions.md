@@ -87,6 +87,12 @@ Left out: `hyprmx.*`, `csj.ios`, `tencentgdt.ios`, `maio.*`, `mytarget.*` - MAX 
 - **AdMob Verve 3.38.0 is broken**, and OpenUPM marks it *latest* because 3.38 > 1.1.x. It was a wrong publish
   (2026-08-08): its Android dependency is the **myTarget** adapter and its iOS pod `GoogleMobileAdsMediationVerve
   5.43.0.0` does not exist, so `pod install` fails. The real line is 1.1.x. GameLib Setup pinned 3.38.0 until this set (core CHANGELOG, Unreleased).
+- **DT Exchange iOS crashes when MAX runs in test mode** (found 2026-11-06, iPhone 14 Pro Max, iOS 27.2, DT 8.5.1 and
+  8.5.0 alike): a few seconds after init, `EXC_BAD_ACCESS` in DT's remote-config decoder
+  (`DTXRemoteConfigDTO.Spot.init(from:)`), sometimes reported as a SIGKILL from Mintegral's crash reporter
+  deadlocking on the same fault. MAX test mode on (a test device registered): 5 of 6 launches crashed; test mode off:
+  0 of 6. So it hits QA devices, not (as far as seen) players. On a test device run the iOS ad test without DT
+  Exchange (`fyber.ios` + AdMob `dtexchange`); keep it in the game. Re-check when DT ships a release after 8.5.1.
 - **Do not pick by "latest" on either registry.** Sort by publish date and read the native pins; `check` does.
 - **MAX Integration Manager installs the newest adapter**, which breaks the pairing above. Install MAX adapters from
   GameLib Setup (below) and do not press the Integration Manager's *Upgrade All*.
