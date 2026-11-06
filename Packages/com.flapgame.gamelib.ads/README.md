@@ -156,7 +156,7 @@ views are drawn by GameLib in code on Android and iOS (icon, headline, body, rat
 
 | Format | Shows as | Call |
 |---|---|---|
-| `NativeBanner` | Full-width bar at the bottom (or top, `Position = Top`) of the safe area, `Native Height Dp` tall (0 = 100). | `ShowBannerAsync` / `HideBanner` |
+| `NativeBanner` | Full-width bar at the bottom (or top, `Position = Top`) of the safe area. As tall as an adaptive banner on the device (`Native Match Banner Height`, on by default: about 50-90 dp, 61 dp on a 393 dp wide phone), so it can take a standard banner's place without moving the layout; off = `Native Height Dp` (0 = 100). | `ShowBannerAsync` / `HideBanner` |
 | `NativeCollapsible` | Bottom bar `Native Height Dp` tall (0 = 50) that opens expanded over ~45% of the screen with the ad's media. A collapse button appears `Native Collapse Button Delay Seconds` after it opens. Always at the bottom (`Position` is ignored). | `ShowBannerAsync` / `HideBanner` |
 | `NativeInterstitial` | Full screen; a "Close in Ns" countdown, then a close button after `Native Close Delay Seconds`. | `ShowInterstitialAsync` |
 

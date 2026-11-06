@@ -471,6 +471,8 @@ namespace FlapGame.GameLib.Ads.Editor
             {
                 case nameof(AdPlacement.NativeHeightDp):
                     return format is AdFormat.NativeBanner or AdFormat.NativeCollapsible;
+                case nameof(AdPlacement.NativeMatchBannerHeight):
+                    return format == AdFormat.NativeBanner;
                 case nameof(AdPlacement.NativeCloseDelaySeconds):
                     return format == AdFormat.NativeInterstitial;
                 case nameof(AdPlacement.NativeCollapseButtonDelaySeconds):

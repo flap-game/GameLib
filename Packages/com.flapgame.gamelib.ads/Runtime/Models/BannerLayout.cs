@@ -6,6 +6,13 @@ namespace FlapGame.GameLib.Ads
     public static class BannerLayout
     {
         /// <summary>
+        /// (0.9.0) Height in dp of an anchored adaptive banner, by Google's documented rule: <paramref name="widthDp"/> x
+        /// 50 / 320, at most 90 dp and 15 % of <paramref name="screenHeightDp"/>, at least 50 dp.
+        /// </summary>
+        public static float AdaptiveBannerHeightDp(float widthDp, float screenHeightDp) =>
+            Mathf.Max(50f, Mathf.Min(Mathf.Round(widthDp * 50f / 320f), Mathf.Min(90f, screenHeightDp * 0.15f)));
+
+        /// <summary>
         /// Top-left corner, in dp from the top-left of the safe area, of an ad of <paramref name="sizeDp"/> centred at
         /// <paramref name="centerFraction"/> of the safe area (<see cref="BannerPosition.Custom"/>), kept inside it.
         /// </summary>

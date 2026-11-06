@@ -218,5 +218,22 @@ namespace FlapGame.GameLib.Ads.Tests
             Assert.That(Await(mock.ShowAsync("nb")), Is.EqualTo(AdShowResult.Completed), "a banner shows before it loaded");
             Assert.That(Await(mock.ShowAsync("nc")), Is.EqualTo(AdShowResult.Completed));
         }
+
+        [TestCase(393f, 894f, 61f, TestName = "AdaptiveHeight_Phone_IsWidthTimes50Over320")]
+        [TestCase(320f, 640f, 50f, TestName = "AdaptiveHeight_NarrowPhone_IsAtLeast50")]
+        [TestCase(800f, 1280f, 90f, TestName = "AdaptiveHeight_Tablet_IsAtMost90")]
+        [TestCase(800f, 360f, 54f, TestName = "AdaptiveHeight_Landscape_IsAtMost15PercentOfTheScreen")]
+        public void AdaptiveBannerHeightDp_FollowsGooglesRule(float widthDp, float screenDp, float expected)
+        {
+            Assert.That(BannerLayout.AdaptiveBannerHeightDp(widthDp, screenDp), Is.EqualTo(expected).Within(0.01f));
+        }
+
+        [Test]
+        public void NativeBanner_MatchesTheBannerHeight_ByDefault()
+        {
+            var p = new AdPlacement { Format = AdFormat.NativeBanner };
+            Assert.That(p.NativeMatchBannerHeight, Is.True);
+            Assert.That(p.EffectiveNativeHeightDp, Is.EqualTo(100), "the fixed height used when matching is turned off");
+        }
     }
 }

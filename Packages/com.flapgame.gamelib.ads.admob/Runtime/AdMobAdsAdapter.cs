@@ -1075,9 +1075,16 @@ namespace FlapGame.GameLib.Ads
             if (size.Height > 0) return Mathf.Round(size.Height * scale);
             if (size.AdType != AdSize.Type.AnchoredAdaptive) return 0f;
             float widthDp  = size.Width > 0 ? size.Width : MobileAds.Utils.GetDeviceSafeWidth();
-            float screenDp = Screen.height / scale;
-            float heightDp = Mathf.Max(50f, Mathf.Min(Mathf.Round(widthDp * 50f / 320f), Mathf.Min(90f, screenDp * 0.15f)));
-            return Mathf.Round(heightDp * scale);
+            return Mathf.Round(BannerLayout.AdaptiveBannerHeightDp(widthDp, Screen.height / scale) * scale);
+        }
+
+        // (0.9.0) Bar height in dp of a banner-like native: an adaptive banner's height for a NativeBanner that matches it.
+        private static int NativeBarHeightDp(AdPlacement p)
+        {
+            if (p.Format != AdFormat.NativeBanner || !p.NativeMatchBannerHeight) return p.EffectiveNativeHeightDp;
+            float scale = MobileAds.Utils.GetDeviceScale();
+            if (scale <= 0f) return p.EffectiveNativeHeightDp;
+            return Mathf.RoundToInt(BannerLayout.AdaptiveBannerHeightDp(MobileAds.Utils.GetDeviceSafeWidth(), Screen.height / scale));
         }
 
         // Per placement and screen size, so a rotation / resolution change never reuses a wrong height.
@@ -1194,7 +1201,7 @@ namespace FlapGame.GameLib.Ads
         private void PresentNative(Unit unit)
         {
             AdPlacement p = unit.Placement;
-            int heightDp  = p.EffectiveNativeHeightDp;
+            int heightDp  = NativeBarHeightDp(p);
             unit.NativeShowRequested = true;
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing native {unit.Id}.");
             if (p.Format == AdFormat.NativeCollapsible)
@@ -1260,7 +1267,7 @@ namespace FlapGame.GameLib.Ads
         private float NativeHeightPixels(Unit unit)
         {
             float scale = MobileAds.Utils.GetDeviceScale(); // dp -> px (iOS: points -> px)
-            return scale > 0f ? Mathf.Round(unit.Placement.EffectiveNativeHeightDp * scale) : 0f;
+            return scale > 0f ? Mathf.Round(NativeBarHeightDp(unit.Placement) * scale) : 0f;
         }
 
         // Like ShowInterstitialAsync: closed = Completed, show failure = Failed, the token counts only before the show.
