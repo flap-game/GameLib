@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.9.0] - 2026-11-06
 - Setup: Ads - AppLovin MAX offers MAX's mediation adapters (22 networks) as optional SDKs, each network's `.android`
   and `.ios` package installed / removed together (`SdkRequirement.Companions`), pinned with the AdMob + MAX version
   set; CLI keys `max-<network>` (`SdkRequirement.Key`). MAX core is pinned to 8.6.6 (`GameLibModuleCatalog.MaxVersion`)
