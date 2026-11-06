@@ -137,7 +137,11 @@ static UILabel *GLNAMakeLabel(CGFloat size, UIFontWeight weight, UIColor *color,
     return label;
 }
 
-// Small rounded "AD" attribution badge (bold 10pt, dark text on near-white, thin border).
+// Small rounded "AD" attribution badge (bold 10pt, dark text on near-white, thin border), GLNABadgeHeight tall.
+static const CGFloat GLNABadgeHeight = 15.0;
+static const CGFloat GLNABadgeInset = 2.0;   // badge offset from the ad view's top-left corner
+static const CGFloat GLNABadgeGap = 4.0;     // space between the badge and the asset row on its right
+
 static UIView *GLNAMakeAdBadge(void)
 {
     UIView *badge = [[UIView alloc] init];
@@ -153,8 +157,8 @@ static UIView *GLNAMakeAdBadge(void)
     label.text = @"AD";
     [badge addSubview:label];
     [NSLayoutConstraint activateConstraints:@[
-        [label.topAnchor constraintEqualToAnchor:badge.topAnchor constant:1.0],
-        [label.bottomAnchor constraintEqualToAnchor:badge.bottomAnchor constant:-1.0],
+        [badge.heightAnchor constraintEqualToConstant:GLNABadgeHeight],
+        [label.centerYAnchor constraintEqualToAnchor:badge.centerYAnchor],
         [label.leadingAnchor constraintEqualToAnchor:badge.leadingAnchor constant:4.0],
         [label.trailingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:-4.0],
     ]];
@@ -232,22 +236,42 @@ static UIButton *GLNAMakeCta(CGFloat fontSize, UIColor *background, UIColor *tex
 
 @end
 
-static UIButton *GLNAMakeRoundGlyphButton(BOOL cross, CGFloat size, UIColor *background, UIColor *glyphColor)
+// Round glyph button: a `size` circle centred in a transparent `touchSize` square that takes the touches
+// (touchSize <= size: the button is the circle itself).
+static UIButton *GLNAMakeRoundGlyphButton(BOOL cross, CGFloat size, CGFloat touchSize, UIColor *background, UIColor *glyphColor,
+                                          UIColor *borderColor)
 {
+    CGFloat side = MAX(size, touchSize);
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.backgroundColor = background;
-    button.layer.cornerRadius = size * 0.5;
-    button.clipsToBounds = YES;
+    button.backgroundColor = [UIColor clearColor];
+
+    UIView *circle = [[UIView alloc] init];
+    circle.translatesAutoresizingMaskIntoConstraints = NO;
+    circle.userInteractionEnabled = NO;
+    circle.backgroundColor = background;
+    circle.layer.cornerRadius = size * 0.5;
+    circle.clipsToBounds = YES;
+    if (borderColor != nil)
+    {
+        circle.layer.borderWidth = 1.0;
+        circle.layer.borderColor = borderColor.CGColor;
+    }
+    [button addSubview:circle];
+
     GLNAGlyphView *glyph = [[GLNAGlyphView alloc] initWithCross:cross color:glyphColor];
-    [button addSubview:glyph];
+    [circle addSubview:glyph];
     [NSLayoutConstraint activateConstraints:@[
-        [button.widthAnchor constraintEqualToConstant:size],
-        [button.heightAnchor constraintEqualToConstant:size],
-        [glyph.topAnchor constraintEqualToAnchor:button.topAnchor],
-        [glyph.bottomAnchor constraintEqualToAnchor:button.bottomAnchor],
-        [glyph.leadingAnchor constraintEqualToAnchor:button.leadingAnchor],
-        [glyph.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
+        [button.widthAnchor constraintEqualToConstant:side],
+        [button.heightAnchor constraintEqualToConstant:side],
+        [circle.widthAnchor constraintEqualToConstant:size],
+        [circle.heightAnchor constraintEqualToConstant:size],
+        [circle.centerXAnchor constraintEqualToAnchor:button.centerXAnchor],
+        [circle.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
+        [glyph.topAnchor constraintEqualToAnchor:circle.topAnchor],
+        [glyph.bottomAnchor constraintEqualToAnchor:circle.bottomAnchor],
+        [glyph.leadingAnchor constraintEqualToAnchor:circle.leadingAnchor],
+        [glyph.trailingAnchor constraintEqualToAnchor:circle.trailingAnchor],
     ]];
     return button;
 }
@@ -296,6 +320,7 @@ static NSString *GLNAAdSource(GADResponseInfo *info)
 @property (nonatomic, strong) NSLayoutConstraint *ctaWidth;
 @property (nonatomic, strong) NSLayoutConstraint *ctaHeight;
 @property (nonatomic, strong) UIColor *secondaryColor;
+@property (nonatomic, assign) BOOL compactMetaFits; // NO: the bar is too short for the meta line in compact mode
 @end
 
 @implementation GLNARow
@@ -303,14 +328,18 @@ static NSString *GLNAAdSource(GADResponseInfo *info)
 
 static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UIColor *ctaText)
 {
+    // Bars <= 60pt: headline 12pt, body 10pt (one line), icon = bar - 8pt, CTA >= 32pt tall, and the meta line only
+    // when headline + body + meta fit in the bar. Bars > 60pt keep 13 / 11 / 10.
     BOOL small = barHeight <= 60.0;
-    CGFloat headlineSize = small ? 11.0 : 13.0;
-    CGFloat bodySize = small ? 9.0 : 11.0;
+    CGFloat headlineSize = small ? 12.0 : 13.0;
+    CGFloat bodySize = small ? 10.0 : 11.0;
     CGFloat metaSize = small ? 8.0 : 10.0;
+    CGFloat columnSpacing = 1.0;
     UIColor *secondary = [text colorWithAlphaComponent:CGColorGetAlpha(text.CGColor) * 0.6];
 
     GLNARow *row = [[GLNARow alloc] init];
     row.secondaryColor = secondary;
+    row.compactMetaFits = YES;
     row.stack = GLNAMakeStack(UILayoutConstraintAxisHorizontal, 8.0, UIStackViewAlignmentCenter);
 
     row.icon = [[UIImageView alloc] init];
@@ -318,7 +347,7 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     row.icon.contentMode = UIViewContentModeScaleAspectFill;
     row.icon.clipsToBounds = YES;
     row.icon.layer.cornerRadius = 6.0;
-    CGFloat iconSide = GLNAClamp(barHeight * 0.7, 24.0, 72.0);
+    CGFloat iconSide = small ? MAX(barHeight - 8.0, 16.0) : GLNAClamp(barHeight * 0.7, 24.0, 72.0);
     row.iconSize = [row.icon.widthAnchor constraintEqualToConstant:iconSide];
     [NSLayoutConstraint activateConstraints:@[
         row.iconSize,
@@ -327,7 +356,7 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     [row.icon setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [row.icon setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
-    UIStackView *column = GLNAMakeStack(UILayoutConstraintAxisVertical, 1.0, UIStackViewAlignmentFill);
+    UIStackView *column = GLNAMakeStack(UILayoutConstraintAxisVertical, columnSpacing, UIStackViewAlignmentFill);
     [column setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
     [column setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
@@ -353,9 +382,18 @@ static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UICo
     [column addArrangedSubview:row.body];
     [column addArrangedSubview:row.meta];
 
+    if (small)
+    {
+        // Row content area = bar - 4pt top / bottom margins.
+        CGFloat needed = row.headline.font.lineHeight + row.body.font.lineHeight + row.rating.font.lineHeight + 2.0 * columnSpacing;
+        row.compactMetaFits = ceil(needed) <= barHeight - 8.0;
+    }
+
     row.cta = GLNAMakeCta(headlineSize, cta, ctaText);
     row.ctaWidth = [row.cta.widthAnchor constraintEqualToConstant:GLNAClamp(barHeight * 1.2, 52.0, 96.0)];
-    row.ctaHeight = [row.cta.heightAnchor constraintEqualToConstant:GLNAClamp(barHeight - 16.0, 22.0, 40.0)];
+    CGFloat ctaHeight = small ? MIN(GLNAClamp(barHeight - 16.0, 32.0, 40.0), barHeight - 8.0)
+                              : GLNAClamp(barHeight - 16.0, 22.0, 40.0);
+    row.ctaHeight = [row.cta.heightAnchor constraintEqualToConstant:ctaHeight];
     [NSLayoutConstraint activateConstraints:@[ row.ctaWidth, row.ctaHeight ]];
     [row.cta setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [row.cta setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
@@ -404,7 +442,8 @@ static void GLNAFillRow(GLNARow *row, GADNativeAd *ad, BOOL full, BOOL showPrice
     row.price.hidden = !priceVisible;
     any = any || priceVisible;
 
-    row.meta.hidden = !any;
+    // `full` rows (expanded collapsible, >= 76pt) always have room for the meta line.
+    row.meta.hidden = !any || (!full && !row.compactMetaFits);
 }
 
 // Compact (collapsed) row: one body line, only the rating on the meta line.
@@ -416,7 +455,7 @@ static void GLNASetRowCompact(GLNARow *row, GADNativeAd *ad, BOOL compact)
         row.advertiser.hidden = YES;
         row.store.hidden = YES;
         row.price.hidden = YES;
-        row.meta.hidden = row.rating.hidden;
+        row.meta.hidden = row.rating.hidden || !row.compactMetaFits;
     }
     else
     {
@@ -462,6 +501,8 @@ typedef NS_ENUM(NSInteger, GLNAShownFormat) {
 @property (nonatomic, strong) UIButton *collapseButton;  // collapsible only
 @property (nonatomic, strong) NSLayoutConstraint *heightConstraint;
 @property (nonatomic, strong) NSLayoutConstraint *rowHeightConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *rowLeadingCompact;  // collapsible: row right of the AD badge
+@property (nonatomic, strong) NSLayoutConstraint *rowLeadingFull;     // collapsible expanded: badge sits over the media
 @property (nonatomic, assign) CGFloat collapsedHeight;
 @property (nonatomic, assign) BOOL expanded;
 @property (nonatomic, strong) NSTimer *collapseButtonTimer;
@@ -512,9 +553,22 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 
 @implementation GLNAInterstitialController
 
+// Full screen: no status bar, home indicator auto-hidden. The close / countdown row stays inside the safe area.
 - (BOOL)prefersStatusBarHidden
 {
     return YES;
+}
+
+- (BOOL)prefersHomeIndicatorAutoHidden
+{
+    return YES;
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear:animated];
+    [self setNeedsStatusBarAppearanceUpdate];
+    [self setNeedsUpdateOfHomeIndicatorAutoHidden];
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations
@@ -672,9 +726,9 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     self.countdownLabel.clipsToBounds = YES;
     [root addSubview:self.countdownLabel];
 
-    self.closeButton = GLNAMakeRoundGlyphButton(YES, 38.0, [UIColor colorWithWhite:0.0 alpha:0.67], [UIColor whiteColor]);
-    self.closeButton.layer.borderWidth = 1.0;
-    self.closeButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
+    // 38pt circle in a 44pt touch square (Apple HIG minimum).
+    self.closeButton = GLNAMakeRoundGlyphButton(YES, 38.0, 44.0, [UIColor colorWithWhite:0.0 alpha:0.67], [UIColor whiteColor],
+                                                [UIColor colorWithWhite:1.0 alpha:0.35]);
     [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
     self.closeButton.hidden = YES;
     [root addSubview:self.closeButton];
@@ -684,8 +738,10 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
         [self.countdownLabel.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12.0],
         [self.countdownLabel.heightAnchor constraintEqualToConstant:28.0],
         [self.countdownLabel.widthAnchor constraintGreaterThanOrEqualToConstant:96.0],
-        [self.closeButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:7.0],
-        [self.closeButton.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12.0],
+        // Circle stays where it was (safe top + 7, safe trailing - 12); the 44pt touch square extends 3pt around it,
+        // still inside the safe area.
+        [self.closeButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:4.0],
+        [self.closeButton.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-9.0],
     ]];
 
     self.remainingSeconds = self.closeDelaySeconds > 0 ? self.closeDelaySeconds : 0;
@@ -933,6 +989,8 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     state.collapseButton = nil;
     state.heightConstraint = nil;
     state.rowHeightConstraint = nil;
+    state.rowLeadingCompact = nil;
+    state.rowLeadingFull = nil;
 
     GLNAInterstitialController *interstitial = state.interstitial;
     state.interstitial = nil;
@@ -1052,14 +1110,15 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
         [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
         [adView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
 
-        [row.stack.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:8.0],
+        // The row starts right of the AD badge so the badge never covers the icon / text.
+        [row.stack.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:GLNABadgeGap],
         [row.stack.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-8.0],
         [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:adView.topAnchor constant:4.0],
         [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:adView.bottomAnchor constant:-4.0],
         [row.stack.centerYAnchor constraintEqualToAnchor:adView.centerYAnchor],
 
-        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:2.0],
-        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:2.0],
+        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNABadgeInset],
+        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:GLNABadgeInset],
     ]];
 
     GLNAFillRow(row, ad, NO, NO);
@@ -1077,10 +1136,14 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 
 // ----- collapsible -----
 
+// The media view of the expanded collapsible must be >= GLNAMinMediaSide tall (AdMob's video minimum, 120x120pt).
+static const CGFloat GLNAMinMediaSide = 120.0;
+
 - (CGFloat)expandedHeightFor:(CGFloat)collapsed
 {
     CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
-    return MAX(collapsed, floor(screenHeight * 0.45));
+    CGFloat height = MAX(collapsed, floor(screenHeight * 0.45));
+    return MAX(height, MAX(collapsed, 76.0) + GLNAMinMediaSide);
 }
 
 - (CGFloat)expandedRowHeightFor:(CGFloat)collapsed expanded:(CGFloat)expanded
@@ -1155,9 +1218,10 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     UIView *badge = GLNAMakeAdBadge();
     [adView addSubview:badge];
 
-    // Collapse button: circle with a down chevron; kept left of the AdChoices corner (top-right of the ad view).
+    // Collapse button: 28pt circle with a down chevron in a 44x44pt touch square (Apple HIG); kept left of the
+    // AdChoices corner (top-right of the ad view).
     UIColor *buttonBg = [UIColor colorWithWhite:0.0 alpha:0.55];
-    UIButton *collapseButton = GLNAMakeRoundGlyphButton(NO, 28.0, buttonBg, [UIColor whiteColor]);
+    UIButton *collapseButton = GLNAMakeRoundGlyphButton(NO, 28.0, 44.0, buttonBg, [UIColor whiteColor], nil);
     [collapseButton addTarget:self action:@selector(collapseTapped:) forControlEvents:UIControlEventTouchUpInside];
     collapseButton.accessibilityLabel = @"Collapse ad";
     collapseButton.hidden = YES;
@@ -1167,6 +1231,9 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     UILayoutGuide *safe = host.safeAreaLayoutGuide;
     NSLayoutConstraint *heightConstraint = [adView.heightAnchor constraintEqualToConstant:expanded ? expandedHeight : collapsed];
     NSLayoutConstraint *rowHeight = [rowHost.heightAnchor constraintEqualToConstant:expanded ? expandedRow : collapsed];
+    // Collapsed, the row starts right of the AD badge (no asset under it); expanded, the badge sits over the media.
+    NSLayoutConstraint *leadingCompact = [row.stack.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:GLNABadgeGap];
+    NSLayoutConstraint *leadingFull = [row.stack.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:8.0];
     [NSLayoutConstraint activateConstraints:@[
         [adView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
         [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
@@ -1183,17 +1250,18 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
         [media.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
         [media.bottomAnchor constraintEqualToAnchor:rowHost.topAnchor],
 
-        [row.stack.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:8.0],
+        expanded ? leadingFull : leadingCompact,
         [row.stack.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor constant:-8.0],
         [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:rowHost.topAnchor constant:4.0],
         [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:rowHost.bottomAnchor constant:-4.0],
         [row.stack.centerYAnchor constraintEqualToAnchor:rowHost.centerYAnchor],
 
-        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:2.0],
-        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:2.0],
+        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNABadgeInset],
+        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:GLNABadgeInset],
 
-        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor constant:6.0],
-        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-30.0],
+        // Touch square at the top edge, 26pt clear of the right edge (AdChoices); the circle sits 8pt inside it.
+        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor],
+        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-26.0],
     ]];
 
     GLNAFillRow(row, ad, YES, YES);
@@ -1202,8 +1270,17 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     media.hidden = !expanded;
 
     GLNARegisterRow(adView, row);
-    adView.mediaView = media;
-    media.mediaContent = ad.mediaContent;
+    // The media view is registered only while expanded (>= 120x120pt). Collapsed it would be a hidden, too small
+    // media view, which AdMob's validator flags ("MediaView is too small for video").
+    if (expanded)
+    {
+        media.mediaContent = ad.mediaContent;
+        adView.mediaView = media;
+    }
+    else
+    {
+        adView.mediaView = nil;
+    }
     ad.rootViewController = GLNATopViewController();
     adView.nativeAd = ad;
     [host bringSubviewToFront:adView];
@@ -1214,6 +1291,8 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     state.collapseButton = collapseButton;
     state.heightConstraint = heightConstraint;
     state.rowHeightConstraint = rowHeight;
+    state.rowLeadingCompact = leadingCompact;
+    state.rowLeadingFull = leadingFull;
     state.collapsedHeight = collapsed;
     state.expanded = expanded;
     state.format = GLNAShownCollapsible;
@@ -1266,8 +1345,17 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     GADMediaView *media = state.mediaView;
     GLNARow *row = state.row;
     GADNativeAd *ad = state.shownAd;
+
+    // Unregister the media view before it shrinks away, then re-assign the ad so the SDK re-reads the outlets.
+    GADNativeAdView *adView = state.adView;
+    adView.mediaView = nil;
+    if (ad != nil)
+        adView.nativeAd = ad;
+
     state.heightConstraint.constant = state.collapsedHeight;
     state.rowHeightConstraint.constant = state.collapsedHeight;
+    state.rowLeadingFull.active = NO;
+    state.rowLeadingCompact.active = YES;
     [UIView animateWithDuration:0.25
         animations:^{
             GLNASetRowCompact(row, ad, YES);
@@ -1319,6 +1407,7 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     controller.ctaColor = GLNAColor(cta);
     controller.ctaTextColor = GLNAColor(ctaText);
     controller.modalPresentationStyle = UIModalPresentationFullScreen;
+    controller.modalPresentationCapturesStatusBarAppearance = YES;
     controller.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
 
     __weak GLNAManager *weakSelf = self;

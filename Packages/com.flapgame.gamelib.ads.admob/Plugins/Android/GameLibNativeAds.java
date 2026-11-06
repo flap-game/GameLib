@@ -27,6 +27,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -84,6 +85,11 @@ public final class GameLibNativeAds {
     private static final int KIND_BANNER = 1;
     private static final int KIND_COLLAPSIBLE = 2;
     private static final int KIND_INTERSTITIAL = 3;
+
+    // "AD" badge: fixed box in the ad view's top-left corner (>= 15dp tall)
+    private static final int BADGE_W_DP = 24;
+    private static final int BADGE_H_DP = 16;
+    private static final int BADGE_MARGIN_DP = 2;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<String, State> STATES = new HashMap<String, State>();
@@ -515,15 +521,15 @@ public final class GameLibNativeAds {
         // Transparent strip above the ad for the collapse button: AdChoices owns the ad's top-right corner.
         // The strip is not clickable, so touches on it fall through to the game.
         v.strip = new FrameLayout(activity);
-        v.collapseButton = new RoundIconButton(activity, RoundIconButton.CHEVRON_DOWN, 0xAA000000, Color.WHITE);
+        // 28dp visual circle inside a 48dp touch target; the strip is as tall as the touch target.
+        v.collapseButton = new RoundIconButton(activity, RoundIconButton.CHEVRON_DOWN, 0xAA000000, Color.WHITE,
+                dp(activity, 28));
         v.collapseButton.setVisibility(View.GONE);
-        int buttonPx = dp(activity, 28);
-        FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(buttonPx, buttonPx,
+        int touchPx = dp(activity, 48);
+        FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(touchPx, touchPx,
                 Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        blp.rightMargin = dp(activity, 6);
         v.strip.addView(v.collapseButton, blp);
-        column.addView(v.strip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(activity, 32)));
+        column.addView(v.strip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, touchPx));
 
         v.adView = new NativeAdView(activity);
         v.adView.setBackgroundColor(c.bg);
@@ -538,8 +544,7 @@ public final class GameLibNativeAds {
         v.mediaBox.setBackgroundColor(0xFF000000);
         v.media = new MediaView(activity);
         v.media.setImageScaleType(ImageView.ScaleType.FIT_CENTER);
-        v.mediaBox.addView(v.media, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
+        // the MediaView is attached to mediaBox only while expanded (see setMediaAttached)
         v.content.addView(v.mediaBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         buildRow(activity, v, c);
@@ -558,16 +563,36 @@ public final class GameLibNativeAds {
         if (v.expanded) {
             int rowDp = Math.max(v.collapsedDp, 76);
             int rowPx = Math.min(dp(ctx, rowDp), v.expandedPx);
+            setMediaAttached(v, true);
             v.mediaBox.setVisibility(View.VISIBLE);
             v.strip.setVisibility(View.VISIBLE);
             layoutRow(ctx, v, rowDp, rowPx, 2, true, true);
             setHeight(v.adView, v.expandedPx);
         } else {
             v.mediaBox.setVisibility(View.GONE);
+            setMediaAttached(v, false);
             v.strip.setVisibility(View.GONE);
             v.collapseButton.setVisibility(View.GONE);
             layoutRow(ctx, v, v.collapsedDp, v.collapsedPx, 1, false, false);
             setHeight(v.adView, v.collapsedPx);
+        }
+    }
+
+    /**
+     * Collapsible: the MediaView is in the hierarchy only while expanded (~full width x 45% of the
+     * screen, well above the 120x120dp video minimum). Collapsed, it is detached so the collapsed bar has
+     * no media view at all; registerAssetViews registers it with the NativeAdView only when expanded.
+     */
+    private static void setMediaAttached(Views v, boolean attached) {
+        if (v.media == null || v.mediaBox == null) {
+            return;
+        }
+        boolean isAttached = v.media.getParent() == v.mediaBox;
+        if (attached && !isAttached) {
+            v.mediaBox.addView(v.media, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
+        } else if (!attached && isAttached) {
+            v.mediaBox.removeView(v.media);
         }
     }
 
@@ -606,6 +631,12 @@ public final class GameLibNativeAds {
         v.collapseButton.setOnClickListener(null);
         v.strip.setVisibility(View.GONE);
         v.mediaBox.setVisibility(View.GONE);
+        // collapsed: no media view registered nor in the hierarchy; re-bind so the SDK re-evaluates
+        v.adView.setMediaView(null);
+        setMediaAttached(v, false);
+        if (s.shownAd != null) {
+            v.adView.setNativeAd(s.shownAd);
+        }
         layoutRow(ctx, v, v.collapsedDp, v.collapsedPx, 1, false, false);
 
         int from = v.adView.getHeight() > 0 ? v.adView.getHeight() : v.expandedPx;
@@ -693,14 +724,27 @@ public final class GameLibNativeAds {
     }
 
     /**
-     * Sizes the row for a bar of rowDp: icon ~70% of the bar (24..72dp), CTA width ~1.2x (52..96dp),
-     * smaller fonts when the bar is <= 60dp. Meta shows the rating always; advertiser + store when
-     * showAdvertiserStore; price when showPrice (only the parts present).
+     * Sizes the row for a bar of rowDp: icon ~70% of the bar (24..72dp), CTA width ~1.2x (52..96dp).
+     * Bars <= 60dp: icon = bar minus 8dp top/bottom, headline 12sp, body 10sp one line, CTA >= 32dp tall,
+     * meta line dropped when it does not fit. Meta shows the rating always; advertiser + store when
+     * showAdvertiserStore; price when showPrice (only the parts present). A row at the top of the ad view
+     * starts right of the "AD" badge.
      */
     private static void layoutRow(Context ctx, Views v, int rowDp, int rowPx, int bodyLines,
                                   boolean showAdvertiserStore, boolean showPrice) {
         setHeight(v.row, rowPx);
-        int iconPx = dp(ctx, clamp(Math.round(rowDp * 0.7f), 24, 72));
+        boolean small = rowDp <= 60;
+        // The "AD" badge sits in the ad view's top-left corner. When the row is the top of the ad view
+        // (banner, collapsed bar) it starts right of the badge so no asset is covered.
+        boolean rowAtTop = v.mediaBox == null || v.mediaBox.getVisibility() != View.VISIBLE;
+        int padV = dp(ctx, 3);
+        int padH = dp(ctx, 8);
+        v.row.setPadding(rowAtTop ? dp(ctx, BADGE_MARGIN_DP + BADGE_W_DP + 4) : padH, padV, padH, padV);
+        int innerPx = Math.max(0, rowPx - 2 * padV);
+
+        // small bars: icon = bar height minus 8dp top + bottom; otherwise ~70% of the bar (24..72dp)
+        int iconPx = small ? Math.max(dp(ctx, 16), rowPx - 2 * dp(ctx, 8))
+                : dp(ctx, clamp(Math.round(rowDp * 0.7f), 24, 72));
         LinearLayout.LayoutParams ilp = (LinearLayout.LayoutParams) v.icon.getLayoutParams();
         ilp.width = iconPx;
         ilp.height = iconPx;
@@ -708,13 +752,13 @@ public final class GameLibNativeAds {
 
         LinearLayout.LayoutParams clp = (LinearLayout.LayoutParams) v.cta.getLayoutParams();
         clp.width = dp(ctx, clamp(Math.round(rowDp * 1.2f), 52, 96));
-        clp.height = dp(ctx, clamp(Math.round(rowDp * 0.55f), 24, 44));
+        clp.height = small ? Math.min(dp(ctx, Math.max(32, Math.round(rowDp * 0.55f))), innerPx)
+                : dp(ctx, clamp(Math.round(rowDp * 0.55f), 24, 44));
         v.cta.setLayoutParams(clp);
 
-        boolean small = rowDp <= 60;
-        v.headline.setTextSize(TypedValue.COMPLEX_UNIT_SP, small ? 11 : 13);
-        v.body.setTextSize(TypedValue.COMPLEX_UNIT_SP, small ? 9 : 11);
-        float meta = small ? 8 : 10;
+        v.headline.setTextSize(TypedValue.COMPLEX_UNIT_SP, small ? 12 : 13);
+        v.body.setTextSize(TypedValue.COMPLEX_UNIT_SP, small ? 10 : 11);
+        float meta = 10;
         v.rating.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
         v.advertiser.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
         v.store.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
@@ -723,7 +767,7 @@ public final class GameLibNativeAds {
             sep.setTextSize(TypedValue.COMPLEX_UNIT_SP, meta);
         }
         v.cta.setTextSize(TypedValue.COMPLEX_UNIT_SP, small ? 11 : 13);
-        v.body.setMaxLines(bodyLines);
+        v.body.setMaxLines(small ? 1 : bodyLines);
 
         // asset visibility: present AND allowed in this layout
         setShown(v.advertiser, showAdvertiserStore && hasText(v.advertiser));
@@ -731,6 +775,20 @@ public final class GameLibNativeAds {
         setShown(v.price, showPrice && hasText(v.price));
         setShown(v.rating, hasText(v.rating));
         updateSeparators(v);
+
+        if (small && v.metaRow.getVisibility() == View.VISIBLE) {
+            // small bar: drop the meta line (rating / store) when the three lines do not fit
+            int need = v.rating.getLineHeight() + dp(ctx, 2);
+            if (v.headline.getVisibility() == View.VISIBLE) {
+                need += v.headline.getLineHeight();
+            }
+            if (v.body.getVisibility() == View.VISIBLE) {
+                need += v.body.getLineHeight();
+            }
+            if (need > innerPx) {
+                v.metaRow.setVisibility(View.GONE);
+            }
+        }
     }
 
     private static void updateSeparators(Views v) {
@@ -797,8 +855,17 @@ public final class GameLibNativeAds {
                             WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
                     w.setAttributes(attrs);
                 }
-                copyImmersiveFlags(activity, w);
+                makeImmersive(w);
             }
+            dialog.setOnShowListener(new DialogInterface.OnShowListener() {
+                @Override
+                public void onShow(DialogInterface d) {
+                    Window sw = ((Dialog) d).getWindow();
+                    if (sw != null) {
+                        makeImmersive(sw); // again once attached: the window now has its insets controller
+                    }
+                }
+            });
             dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
                 @Override
                 public void onDismiss(DialogInterface d) {
@@ -948,10 +1015,16 @@ public final class GameLibNativeAds {
             @Override
             public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
                 int[] safe = safeInsets(insets);
+                int bottom = safe[3];
+                if (Build.VERSION.SDK_INT >= 29) {
+                    // bars are hidden (immersive): keep the CTA panel clear of the bottom gesture area too
+                    bottom = Math.max(bottom, insets.getMandatorySystemGestureInsets().bottom);
+                    bottom = Math.max(bottom, insets.getSystemGestureInsets().bottom);
+                }
                 root.setPadding(safe[0], 0, safe[2], 0);
                 topBar.setPadding(0, safe[1], 0, 0);
                 setHeight(topBar, barPx + safe[1]);
-                panel.setPadding(pad, pad, pad, pad + safe[3]);
+                panel.setPadding(pad, pad, pad, pad + bottom);
                 return insets;
             }
         });
@@ -1014,7 +1087,9 @@ public final class GameLibNativeAds {
         v.adView.setPriceView(v.price);
         v.adView.setStarRatingView(v.rating);
         if (v.media != null) {
-            v.adView.setMediaView(v.media);
+            // interstitial: always; collapsible: only while expanded (collapsed bar has no media view)
+            boolean collapsible = v.wrapper != null;
+            v.adView.setMediaView(!collapsible || v.expanded ? v.media : null);
         }
     }
 
@@ -1171,14 +1246,29 @@ public final class GameLibNativeAds {
         return new int[] {l, t, r, b};
     }
 
+    /**
+     * Full-screen ad window: status + navigation bars hidden (swipe shows them transiently), content laid
+     * out edge to edge (cutout mode SHORT_EDGES is set by the caller); the insets listener keeps the
+     * close button / countdown and the CTA panel inside the safe area.
+     */
     @SuppressWarnings("deprecation")
-    private static void copyImmersiveFlags(Activity activity, Window dialogWindow) {
-        Window w = activity.getWindow();
-        if (w == null) {
-            return;
+    private static void makeImmersive(Window w) {
+        View decor = w.getDecorView();
+        if (Build.VERSION.SDK_INT >= 30) {
+            w.setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = w.getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         }
-        int flags = w.getDecorView().getSystemUiVisibility();
-        dialogWindow.getDecorView().setSystemUiVisibility(flags);
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -1193,10 +1283,16 @@ public final class GameLibNativeAds {
         private final int glyph;
         private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final int circlePx; // visual circle diameter; 0 = fill the view (touch target = view size)
 
         RoundIconButton(Context ctx, int glyph, int fillColor, int glyphColor) {
+            this(ctx, glyph, fillColor, glyphColor, 0);
+        }
+
+        RoundIconButton(Context ctx, int glyph, int fillColor, int glyphColor, int circlePx) {
             super(ctx);
             this.glyph = glyph;
+            this.circlePx = circlePx;
             fill.setColor(fillColor);
             fill.setStyle(Paint.Style.FILL);
             stroke.setColor(glyphColor);
@@ -1214,6 +1310,9 @@ public final class GameLibNativeAds {
             float cx = w / 2f;
             float cy = h / 2f;
             float r = Math.min(w, h) / 2f;
+            if (circlePx > 0) {
+                r = Math.min(r, circlePx / 2f);
+            }
             canvas.drawCircle(cx, cy, r, fill);
             float g = r * 0.42f;
             if (glyph == CROSS) {
@@ -1234,16 +1333,18 @@ public final class GameLibNativeAds {
         badge.setTypeface(Typeface.DEFAULT_BOLD);
         badge.setTextColor(0xFF333333);
         badge.setIncludeFontPadding(false);
-        badge.setPadding(dp(ctx, 4), dp(ctx, 1), dp(ctx, 4), dp(ctx, 1));
+        badge.setGravity(Gravity.CENTER);
+        badge.setMaxLines(1);
+        badge.setPadding(0, 0, 0, 0);
         badge.setBackground(rounded(0xFFF7F7F7, dp(ctx, 3), Math.max(1, dp(ctx, 0.5f)), 0xFFBDBDBD));
         return badge;
     }
 
     private static FrameLayout.LayoutParams badgeParams(Context ctx) {
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT);
-        lp.leftMargin = dp(ctx, 2);
-        lp.topMargin = dp(ctx, 2);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(ctx, BADGE_W_DP), dp(ctx, BADGE_H_DP),
+                Gravity.TOP | Gravity.LEFT);
+        lp.leftMargin = dp(ctx, BADGE_MARGIN_DP);
+        lp.topMargin = dp(ctx, BADGE_MARGIN_DP);
         return lp;
     }
 
