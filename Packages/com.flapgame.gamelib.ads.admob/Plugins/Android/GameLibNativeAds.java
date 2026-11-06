@@ -256,6 +256,8 @@ public final class GameLibNativeAds {
         int collapsedDp;
         int collapsedPx;
         int expandedPx;
+        boolean landscape;           // collapsible: screen wider than tall when built (orientation is fixed per game)
+        int mediaWidthPx;            // collapsible, landscape: media column width while expanded
         boolean expanded;
         boolean top;
     }
@@ -505,6 +507,8 @@ public final class GameLibNativeAds {
 
     /** Collapse button touch target's distance from the ad's top edge: clear of the top-right AdChoices icon. */
     private static final int COLLAPSE_BUTTON_TOP_DP = 24;
+    /** AdMob's minimum media view size for video, both sides. */
+    private static final int MIN_MEDIA_DP = 120;
 
     private static Views buildCollapsible(Activity activity, ViewGroup content, int collapsedDp,
                                           boolean startExpanded, Colors c) {
@@ -512,7 +516,13 @@ public final class GameLibNativeAds {
         v.collapsedDp = collapsedDp;
         v.collapsedPx = dp(activity, collapsedDp);
         int screenH = content.getHeight() > 0 ? content.getHeight() : screenHeightPx(activity);
-        v.expandedPx = Math.max(v.collapsedPx, Math.round(screenH * 0.45f));
+        int screenW = content.getWidth() > 0 ? content.getWidth() : screenWidthPx(activity);
+        v.landscape = screenW > screenH;
+        // the media must stay >= 120x120dp (AdMob's video minimum): in landscape it is the full ad height
+        v.expandedPx = Math.max(v.collapsedPx, Math.max(Math.round(screenH * 0.45f),
+                v.landscape ? dp(activity, MIN_MEDIA_DP) : 0));
+        // landscape: media column on the left (16:9 of the ad height, at most half the width), row on the right
+        v.mediaWidthPx = Math.max(dp(activity, MIN_MEDIA_DP), Math.min(Math.round(v.expandedPx * 16f / 9f), screenW / 2));
         v.expanded = startExpanded;
 
         v.wrapper = new FrameLayout(activity);
@@ -565,9 +575,16 @@ public final class GameLibNativeAds {
         if (v.expanded) {
             int rowDp = Math.max(v.collapsedDp, 76);
             int rowPx = Math.min(dp(ctx, rowDp), v.expandedPx);
+            if (v.landscape) {
+                // the row fills the right column below the collapse button's touch target
+                int belowButtonPx = v.expandedPx - dp(ctx, COLLAPSE_BUTTON_TOP_DP + 48);
+                rowPx = Math.max(rowPx, Math.min(belowButtonPx, dp(ctx, 120)));
+                rowDp = Math.round(rowPx / density(ctx));
+            }
             setMediaAttached(v, true);
             v.mediaBox.setVisibility(View.VISIBLE);
             v.strip.setVisibility(View.VISIBLE);
+            arrangeCollapsible(v, true);
             layoutRow(ctx, v, rowDp, rowPx, 2, true, true);
             setHeight(v.adView, v.expandedPx);
         } else {
@@ -575,9 +592,25 @@ public final class GameLibNativeAds {
             setMediaAttached(v, false);
             v.strip.setVisibility(View.GONE);
             v.collapseButton.setVisibility(View.GONE);
+            arrangeCollapsible(v, false);
             layoutRow(ctx, v, v.collapsedDp, v.collapsedPx, 1, false, false);
             setHeight(v.adView, v.collapsedPx);
         }
+    }
+
+    /**
+     * Collapsible content: media above the row (portrait, and every collapsed bar) or, expanded in landscape,
+     * media column left and the row right (aligned to the bottom, clear of the collapse button).
+     */
+    private static void arrangeCollapsible(Views v, boolean expanded) {
+        boolean side = expanded && v.landscape;
+        v.content.setOrientation(side ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        v.mediaBox.setLayoutParams(side
+                ? new LinearLayout.LayoutParams(v.mediaWidthPx, ViewGroup.LayoutParams.MATCH_PARENT)
+                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        v.row.setLayoutParams(side
+                ? new LinearLayout.LayoutParams(0, v.row.getLayoutParams().height, 1f)
+                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, v.row.getLayoutParams().height));
     }
 
     /**
@@ -639,6 +672,7 @@ public final class GameLibNativeAds {
         if (s.shownAd != null) {
             v.adView.setNativeAd(s.shownAd);
         }
+        arrangeCollapsible(v, false);
         layoutRow(ctx, v, v.collapsedDp, v.collapsedPx, 1, false, false);
 
         int from = v.adView.getHeight() > 0 ? v.adView.getHeight() : v.expandedPx;
@@ -1479,6 +1513,10 @@ public final class GameLibNativeAds {
 
     private static int dp(Context ctx, float dp) {
         return Math.round(dp * density(ctx));
+    }
+
+    private static int screenWidthPx(Context ctx) {
+        return ctx.getResources().getDisplayMetrics().widthPixels;
     }
 
     private static int screenHeightPx(Context ctx) {

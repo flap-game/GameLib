@@ -30,7 +30,7 @@ SDK (clicks and impressions are tracked by Google) and hides the assets an ad do
 | Format | Shown with | Look |
 |---|---|---|
 | `NativeBanner` | `ShowBanner` / `HideBanner` | Full-width bar at the bottom (or top: `Position` Top / TopLeft / TopRight) of the safe area, as tall as an adaptive banner on the device (`NativeMatchBannerHeight`, default on); off = `NativeHeightDp` high (0 = 100). |
-| `NativeCollapsible` | `ShowBanner` / `HideBanner` | Bottom bar `NativeHeightDp` high (0 = 50). With `NativeStartExpanded` each show opens it over ~45 % of the screen with its media; a collapse button appears after `NativeCollapseButtonDelaySeconds`, inside the ad at its top-right corner, 24 dp below the top so the AdChoices icon stays clear. |
+| `NativeCollapsible` | `ShowBanner` / `HideBanner` | Bottom bar `NativeHeightDp` high (0 = 50). With `NativeStartExpanded` each show opens it over ~45 % of the screen with its media; a collapse button appears after `NativeCollapseButtonDelaySeconds`, inside the ad at its top-right corner, 24 dp below the top so the AdChoices icon stays clear. In a landscape game the expanded ad puts the media in a left column (at least 120 dp, AdMob's video minimum) and the texts on the right; the layout follows the orientation the ad was shown in (games with a fixed orientation). |
 | `NativeInterstitial` | like an interstitial | Full screen; a "Close in Ns" countdown (`NativeCloseDelaySeconds`, 0 = close button at once). Follows the interstitial pacing. |
 
 - Colors: `NativeBackgroundColor`, `NativeTextColor`, `NativeCtaColor`, `NativeCtaTextColor` on the placement.

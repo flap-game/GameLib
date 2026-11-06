@@ -10,6 +10,9 @@
 - A collapsible banner opening its expanded panel by itself is no longer reported as fullscreen content: interstitials
   (standard and native) now show over it instead of being refused with `AnotherAdShowing`. A tap that opens the ad's
   page is still reported.
+- Landscape: an expanded `NativeCollapsible` shows its media in a left column and the texts on the right (the media
+  stays at least 120 dp, AdMob's video minimum, which the stacked layout missed on a landscape screen). For games with
+  a fixed orientation: a shown ad keeps the layout of the orientation it was shown in.
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.

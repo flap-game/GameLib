@@ -503,6 +503,8 @@ typedef NS_ENUM(NSInteger, GLNAShownFormat) {
 @property (nonatomic, strong) NSLayoutConstraint *rowHeightConstraint;
 @property (nonatomic, strong) NSLayoutConstraint *rowLeadingCompact;  // collapsible: row right of the AD badge
 @property (nonatomic, strong) NSLayoutConstraint *rowLeadingFull;     // collapsible expanded: badge sits over the media
+@property (nonatomic, strong) NSLayoutConstraint *rowHostLeadingFull; // collapsible: row across the whole ad
+@property (nonatomic, strong) NSLayoutConstraint *rowHostLeadingSide; // collapsible expanded in landscape: row right of the media
 @property (nonatomic, assign) CGFloat collapsedHeight;
 @property (nonatomic, assign) BOOL expanded;
 @property (nonatomic, strong) NSTimer *collapseButtonTimer;
@@ -991,6 +993,8 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
     state.rowHeightConstraint = nil;
     state.rowLeadingCompact = nil;
     state.rowLeadingFull = nil;
+    state.rowHostLeadingFull = nil;
+    state.rowHostLeadingSide = nil;
 
     GLNAInterstitialController *interstitial = state.interstitial;
     state.interstitial = nil;
@@ -1139,16 +1143,25 @@ static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
 // The media view of the expanded collapsible must be >= GLNAMinMediaSide tall (AdMob's video minimum, 120x120pt).
 static const CGFloat GLNAMinMediaSide = 120.0;
 
-- (CGFloat)expandedHeightFor:(CGFloat)collapsed
+// Collapse button touch square: 24pt below the ad's top edge (clear of AdChoices), 44pt tall.
+static const CGFloat GLNACollapseButtonTop = 24.0;
+static const CGFloat GLNACollapseButtonTouch = 44.0;
+
+// Portrait: media above the row, so the ad is at least row + 120pt. Landscape: media column left of the row, the
+// full ad height, so the ad is at least 120pt.
+- (CGFloat)expandedHeightFor:(CGFloat)collapsed screenHeight:(CGFloat)screenHeight landscape:(BOOL)landscape
 {
-    CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
     CGFloat height = MAX(collapsed, floor(screenHeight * 0.45));
-    return MAX(height, MAX(collapsed, 76.0) + GLNAMinMediaSide);
+    return MAX(height, landscape ? GLNAMinMediaSide : MAX(collapsed, 76.0) + GLNAMinMediaSide);
 }
 
-- (CGFloat)expandedRowHeightFor:(CGFloat)collapsed expanded:(CGFloat)expanded
+// Landscape: the row fills the right column below the collapse button (at most 120pt).
+- (CGFloat)expandedRowHeightFor:(CGFloat)collapsed expanded:(CGFloat)expanded landscape:(BOOL)landscape
 {
-    return MIN(MAX(collapsed, 76.0), expanded);
+    CGFloat row = MIN(MAX(collapsed, 76.0), expanded);
+    if (landscape)
+        row = MAX(row, MIN(expanded - GLNACollapseButtonTop - GLNACollapseButtonTouch, 120.0));
+    return row;
 }
 
 - (void)showCollapsibleKey:(NSString *)key collapsedDp:(int)collapsedDp startExpanded:(BOOL)startExpanded
@@ -1192,8 +1205,15 @@ static const CGFloat GLNAMinMediaSide = 120.0;
         return NO;
 
     CGFloat collapsed = collapsedDp > 0 ? (CGFloat)collapsedDp : 50.0;
-    CGFloat expandedHeight = [self expandedHeightFor:collapsed];
-    CGFloat expandedRow = [self expandedRowHeightFor:collapsed expanded:expandedHeight];
+    // The game's orientation is fixed: decide the expanded layout once, from the host's shape.
+    CGSize hostSize = host.bounds.size;
+    if (hostSize.width <= 0 || hostSize.height <= 0)
+        hostSize = [UIScreen mainScreen].bounds.size;
+    BOOL landscape = hostSize.width > hostSize.height;
+    CGFloat expandedHeight = [self expandedHeightFor:collapsed screenHeight:hostSize.height landscape:landscape];
+    CGFloat expandedRow = [self expandedRowHeightFor:collapsed expanded:expandedHeight landscape:landscape];
+    // landscape media column: 16:9 of the ad height, at most half the width
+    CGFloat mediaWidth = MAX(GLNAMinMediaSide, MIN(floor(expandedHeight * 16.0 / 9.0), floor(hostSize.width / 2.0)));
 
     GADNativeAdView *adView = [[GADNativeAdView alloc] init];
     adView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1234,21 +1254,29 @@ static const CGFloat GLNAMinMediaSide = 120.0;
     // Collapsed, the row starts right of the AD badge (no asset under it); expanded, the badge sits over the media.
     NSLayoutConstraint *leadingCompact = [row.stack.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:GLNABadgeGap];
     NSLayoutConstraint *leadingFull = [row.stack.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:8.0];
+    // The row spans the ad, except expanded in landscape where it sits right of the media column.
+    NSLayoutConstraint *rowHostFull = [rowHost.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor];
+    NSLayoutConstraint *rowHostSide = [rowHost.leadingAnchor constraintEqualToAnchor:media.trailingAnchor];
+    BOOL side = landscape && expanded;
+    NSArray<NSLayoutConstraint *> *mediaShape = landscape
+        ? @[ [media.widthAnchor constraintEqualToConstant:mediaWidth],
+             [media.bottomAnchor constraintEqualToAnchor:adView.bottomAnchor] ]
+        : @[ [media.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
+             [media.bottomAnchor constraintEqualToAnchor:rowHost.topAnchor] ];
+    [NSLayoutConstraint activateConstraints:mediaShape];
     [NSLayoutConstraint activateConstraints:@[
         [adView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
         [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
         [adView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
         heightConstraint,
 
-        [rowHost.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor],
+        side ? rowHostSide : rowHostFull,
         [rowHost.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
         [rowHost.bottomAnchor constraintEqualToAnchor:adView.bottomAnchor],
         rowHeight,
 
         [media.topAnchor constraintEqualToAnchor:adView.topAnchor],
         [media.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor],
-        [media.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
-        [media.bottomAnchor constraintEqualToAnchor:rowHost.topAnchor],
 
         expanded ? leadingFull : leadingCompact,
         [row.stack.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor constant:-8.0],
@@ -1260,7 +1288,7 @@ static const CGFloat GLNAMinMediaSide = 120.0;
         [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:GLNABadgeInset],
 
         // Touch square at the right edge, 24pt below the top edge (clear of AdChoices) - same spot as on Android.
-        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor constant:24.0],
+        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor constant:GLNACollapseButtonTop],
         [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
     ]];
 
@@ -1293,6 +1321,8 @@ static const CGFloat GLNAMinMediaSide = 120.0;
     state.rowHeightConstraint = rowHeight;
     state.rowLeadingCompact = leadingCompact;
     state.rowLeadingFull = leadingFull;
+    state.rowHostLeadingFull = rowHostFull;
+    state.rowHostLeadingSide = rowHostSide;
     state.collapsedHeight = collapsed;
     state.expanded = expanded;
     state.format = GLNAShownCollapsible;
@@ -1356,6 +1386,8 @@ static const CGFloat GLNAMinMediaSide = 120.0;
     state.rowHeightConstraint.constant = state.collapsedHeight;
     state.rowLeadingFull.active = NO;
     state.rowLeadingCompact.active = YES;
+    state.rowHostLeadingSide.active = NO; // deactivate before activating: never two leading constraints at once
+    state.rowHostLeadingFull.active = YES;
     [UIView animateWithDuration:0.25
         animations:^{
             GLNASetRowCompact(row, ad, YES);
