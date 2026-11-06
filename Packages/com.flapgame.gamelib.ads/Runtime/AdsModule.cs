@@ -194,6 +194,8 @@ namespace FlapGame.GameLib.Ads
                             WarnEmptyKeys(issues, p.MaxExtraParameters, $"Placement '{p.Id}' Max Extra Parameters");
                         if (p.Format == AdFormat.RewardedInterstitial && r.EffectiveProviderId == AdProviderIds.Max)
                             issues.Add(GameLibIssue.Error($"Placement '{p.Id}': MAX has no rewarded interstitial - route it to AdMob, or use an Interstitial / Rewarded placement on MAX."));
+                        if (p.IsNative && r.EffectiveProviderId == AdProviderIds.Max)
+                            issues.Add(GameLibIssue.Error($"Placement '{p.Id}': MAX has no native ads ({p.Format} is AdMob only) - route it to AdMob, or use a Banner / Interstitial placement on MAX."));
                     }
             }
 
@@ -384,6 +386,7 @@ namespace FlapGame.GameLib.Ads
                 AdFormat.Mrec         => AdFormatKind.Mrec,
                 AdFormat.AppOpen      => AdFormatKind.AppOpen,
                 AdFormat.RewardedInterstitial => AdFormatKind.RewardedInterstitial,
+                AdFormat.NativeBanner or AdFormat.NativeCollapsible or AdFormat.NativeInterstitial => AdFormatKind.Native,
                 _                     => AdFormatKind.Unknown,
             },
             AdUnitId  = impression.AdUnitId,

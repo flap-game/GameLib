@@ -31,8 +31,15 @@ namespace FlapGame.GameLib.Ads
     /// Once <c>Show()</c> was called the caller's cancellation token is ignored: the ad is on screen and its real
     /// outcome is awaited, so the composite never opens a second ad on top of it.
     /// </para>
+    /// <para>
+    /// Native ads (0.9.0) are drawn by GameLib's own native views (<see cref="AdMobNativeBridge"/>), one native ad per
+    /// key: a banner-like native (NativeBanner, NativeCollapsible) has one key per placement and behaves like a banner
+    /// (loaded on its first show, or on activation with <see cref="AdPlacement.PreloadBanner"/>; a shown ad is spent
+    /// once hidden and a fresh one loads while the placement stays active). NativeInterstitial shares a
+    /// <see cref="Slot"/> per ad unit like the other fullscreen formats.
+    /// </para>
     /// </summary>
-    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification, IBannerExpansion
+    public sealed class AdMobAdsAdapter : IAdsProviderAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification, IBannerExpansion, INativeCollapseSource, INativeTimingAdapter
     {
         private const string LogPrefix = "[Ads/AdMob]";
 
@@ -47,6 +54,12 @@ namespace FlapGame.GameLib.Ads
         private readonly CancellationTokenSource lifetime = new();
         // Shows awaiting their close callback; failed on Dispose so no caller hangs after teardown.
         private readonly HashSet<TaskCompletionSource<AdShowResult>> pendingShows = new();
+        // Native bridge keys -> banner-like native placement / NativeInterstitial slot.
+        private readonly Dictionary<string, Unit> nativeUnits = new();
+        private readonly Dictionary<string, Slot> nativeSlots = new();
+#if GAMELIB_ADMOB
+        private AdMobNativeBridge nativeBridge; // created on the first native call
+#endif
 
         private SynchronizationContext mainContext;
         private int mainThreadId;
@@ -82,6 +95,9 @@ namespace FlapGame.GameLib.Ads
 
         /// <inheritdoc />
         public event Action<string, bool> BannerExpandedChanged;
+
+        /// <inheritdoc />
+        public event Action<string, bool> NativeExpandedChanged;
 
         /// <summary>Grace to wait for a reward callback that arrives after the close callback.</summary>
         public TimeSpan LateRewardGrace { get; set; } = RewardGrace.DefaultGrace;
@@ -123,6 +139,21 @@ namespace FlapGame.GameLib.Ads
         }
 
         /// <inheritdoc />
+        // (0.9.0) Effective native timings pushed by the composite (plan / remote overrides); absent = the local asset's values.
+        private readonly Dictionary<string, (int close, int collapse)> nativeTimings = new();
+
+        /// <inheritdoc />
+        public void SetNativeTiming(string placementId, int closeDelaySeconds, int collapseButtonDelaySeconds)
+        {
+            if (placementId != null) nativeTimings[placementId] = (Math.Max(0, closeDelaySeconds), Math.Max(0, collapseButtonDelaySeconds));
+        }
+
+        private int NativeCloseDelay(AdPlacement p) =>
+            nativeTimings.TryGetValue(p.Id, out var t) ? t.close : Math.Max(0, p.NativeCloseDelaySeconds);
+
+        private int NativeCollapseDelay(AdPlacement p) =>
+            nativeTimings.TryGetValue(p.Id, out var t) ? t.collapse : Math.Max(0, p.NativeCollapseButtonDelaySeconds);
+
         public void SetPlacementActive(string placementId, bool active)
         {
             if (disposed || placementId == null || !units.TryGetValue(placementId, out Unit unit)) return;
@@ -150,8 +181,10 @@ namespace FlapGame.GameLib.Ads
             {
                 unit.Slot.ResetLoad();
                 ReleaseFullscreen(unit.Slot);
+                ReleaseNative(unit.Slot);
             }
             ReleaseBanner(unit);
+            ReleaseNative(unit);
             if (wasReady) RaiseReadyChanged(placementId);
 #endif
         }
@@ -168,7 +201,11 @@ namespace FlapGame.GameLib.Ads
                 case AdFormat.Rewarded:     return unit.Active && unit.Slot.Rewarded != null;
                 case AdFormat.RewardedInterstitial: return unit.Active && unit.Slot.RewardedInterstitial != null;
                 case AdFormat.AppOpen:      return unit.Active && IsAppOpenReady(unit.Slot);
-                default:                    return unit.Banner != null && unit.BannerLoaded;
+                case AdFormat.NativeInterstitial: return unit.Active && unit.Slot.NativeReady;
+                default:
+                    return unit.NativeKey != null
+                        ? unit.Active && unit.BannerLoaded
+                        : unit.Banner != null && unit.BannerLoaded;
             }
 #else
             return false;
@@ -187,7 +224,8 @@ namespace FlapGame.GameLib.Ads
                 case AdFormat.Rewarded:     return await ShowRewardedAsync(unit, cancellationToken);
                 case AdFormat.RewardedInterstitial: return await ShowRewardedInterstitialAsync(unit, cancellationToken);
                 case AdFormat.AppOpen:      return await ShowAppOpenAsync(unit, cancellationToken);
-                default:                    return ShowBanner(unit);
+                case AdFormat.NativeInterstitial: return await ShowNativeInterstitialAsync(unit, cancellationToken);
+                default:                    return unit.NativeKey != null ? ShowNativeBanner(unit) : ShowBanner(unit);
             }
 #else
             await Task.CompletedTask;
@@ -200,6 +238,8 @@ namespace FlapGame.GameLib.Ads
         {
 #if GAMELIB_ADMOB
             if (disposed || placementId == null || !units.TryGetValue(placementId, out Unit unit)) return 0f;
+            // A native bar reports its height only while it is on screen (NativeCollapsible: the collapsed bar).
+            if (unit.NativeKey != null) return unit.NativeOnScreen ? NativeHeightPixels(unit) : 0f;
             if (unit.Banner == null || !unit.BannerLoaded) return 0f;
             // Measured once per loaded view: a layout script may ask every frame, and each measure is a native call.
             if (unit.LoadedHeightPixels > 0f) return unit.LoadedHeightPixels;
@@ -220,6 +260,7 @@ namespace FlapGame.GameLib.Ads
 #if GAMELIB_ADMOB
             if (disposed || !initialized || placementId == null || !units.TryGetValue(placementId, out Unit unit) || !unit.Active)
                 return 0f;
+            if (unit.NativeKey != null) return NativeHeightPixels(unit); // the bar height is fixed by the placement
             float loaded = GetBannerHeightPixels(placementId);
             if (loaded > 0f) return loaded;
             if (unit.ExpectedHeightPixels > 0f) return unit.ExpectedHeightPixels;
@@ -245,6 +286,7 @@ namespace FlapGame.GameLib.Ads
 #if GAMELIB_ADMOB
             if (placementId == null || !units.TryGetValue(placementId, out Unit unit)) return;
             unit.BannerVisible = false;
+            if (unit.NativeKey != null) { HideNative(unit); return; }
             unit.Banner?.Hide();
 #endif
         }
@@ -253,7 +295,9 @@ namespace FlapGame.GameLib.Ads
         public void DestroyBanner(string placementId)
         {
 #if GAMELIB_ADMOB
-            if (placementId == null || !units.TryGetValue(placementId, out Unit unit) || unit.Banner == null) return;
+            if (placementId == null || !units.TryGetValue(placementId, out Unit unit)) return;
+            if (unit.NativeKey != null) { DestroyNative(unit); return; }
+            if (unit.Banner == null) return;
             bool wasLoaded = unit.BannerLoaded;
             unit.Generation++; // a pending banner retry belongs to the destroyed view
             unit.RetryPending = false;
@@ -348,13 +392,20 @@ namespace FlapGame.GameLib.Ads
                 unit.Generation++;
                 unit.Active = false;
                 ReleaseBanner(unit);
+                ReleaseNative(unit);
             }
             foreach (Slot slot in slots.Values)
             {
                 slot.Generation++;
                 ReleaseFullscreen(slot);
+                slot.NativeShowing = null; // teardown: a native interstitial on screen goes too
+                ReleaseNative(slot);
             }
+            nativeBridge?.Dispose();
+            nativeBridge = null;
 #endif
+            nativeUnits.Clear();
+            nativeSlots.Clear();
             activeBeforeInit.Clear();
             lifetime.Dispose();
         }
@@ -372,6 +423,8 @@ namespace FlapGame.GameLib.Ads
             // A retried init (after a faulted / cancelled run) rebuilds both: stale slots would keep the old run's units.
             units.Clear();
             slots.Clear();
+            nativeUnits.Clear();
+            nativeSlots.Clear();
             foreach (AdUnitAssignment assignment in context.Units)
             {
                 AdPlacement placement = assignment.Placement;
@@ -394,9 +447,17 @@ namespace FlapGame.GameLib.Ads
                 {
                     string key = $"{placement.Format}|{unitId}";
                     if (!slots.TryGetValue(key, out Slot slot))
+                    {
                         slots[key] = slot = new Slot(placement.Format, unitId);
+                        if (placement.Format == AdFormat.NativeInterstitial)
+                            nativeSlots[slot.NativeKey = "slot|" + key] = slot;
+                    }
                     slot.Members.Add(unit);
                     unit.Slot = slot;
+                }
+                else if (placement.IsNative)
+                {
+                    nativeUnits[unit.NativeKey = "placement|" + placement.Id] = unit;
                 }
             }
             foreach (Slot slot in slots.Values)
@@ -405,7 +466,8 @@ namespace FlapGame.GameLib.Ads
         }
 
         private static bool IsFullscreen(AdFormat format) =>
-            format is AdFormat.Interstitial or AdFormat.Rewarded or AdFormat.RewardedInterstitial or AdFormat.AppOpen;
+            format is AdFormat.Interstitial or AdFormat.Rewarded or AdFormat.RewardedInterstitial or AdFormat.AppOpen
+                   or AdFormat.NativeInterstitial;
 
         /// <summary>Google's public demo unit ids (always fill, never pay). Used in test mode when a route has no id.</summary>
         private static string GoogleTestUnitId(AdFormat format)
@@ -417,6 +479,8 @@ namespace FlapGame.GameLib.Ads
                 AdFormat.Rewarded     => "ca-app-pub-3940256099942544/1712485313",
                 AdFormat.RewardedInterstitial => "ca-app-pub-3940256099942544/6978759866",
                 AdFormat.AppOpen      => "ca-app-pub-3940256099942544/5662855259",
+                AdFormat.NativeBanner or AdFormat.NativeCollapsible or AdFormat.NativeInterstitial
+                                      => "ca-app-pub-3940256099942544/3986624511",
                 _                     => "ca-app-pub-3940256099942544/2934735716",
             };
 #else
@@ -426,6 +490,8 @@ namespace FlapGame.GameLib.Ads
                 AdFormat.Rewarded     => "ca-app-pub-3940256099942544/5224354917",
                 AdFormat.RewardedInterstitial => "ca-app-pub-3940256099942544/5354046379",
                 AdFormat.AppOpen      => "ca-app-pub-3940256099942544/9257395921",
+                AdFormat.NativeBanner or AdFormat.NativeCollapsible or AdFormat.NativeInterstitial
+                                      => "ca-app-pub-3940256099942544/2247696110",
                 _                     => "ca-app-pub-3940256099942544/6300978111",
             };
 #endif
@@ -487,6 +553,7 @@ namespace FlapGame.GameLib.Ads
         private void EnsureLoading(Unit unit)
         {
             if (unit.Slot != null) EnsureLoading(unit.Slot);
+            else if (unit.NativeKey != null) PreloadNative(unit);
             else PreloadBanner(unit);
         }
 
@@ -519,6 +586,10 @@ namespace FlapGame.GameLib.Ads
                 case AdFormat.Rewarded:     if (slot.Rewarded == null)     LoadRewarded(slot);     break;
                 case AdFormat.RewardedInterstitial: if (slot.RewardedInterstitial == null) LoadRewardedInterstitial(slot); break;
                 case AdFormat.AppOpen:      if (slot.AppOpen == null)      LoadAppOpen(slot);      break;
+                // Not while its ad is on screen: the events of one key could not tell the two ads apart.
+                case AdFormat.NativeInterstitial:
+                    if (!slot.NativeReady && slot.NativeShowing == null) LoadNative(slot);
+                    break;
             }
         }
 
@@ -1014,6 +1085,335 @@ namespace FlapGame.GameLib.Ads
             BannerPosition.Center      => AdPosition.Center,
             _                          => AdPosition.Bottom,
         };
+
+        // ---------------------------------------------------------------- native ads (0.9.0)
+
+        private AdMobNativeBridge NativeBridge => nativeBridge ??= new AdMobNativeBridge(RunOnMain, OnNativeEvent);
+
+        // Banner-like native: loaded on activation only with PreloadBanner, or again once a show created it.
+        private void PreloadNative(Unit unit)
+        {
+            if (unit.NativeStarted || unit.Placement.PreloadBanner) EnsureNativeLoading(unit);
+        }
+
+        private void EnsureNativeLoading(Unit unit)
+        {
+            if (disposed || !initialized || !unit.Active || unit.Loading || unit.RetryPending || unit.BannerLoaded) return;
+            unit.NativeStarted = true;
+            unit.Loading       = true;
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native {unit.Id} loading.");
+            NativeBridge.Load(unit.NativeKey, unit.AdUnitId);
+        }
+
+        private void LoadNative(Slot slot)
+        {
+            BeginLoad(slot);
+            NativeBridge.Load(slot.NativeKey, slot.AdUnitId);
+        }
+
+        // Like ShowBanner: Completed once the show is requested; the ad appears when it has loaded.
+        private AdShowResult ShowNativeBanner(Unit unit)
+        {
+            if (!initialized)
+            {
+                Debug.LogWarning($"{LogPrefix} Native {unit.Id} not shown: SDK not initialized.");
+                return AdShowResult.Failed;
+            }
+            if (!unit.Active)
+            {
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native {unit.Id} not shown: placement not active.");
+                return AdShowResult.Failed;
+            }
+
+            unit.BannerVisible = true;
+            if (unit.NativeShowRequested) return AdShowResult.Completed; // already on screen (or on its way): same ad
+            if (unit.BannerLoaded)
+            {
+                PresentNative(unit);
+                return AdShowResult.Completed;
+            }
+            EnsureNativeLoading(unit); // no-op while a load or a retry is pending
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native {unit.Id} requested; it appears once loaded.");
+            return AdShowResult.Completed;
+        }
+
+        // Placement fields are read at show time.
+        private void PresentNative(Unit unit)
+        {
+            AdPlacement p = unit.Placement;
+            int heightDp  = p.EffectiveNativeHeightDp;
+            unit.NativeShowRequested = true;
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing native {unit.Id}.");
+            if (p.Format == AdFormat.NativeCollapsible)
+            {
+                NativeBridge.ShowCollapsible(unit.NativeKey, heightDp, p.NativeStartExpanded,
+                    NativeCollapseDelay(p),
+                    AdMobNativeBridge.Argb(p.NativeBackgroundColor), AdMobNativeBridge.Argb(p.NativeTextColor),
+                    AdMobNativeBridge.Argb(p.NativeCtaColor), AdMobNativeBridge.Argb(p.NativeCtaTextColor));
+            }
+            else
+            {
+                bool top = p.Position is BannerPosition.Top or BannerPosition.TopLeft or BannerPosition.TopRight;
+                NativeBridge.ShowBanner(unit.NativeKey, heightDp, top,
+                    AdMobNativeBridge.Argb(p.NativeBackgroundColor), AdMobNativeBridge.Argb(p.NativeTextColor),
+                    AdMobNativeBridge.Argb(p.NativeCtaColor), AdMobNativeBridge.Argb(p.NativeCtaTextColor));
+            }
+        }
+
+        // A shown native ad is spent: hiding it releases the ad, and a fresh one loads while the placement is active.
+        private void HideNative(Unit unit)
+        {
+            if (nativeBridge == null || !unit.NativeStarted) return;
+            nativeBridge.Hide(unit.NativeKey);
+            if (!unit.NativeShowRequested) return; // an unshown loaded ad stays ready
+            unit.NativeShowRequested = false;
+            unit.NativeOnScreen      = false;
+            unit.NativeExpanded      = false;
+            unit.BannerLoaded        = false;
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native {unit.Id} hidden; loading a fresh ad.");
+            RaiseReadyChanged(unit.Id);
+            EnsureNativeLoading(unit);
+        }
+
+        private void DestroyNative(Unit unit)
+        {
+            bool wasLoaded = unit.Active && unit.BannerLoaded;
+            unit.ResetLoad(); // a pending retry or load belongs to the destroyed ad
+            ReleaseNative(unit);
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native {unit.Id} destroyed.");
+            if (wasLoaded) RaiseReadyChanged(unit.Id);
+        }
+
+        private void ReleaseNative(Unit unit)
+        {
+            if (unit.NativeKey == null) return;
+            if (unit.NativeStarted) nativeBridge?.Destroy(unit.NativeKey);
+            unit.NativeStarted       = false;
+            unit.NativeShowRequested = false;
+            unit.NativeOnScreen      = false;
+            unit.NativeExpanded      = false;
+            unit.BannerLoaded        = false;
+            unit.BannerVisible       = false;
+        }
+
+        // A native interstitial on screen is destroyed after it closes (ShowNativeInterstitialAsync).
+        private void ReleaseNative(Slot slot)
+        {
+            if (slot.NativeKey == null) return;
+            slot.NativeReady = false;
+            if (slot.NativeShowing == null) nativeBridge?.Destroy(slot.NativeKey);
+        }
+
+        private float NativeHeightPixels(Unit unit)
+        {
+            float scale = MobileAds.Utils.GetDeviceScale(); // dp -> px (iOS: points -> px)
+            return scale > 0f ? Mathf.Round(unit.Placement.EffectiveNativeHeightDp * scale) : 0f;
+        }
+
+        // Like ShowInterstitialAsync: closed = Completed, show failure = Failed, the token counts only before the show.
+        private async ValueTask<AdShowResult> ShowNativeInterstitialAsync(Unit unit, CancellationToken cancellationToken)
+        {
+            Slot slot = unit.Slot;
+            if (!unit.Active || !slot.NativeReady || slot.NativeShowing != null)
+            {
+                Debug.LogWarning($"{LogPrefix} Native interstitial {unit.Id} not shown: not ready (ad not loaded).");
+                return AdShowResult.Failed;
+            }
+            if (cancellationToken.IsCancellationRequested) return AdShowResult.Failed;
+
+            var tcs = new TaskCompletionSource<AdShowResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            slot.NativeShowTcs = tcs;
+            slot.NativeShowing = unit;
+            slot.NativeReady   = false; // consumed, for every placement on the slot
+            RaiseReadyChanged(slot);
+
+            AdPlacement p = unit.Placement;
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Showing native interstitial {unit.Id}.");
+            NativeBridge.ShowInterstitial(slot.NativeKey, NativeCloseDelay(p),
+                AdMobNativeBridge.Argb(p.NativeBackgroundColor), AdMobNativeBridge.Argb(p.NativeTextColor),
+                AdMobNativeBridge.Argb(p.NativeCtaColor), AdMobNativeBridge.Argb(p.NativeCtaTextColor));
+
+            // The ad is on screen: the caller's token no longer applies (see class remarks).
+            AdShowResult result = await AwaitCloseAsync(tcs);
+
+            if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native interstitial {unit.Id} result: {result}.");
+            if (ReferenceEquals(slot.NativeShowTcs, tcs))
+            {
+                slot.NativeShowTcs = null;
+                slot.NativeShowing = null;
+            }
+            if (!disposed)
+            {
+                if (slot.IsActive) EnsureLoading(slot);
+                else nativeBridge?.Destroy(slot.NativeKey); // every placement deactivated during the show
+            }
+            return result;
+        }
+
+        // Main thread (the bridge marshals).
+        private void OnNativeEvent(string key, string evt, AdMobNativeBridge.EventData data)
+        {
+            if (disposed) return;
+            if (nativeUnits.TryGetValue(key, out Unit unit)) OnNativeUnitEvent(unit, evt, data);
+            else if (nativeSlots.TryGetValue(key, out Slot slot)) OnNativeSlotEvent(slot, evt, data);
+        }
+
+        private void OnNativeUnitEvent(Unit unit, string evt, AdMobNativeBridge.EventData data)
+        {
+            switch (evt)
+            {
+                case AdMobNativeBridge.EvLoaded:
+                    if (!unit.Loading)
+                    {
+                        // Not ours (destroyed / deactivated meanwhile): free it unless the key is in use again.
+                        if (!unit.NativeStarted) nativeBridge?.Destroy(unit.NativeKey);
+                        return;
+                    }
+                    unit.Loading      = false;
+                    unit.RetryAttempt = 0;
+                    if (unit.BannerLoaded) return; // the native side re-reported the unshown ad
+                    unit.BannerLoaded = true;
+                    if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native {unit.Id} loaded ({data.adSource}).");
+                    if (unit.BannerVisible) PresentNative(unit); // a show was waiting for it
+                    RaiseReadyChanged(unit.Id);
+                    break;
+
+                case AdMobNativeBridge.EvFailed:
+                {
+                    if (!unit.Loading) return;
+                    unit.Loading = false;
+                    string msg = string.IsNullOrEmpty(data.error) ? "unknown error" : data.error;
+                    PlacementLoadFailed?.Invoke(unit.Id, msg);
+                    ScheduleRetry(unit, "Native", msg, () => EnsureNativeLoading(unit));
+                    break;
+                }
+
+                case AdMobNativeBridge.EvShown:
+                    // Ignored when hidden before the view came up (the hide already removed it).
+                    if (unit.NativeShowRequested && unit.BannerVisible) unit.NativeOnScreen = true;
+                    break;
+
+                case AdMobNativeBridge.EvShowFailed:
+                {
+                    if (!unit.NativeShowRequested) return;
+                    Debug.LogWarning($"{LogPrefix} Native {unit.Id} could not be shown: {data.error}");
+                    // The intent is dropped (the game's next ShowBanner tries again), so a view that never comes up
+                    // cannot turn load -> show -> fail into a request loop. A fresh ad is loaded for that next show.
+                    unit.NativeShowRequested = false;
+                    unit.NativeOnScreen      = false;
+                    unit.BannerVisible       = false;
+                    unit.BannerLoaded        = false;
+                    RaiseReadyChanged(unit.Id);
+                    EnsureNativeLoading(unit);
+                    break;
+                }
+
+                case AdMobNativeBridge.EvExpanded:
+                case AdMobNativeBridge.EvCollapsed:
+                {
+                    if (!unit.NativeShowRequested) return;
+                    bool expanded = evt == AdMobNativeBridge.EvExpanded;
+                    // Raised on changes only: a show that opens collapsed is not a player's collapse.
+                    if (unit.NativeExpanded == expanded) return;
+                    unit.NativeExpanded = expanded;
+                    NativeExpandedChanged?.Invoke(unit.Id, expanded);
+                    break;
+                }
+
+                case AdMobNativeBridge.EvClicked:
+                    RaiseClicked(unit.Id);
+                    break;
+
+                case AdMobNativeBridge.EvPaid:
+                    RaiseNativePaid(unit, data);
+                    break;
+            }
+        }
+
+        private void OnNativeSlotEvent(Slot slot, string evt, AdMobNativeBridge.EventData data)
+        {
+            switch (evt)
+            {
+                case AdMobNativeBridge.EvLoaded:
+                    if (!slot.Loading || !slot.IsActive)
+                    {
+                        if (!slot.IsActive && slot.NativeShowing == null) nativeBridge?.Destroy(slot.NativeKey);
+                        return;
+                    }
+                    slot.Loading      = false;
+                    slot.RetryAttempt = 0;
+                    if (slot.NativeReady) return;
+                    slot.NativeReady = true;
+                    if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native interstitial {slot.Name} loaded ({data.adSource}).");
+                    RaiseReadyChanged(slot);
+                    break;
+
+                case AdMobNativeBridge.EvFailed:
+                {
+                    if (!slot.Loading || !slot.IsActive) return;
+                    slot.Loading = false;
+                    string msg = string.IsNullOrEmpty(data.error) ? "unknown error" : data.error;
+                    foreach (Unit member in slot.Members)
+                        if (member.Active) PlacementLoadFailed?.Invoke(member.Id, msg);
+                    ScheduleRetry(slot, "Native interstitial", msg, () => EnsureLoading(slot));
+                    break;
+                }
+
+                case AdMobNativeBridge.EvShowFailed:
+                    if (slot.NativeShowTcs == null) return;
+                    Debug.LogWarning($"{LogPrefix} Native interstitial {slot.Name} could not be shown: {data.error}");
+                    slot.NativeShowTcs.TrySetResult(AdShowResult.Failed);
+                    break;
+
+                case AdMobNativeBridge.EvClosed:
+                    slot.NativeShowTcs?.TrySetResult(AdShowResult.Completed);
+                    break;
+
+                case AdMobNativeBridge.EvClicked:
+                {
+                    Unit owner = NativeSlotOwner(slot);
+                    if (owner != null) RaiseClicked(owner.Id);
+                    break;
+                }
+
+                case AdMobNativeBridge.EvPaid:
+                {
+                    Unit owner = NativeSlotOwner(slot);
+                    if (owner != null) RaiseNativePaid(owner, data);
+                    break;
+                }
+            }
+        }
+
+        // The placement whose show is on screen, else the first active one on the slot.
+        private static Unit NativeSlotOwner(Slot slot)
+        {
+            if (slot.NativeShowing != null) return slot.NativeShowing;
+            foreach (Unit member in slot.Members)
+                if (member.Active) return member;
+            return slot.Members.Count > 0 ? slot.Members[0] : null;
+        }
+
+        // Same AdImpression as RaisePaid; the native payload carries the AdValue fields.
+        private void RaiseNativePaid(Unit unit, AdMobNativeBridge.EventData data)
+        {
+            if (disposed) return;
+            ImpressionPaid?.Invoke(new AdImpression(
+                unit.Id, ProviderId, unit.Format, unit.AdUnitId,
+                string.IsNullOrEmpty(data.adSource) ? null : data.adSource,
+                data.valueMicros / 1_000_000.0,
+                data.currency,
+                NativePrecisionName(data.precision)));
+        }
+
+        // AdValue precision codes of the native SDKs (0 unknown, 1 estimated, 2 publisher provided, 3 precise).
+        private static string NativePrecisionName(int precision) => precision switch
+        {
+            3 => "exact",
+            1 => "estimated",
+            2 => "publisher_defined",
+            _ => "unknown",
+        };
 #endif
 
         /// <summary>Load/retry bookkeeping shared by a banner placement and a fullscreen slot.</summary>
@@ -1057,6 +1457,13 @@ namespace FlapGame.GameLib.Ads
             public AppOpenAd AppOpen;
             public DateTime AppOpenLoadedAt;
 #endif
+            /// <summary>NativeInterstitial: bridge key (null for other formats).</summary>
+            public string NativeKey;
+            /// <summary>NativeInterstitial: an unshown native ad is loaded for the key.</summary>
+            public bool NativeReady;
+            /// <summary>NativeInterstitial: placement whose show is on screen (paid / click attribution), and its outcome.</summary>
+            public Unit NativeShowing;
+            public TaskCompletionSource<AdShowResult> NativeShowTcs;
 
             public Slot(AdFormat format, string adUnitId)
             {
@@ -1104,6 +1511,18 @@ namespace FlapGame.GameLib.Ads
             public float LoadedHeightPixels;   // measured height of the loaded view; 0 = not measured / no view
             // Desired visibility: Show() before the ad finished loading must still win.
             public bool BannerVisible;
+
+            // Banner-like native (NativeBanner / NativeCollapsible) only; BannerLoaded = an unspent native ad is loaded.
+            /// <summary>Bridge key; null for every other format.</summary>
+            public string NativeKey;
+            /// <summary>A native load was requested since activation (the banner's "view exists").</summary>
+            public bool NativeStarted;
+            /// <summary>The loaded ad was handed to a show call: it is spent once hidden.</summary>
+            public bool NativeShowRequested;
+            /// <summary>The native view reported <c>shown</c> and was not hidden since.</summary>
+            public bool NativeOnScreen;
+            /// <summary>NativeCollapsible: currently expanded.</summary>
+            public bool NativeExpanded;
 
             public Unit(AdPlacement placement, string adUnitId)
             {

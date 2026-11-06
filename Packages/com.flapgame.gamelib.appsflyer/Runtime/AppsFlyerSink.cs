@@ -139,6 +139,7 @@ namespace FlapGame.GameLib.AppsFlyer
             AdFormatKind.Mrec => "mrec",
             AdFormatKind.AppOpen => "app_open",
             AdFormatKind.RewardedInterstitial => "rewarded_interstitial",
+            AdFormatKind.Native => "native",
             _ => "unknown",
         };
 

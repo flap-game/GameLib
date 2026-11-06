@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.0] - 2026-11-06
+- Native ads: `NativeBanner`, `NativeCollapsible` and `NativeInterstitial`, drawn by GameLib's own native views
+  (Android Java / iOS Objective-C++, in `Plugins/`) through `AdMobNativeBridge` (README: Native ads).
+- `INativeCollapseSource`: a `NativeCollapsible` opened expanded / collapsed by the player.
+- Test mode uses Google's native demo units for native placements without a unit id.
+
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.
 

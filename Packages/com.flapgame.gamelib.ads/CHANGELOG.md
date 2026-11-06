@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0] - 2026-11-06
+- AdMob native ads: placement formats `NativeBanner`, `NativeCollapsible` and `NativeInterstitial` (`AdPlacement.IsNative`,
+  `Native*` fields: height, close / collapse-button delays, start expanded, hide on collapse, colors). Native bars go
+  through the banner API (`IsBannerLike`); `NativeInterstitial` follows the interstitial pacing rules and shares their timer.
+- `INativeCollapseSource`, implemented by `CompositeAdsService`: `NativeExpandedChanged(id, expanded)` from every adapter
+  that reports it. A player's collapse of a placement with `NativeHideOnCollapse` hides it as `HideBanner` does.
+- `AdPlacementOverride` and `AdsPlanPlacement`: nullable `NativeCloseDelaySeconds` / `NativeCollapseButtonDelaySeconds`.
+- Doctor: a native placement routed to MAX is an error; a `NativeCollapsible` with `Position = Top` warns (it shows at the
+  bottom). Ad revenue of native bars reports as banner, of native interstitials as interstitial.
+- Inspector: a placement shows only the fields its format reads (Native fields on native formats; Size, Custom Center,
+  Preload Banner, MAX fields hidden for natives). The Null adapter shows native bars like banners.
+
 ## [0.8.10] - 2026-10-27
 - `ads.OpenCreativeDebugger()` (`IAdsCreativeDebugger`) and `ads.SetAdSegment(key, values)` (`IAdSegments`, keys and values
   0..32000; passed before init and on every change).

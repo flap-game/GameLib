@@ -13,7 +13,7 @@ namespace FlapGame.GameLib.Ads.Tests
 {
     /// <summary>Scriptable <see cref="IAdsProviderAdapter"/> shared by the ads tests.</summary>
     internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification,
-                                          IAdsCreativeDebugger, IAdSegments, IBannerExpansion
+                                          IAdsCreativeDebugger, IAdSegments, IBannerExpansion, INativeCollapseSource
     {
         public int DebuggerOpened;
         public bool DebuggerResult = true;
@@ -28,6 +28,8 @@ namespace FlapGame.GameLib.Ads.Tests
         public void ApplySegments(IReadOnlyDictionary<int, int[]> segments) => SegmentCalls.Add(segments);
         public event Action<string, bool> BannerExpandedChanged;
         public void Expand(string id, bool expanded) => BannerExpandedChanged?.Invoke(id, expanded);
+        public event Action<string, bool> NativeExpandedChanged;
+        public void NativeExpand(string id, bool expanded) => NativeExpandedChanged?.Invoke(id, expanded);
 
         public readonly HashSet<string> Ready = new();
         public readonly HashSet<string> Active = new();

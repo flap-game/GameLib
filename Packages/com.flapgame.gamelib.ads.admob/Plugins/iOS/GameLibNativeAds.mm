@@ -1,0 +1,1473 @@
+// GameLib native ads (AdMob) - iOS bridge.
+// Formats: native banner, native collapsible banner, native interstitial. Every view is built in code with
+// Auto Layout and is a GADNativeAdView with its asset views registered, so the SDK tracks clicks and impressions.
+// One native ad / one view per opaque `key` chosen by C#. All UI work runs on the main queue; events go back to C#
+// through a single C callback (key, event, json). Requires ARC (CompileFlags -fobjc-arc in the .meta).
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+
+#if __has_include(<GoogleMobileAds/GoogleMobileAds.h>)
+#import <GoogleMobileAds/GoogleMobileAds.h>
+#define GLNA_HAS_GMA 1
+#else
+#define GLNA_HAS_GMA 0
+#endif
+
+typedef void (*GameLibNativeAdsCallback)(const char *key, const char *event, const char *json);
+
+static GameLibNativeAdsCallback gGLNACallback = NULL;
+
+// ---------------------------------------------------------------------------------------------------------------
+// Shared helpers (with and without the SDK)
+// ---------------------------------------------------------------------------------------------------------------
+
+static NSString *GLNACopyString(const char *value)
+{
+    if (value == NULL)
+        return @"";
+    NSString *copy = [NSString stringWithUTF8String:value];
+    return copy != nil ? copy : @"";
+}
+
+static void GLNAEmit(NSString *key, NSString *event, NSDictionary *fields)
+{
+    GameLibNativeAdsCallback callback = gGLNACallback;
+    if (callback == NULL)
+        return;
+
+    NSString *json = @"{}";
+    if (fields != nil && fields.count > 0 && [NSJSONSerialization isValidJSONObject:fields])
+    {
+        NSData *data = [NSJSONSerialization dataWithJSONObject:fields options:0 error:nil];
+        if (data != nil)
+        {
+            NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            if (text != nil)
+                json = text;
+        }
+    }
+
+    const char *keyUtf8 = key != nil ? key.UTF8String : "";
+    const char *eventUtf8 = event != nil ? event.UTF8String : "";
+    callback(keyUtf8 != NULL ? keyUtf8 : "", eventUtf8 != NULL ? eventUtf8 : "", json.UTF8String);
+}
+
+#if GLNA_HAS_GMA
+
+// ---------------------------------------------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------------------------------------------
+
+static UIColor *GLNAColor(int argb)
+{
+    uint32_t value = (uint32_t)argb;
+    CGFloat a = ((value >> 24) & 0xFF) / 255.0;
+    CGFloat r = ((value >> 16) & 0xFF) / 255.0;
+    CGFloat g = ((value >> 8) & 0xFF) / 255.0;
+    CGFloat b = (value & 0xFF) / 255.0;
+    return [UIColor colorWithRed:r green:g blue:b alpha:a];
+}
+
+static CGFloat GLNAClamp(CGFloat value, CGFloat minValue, CGFloat maxValue)
+{
+    if (value < minValue)
+        return minValue;
+    if (value > maxValue)
+        return maxValue;
+    return value;
+}
+
+static BOOL GLNAHasText(NSString *text)
+{
+    return text != nil && [text isKindOfClass:[NSString class]] && text.length > 0;
+}
+
+static UIWindow *GLNAKeyWindow(void)
+{
+    UIApplication *app = [UIApplication sharedApplication];
+    if (@available(iOS 13.0, *))
+    {
+        for (UIScene *scene in app.connectedScenes)
+        {
+            if (![scene isKindOfClass:[UIWindowScene class]])
+                continue;
+            if (scene.activationState != UISceneActivationStateForegroundActive)
+                continue;
+            for (UIWindow *window in ((UIWindowScene *)scene).windows)
+            {
+                if (window.isKeyWindow)
+                    return window;
+            }
+        }
+    }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    UIWindow *keyWindow = app.keyWindow;
+#pragma clang diagnostic pop
+    if (keyWindow != nil)
+        return keyWindow;
+    id<UIApplicationDelegate> appDelegate = app.delegate;
+    if (appDelegate != nil && [appDelegate respondsToSelector:@selector(window)])
+        return [appDelegate window];
+    return nil;
+}
+
+static UIViewController *GLNARootViewController(void)
+{
+    return GLNAKeyWindow().rootViewController;
+}
+
+static UIViewController *GLNATopViewController(void)
+{
+    UIViewController *controller = GLNARootViewController();
+    while (controller.presentedViewController != nil && !controller.presentedViewController.isBeingDismissed)
+        controller = controller.presentedViewController;
+    return controller;
+}
+
+static UILabel *GLNAMakeLabel(CGFloat size, UIFontWeight weight, UIColor *color, NSInteger lines)
+{
+    UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.font = [UIFont systemFontOfSize:size weight:weight];
+    label.textColor = color;
+    label.numberOfLines = lines;
+    label.lineBreakMode = NSLineBreakByTruncatingTail;
+    label.backgroundColor = [UIColor clearColor];
+    return label;
+}
+
+// Small rounded "AD" attribution badge (bold 10pt, dark text on near-white, thin border).
+static UIView *GLNAMakeAdBadge(void)
+{
+    UIView *badge = [[UIView alloc] init];
+    badge.translatesAutoresizingMaskIntoConstraints = NO;
+    badge.backgroundColor = [UIColor colorWithWhite:0.97 alpha:1.0];
+    badge.layer.cornerRadius = 3.0;
+    badge.layer.borderWidth = 0.5;
+    badge.layer.borderColor = [UIColor colorWithWhite:0.55 alpha:1.0].CGColor;
+    badge.clipsToBounds = YES;
+    badge.userInteractionEnabled = NO;
+
+    UILabel *label = GLNAMakeLabel(10.0, UIFontWeightBold, [UIColor colorWithWhite:0.13 alpha:1.0], 1);
+    label.text = @"AD";
+    [badge addSubview:label];
+    [NSLayoutConstraint activateConstraints:@[
+        [label.topAnchor constraintEqualToAnchor:badge.topAnchor constant:1.0],
+        [label.bottomAnchor constraintEqualToAnchor:badge.bottomAnchor constant:-1.0],
+        [label.leadingAnchor constraintEqualToAnchor:badge.leadingAnchor constant:4.0],
+        [label.trailingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:-4.0],
+    ]];
+    return badge;
+}
+
+// CTA: a rounded button that does not take touches itself, so the GADNativeAdView handles the click.
+static UIButton *GLNAMakeCta(CGFloat fontSize, UIColor *background, UIColor *textColor)
+{
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    button.backgroundColor = background;
+    button.layer.cornerRadius = 6.0;
+    button.clipsToBounds = YES;
+    button.userInteractionEnabled = NO;
+    button.titleLabel.font = [UIFont systemFontOfSize:fontSize weight:UIFontWeightSemibold];
+    button.titleLabel.adjustsFontSizeToFitWidth = YES;
+    button.titleLabel.minimumScaleFactor = 0.6;
+    button.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [button setTitleColor:textColor forState:UIControlStateNormal];
+    return button;
+}
+
+// Chevron / cross glyph drawn with a CAShapeLayer (no image assets).
+@interface GLNAGlyphView : UIView
+@property (nonatomic, assign) BOOL cross;
+@property (nonatomic, strong) CAShapeLayer *shape;
+@end
+
+@implementation GLNAGlyphView
+
+- (instancetype)initWithCross:(BOOL)cross color:(UIColor *)color
+{
+    self = [super initWithFrame:CGRectZero];
+    if (self)
+    {
+        _cross = cross;
+        self.translatesAutoresizingMaskIntoConstraints = NO;
+        self.userInteractionEnabled = NO;
+        self.backgroundColor = [UIColor clearColor];
+        _shape = [CAShapeLayer layer];
+        _shape.fillColor = [UIColor clearColor].CGColor;
+        _shape.strokeColor = color.CGColor;
+        _shape.lineWidth = 2.0;
+        _shape.lineCap = kCALineCapRound;
+        _shape.lineJoin = kCALineJoinRound;
+        [self.layer addSublayer:_shape];
+    }
+    return self;
+}
+
+- (void)layoutSubviews
+{
+    [super layoutSubviews];
+    CGRect bounds = self.bounds;
+    self.shape.frame = bounds;
+    CGFloat w = bounds.size.width;
+    CGFloat h = bounds.size.height;
+    UIBezierPath *path = [UIBezierPath bezierPath];
+    if (self.cross)
+    {
+        [path moveToPoint:CGPointMake(w * 0.30, h * 0.30)];
+        [path addLineToPoint:CGPointMake(w * 0.70, h * 0.70)];
+        [path moveToPoint:CGPointMake(w * 0.70, h * 0.30)];
+        [path addLineToPoint:CGPointMake(w * 0.30, h * 0.70)];
+    }
+    else
+    {
+        [path moveToPoint:CGPointMake(w * 0.28, h * 0.40)];
+        [path addLineToPoint:CGPointMake(w * 0.50, h * 0.62)];
+        [path addLineToPoint:CGPointMake(w * 0.72, h * 0.40)];
+    }
+    self.shape.path = path.CGPath;
+}
+
+@end
+
+static UIButton *GLNAMakeRoundGlyphButton(BOOL cross, CGFloat size, UIColor *background, UIColor *glyphColor)
+{
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    button.backgroundColor = background;
+    button.layer.cornerRadius = size * 0.5;
+    button.clipsToBounds = YES;
+    GLNAGlyphView *glyph = [[GLNAGlyphView alloc] initWithCross:cross color:glyphColor];
+    [button addSubview:glyph];
+    [NSLayoutConstraint activateConstraints:@[
+        [button.widthAnchor constraintEqualToConstant:size],
+        [button.heightAnchor constraintEqualToConstant:size],
+        [glyph.topAnchor constraintEqualToAnchor:button.topAnchor],
+        [glyph.bottomAnchor constraintEqualToAnchor:button.bottomAnchor],
+        [glyph.leadingAnchor constraintEqualToAnchor:button.leadingAnchor],
+        [glyph.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
+    ]];
+    return button;
+}
+
+static UIStackView *GLNAMakeStack(UILayoutConstraintAxis axis, CGFloat spacing, UIStackViewAlignment alignment)
+{
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = axis;
+    stack.spacing = spacing;
+    stack.alignment = alignment;
+    stack.distribution = UIStackViewDistributionFill;
+    return stack;
+}
+
+static NSString *GLNARatingText(GADNativeAd *ad)
+{
+    NSDecimalNumber *rating = ad.starRating;
+    if (rating == nil || rating.doubleValue <= 0.0)
+        return nil;
+    return [NSString stringWithFormat:@"%.1f★", rating.doubleValue];
+}
+
+static NSString *GLNAAdSource(GADResponseInfo *info)
+{
+    NSString *name = info.loadedAdNetworkResponseInfo.adSourceName;
+    return GLNAHasText(name) ? name : @"";
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Row used by the banner and the collapsible: icon | [headline, body, meta] | CTA
+// ---------------------------------------------------------------------------------------------------------------
+
+@interface GLNARow : NSObject
+@property (nonatomic, strong) UIStackView *stack;
+@property (nonatomic, strong) UIImageView *icon;
+@property (nonatomic, strong) UILabel *headline;
+@property (nonatomic, strong) UILabel *body;
+@property (nonatomic, strong) UIStackView *meta;
+@property (nonatomic, strong) UILabel *rating;
+@property (nonatomic, strong) UILabel *advertiser;
+@property (nonatomic, strong) UILabel *store;
+@property (nonatomic, strong) UILabel *price;
+@property (nonatomic, strong) UIButton *cta;
+@property (nonatomic, strong) NSLayoutConstraint *iconSize;
+@property (nonatomic, strong) NSLayoutConstraint *ctaWidth;
+@property (nonatomic, strong) NSLayoutConstraint *ctaHeight;
+@property (nonatomic, strong) UIColor *secondaryColor;
+@end
+
+@implementation GLNARow
+@end
+
+static GLNARow *GLNAMakeRow(CGFloat barHeight, UIColor *text, UIColor *cta, UIColor *ctaText)
+{
+    BOOL small = barHeight <= 60.0;
+    CGFloat headlineSize = small ? 11.0 : 13.0;
+    CGFloat bodySize = small ? 9.0 : 11.0;
+    CGFloat metaSize = small ? 8.0 : 10.0;
+    UIColor *secondary = [text colorWithAlphaComponent:CGColorGetAlpha(text.CGColor) * 0.6];
+
+    GLNARow *row = [[GLNARow alloc] init];
+    row.secondaryColor = secondary;
+    row.stack = GLNAMakeStack(UILayoutConstraintAxisHorizontal, 8.0, UIStackViewAlignmentCenter);
+
+    row.icon = [[UIImageView alloc] init];
+    row.icon.translatesAutoresizingMaskIntoConstraints = NO;
+    row.icon.contentMode = UIViewContentModeScaleAspectFill;
+    row.icon.clipsToBounds = YES;
+    row.icon.layer.cornerRadius = 6.0;
+    CGFloat iconSide = GLNAClamp(barHeight * 0.7, 24.0, 72.0);
+    row.iconSize = [row.icon.widthAnchor constraintEqualToConstant:iconSide];
+    [NSLayoutConstraint activateConstraints:@[
+        row.iconSize,
+        [row.icon.heightAnchor constraintEqualToAnchor:row.icon.widthAnchor],
+    ]];
+    [row.icon setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [row.icon setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+
+    UIStackView *column = GLNAMakeStack(UILayoutConstraintAxisVertical, 1.0, UIStackViewAlignmentFill);
+    [column setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [column setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+
+    row.headline = GLNAMakeLabel(headlineSize, UIFontWeightBold, text, 1);
+    row.body = GLNAMakeLabel(bodySize, UIFontWeightRegular, text, 1);
+
+    row.meta = GLNAMakeStack(UILayoutConstraintAxisHorizontal, 0.0, UIStackViewAlignmentCenter);
+    row.rating = GLNAMakeLabel(metaSize, UIFontWeightRegular, secondary, 1);
+    row.advertiser = GLNAMakeLabel(metaSize, UIFontWeightRegular, secondary, 1);
+    row.store = GLNAMakeLabel(metaSize, UIFontWeightRegular, secondary, 1);
+    row.price = GLNAMakeLabel(metaSize, UIFontWeightRegular, secondary, 1);
+    [row.rating setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [row.meta addArrangedSubview:row.rating];
+    [row.meta addArrangedSubview:row.advertiser];
+    [row.meta addArrangedSubview:row.store];
+    [row.meta addArrangedSubview:row.price];
+    UIView *metaFiller = [[UIView alloc] init];
+    metaFiller.translatesAutoresizingMaskIntoConstraints = NO;
+    [metaFiller setContentHuggingPriority:UILayoutPriorityDefaultLow - 1 forAxis:UILayoutConstraintAxisHorizontal];
+    [row.meta addArrangedSubview:metaFiller];
+
+    [column addArrangedSubview:row.headline];
+    [column addArrangedSubview:row.body];
+    [column addArrangedSubview:row.meta];
+
+    row.cta = GLNAMakeCta(headlineSize, cta, ctaText);
+    row.ctaWidth = [row.cta.widthAnchor constraintEqualToConstant:GLNAClamp(barHeight * 1.2, 52.0, 96.0)];
+    row.ctaHeight = [row.cta.heightAnchor constraintEqualToConstant:GLNAClamp(barHeight - 16.0, 22.0, 40.0)];
+    [NSLayoutConstraint activateConstraints:@[ row.ctaWidth, row.ctaHeight ]];
+    [row.cta setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [row.cta setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+
+    [row.stack addArrangedSubview:row.icon];
+    [row.stack addArrangedSubview:column];
+    [row.stack addArrangedSubview:row.cta];
+    return row;
+}
+
+// Fills the row and hides every asset view whose asset is missing. `full` shows advertiser / store / price and
+// two body lines (expanded collapsible); otherwise the meta line is "rating  •  advertiser  •  store".
+static void GLNAFillRow(GLNARow *row, GADNativeAd *ad, BOOL full, BOOL showPrice)
+{
+    row.headline.text = ad.headline;
+    row.headline.hidden = !GLNAHasText(ad.headline);
+    row.body.text = ad.body;
+    row.body.hidden = !GLNAHasText(ad.body);
+    row.body.numberOfLines = full ? 2 : 1;
+
+    UIImage *iconImage = ad.icon.image;
+    row.icon.image = iconImage;
+    row.icon.hidden = iconImage == nil;
+
+    [row.cta setTitle:ad.callToAction forState:UIControlStateNormal];
+    row.cta.hidden = !GLNAHasText(ad.callToAction);
+
+    NSString *rating = GLNARatingText(ad);
+    BOOL any = NO;
+    row.rating.text = rating;
+    row.rating.hidden = rating == nil;
+    any = rating != nil;
+
+    BOOL showAdvertiser = GLNAHasText(ad.advertiser);
+    row.advertiser.text = showAdvertiser ? [NSString stringWithFormat:@"%@%@", any ? @"  •  " : @"", ad.advertiser] : nil;
+    row.advertiser.hidden = !showAdvertiser;
+    any = any || showAdvertiser;
+
+    BOOL showStore = GLNAHasText(ad.store);
+    row.store.text = showStore ? [NSString stringWithFormat:@"%@%@", any ? @"  •  " : @"", ad.store] : nil;
+    row.store.hidden = !showStore;
+    any = any || showStore;
+
+    BOOL priceVisible = showPrice && GLNAHasText(ad.price);
+    row.price.text = priceVisible ? [NSString stringWithFormat:@"%@%@", any ? @"  •  " : @"", ad.price] : nil;
+    row.price.hidden = !priceVisible;
+    any = any || priceVisible;
+
+    row.meta.hidden = !any;
+}
+
+// Compact (collapsed) row: one body line, only the rating on the meta line.
+static void GLNASetRowCompact(GLNARow *row, GADNativeAd *ad, BOOL compact)
+{
+    if (compact)
+    {
+        row.body.numberOfLines = 1;
+        row.advertiser.hidden = YES;
+        row.store.hidden = YES;
+        row.price.hidden = YES;
+        row.meta.hidden = row.rating.hidden;
+    }
+    else
+    {
+        GLNAFillRow(row, ad, YES, YES);
+    }
+}
+
+static void GLNARegisterRow(GADNativeAdView *adView, GLNARow *row)
+{
+    adView.headlineView = row.headline;
+    adView.bodyView = row.body;
+    adView.iconView = row.icon;
+    adView.callToActionView = row.cta;
+    adView.starRatingView = row.rating;
+    adView.advertiserView = row.advertiser;
+    adView.storeView = row.store;
+    adView.priceView = row.price;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Per-key state
+// ---------------------------------------------------------------------------------------------------------------
+
+typedef NS_ENUM(NSInteger, GLNAShownFormat) {
+    GLNAShownNone = 0,
+    GLNAShownBanner = 1,
+    GLNAShownCollapsible = 2,
+    GLNAShownInterstitial = 3,
+};
+
+@class GLNAInterstitialController;
+
+@interface GLNAState : NSObject
+@property (nonatomic, copy) NSString *key;
+@property (nonatomic, copy) NSString *adUnitId;
+@property (nonatomic, strong) GADAdLoader *loader;       // held until the load finishes
+@property (nonatomic, strong) GADNativeAd *pendingAd;    // loaded, not shown yet
+@property (nonatomic, strong) GADNativeAd *shownAd;      // bound to the visible view (spent)
+@property (nonatomic, assign) GLNAShownFormat format;
+@property (nonatomic, strong) GADNativeAdView *adView;   // banner / collapsible view on the root VC view
+@property (nonatomic, strong) GLNARow *row;
+@property (nonatomic, strong) GADMediaView *mediaView;   // collapsible only
+@property (nonatomic, strong) UIButton *collapseButton;  // collapsible only
+@property (nonatomic, strong) NSLayoutConstraint *heightConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *rowHeightConstraint;
+@property (nonatomic, assign) CGFloat collapsedHeight;
+@property (nonatomic, assign) BOOL expanded;
+@property (nonatomic, strong) NSTimer *collapseButtonTimer;
+@property (nonatomic, strong) GLNAInterstitialController *interstitial;
+@end
+
+@implementation GLNAState
+@end
+
+// ---------------------------------------------------------------------------------------------------------------
+// Interstitial controller
+// ---------------------------------------------------------------------------------------------------------------
+
+@interface GLNAInterstitialController : UIViewController
+@property (nonatomic, copy) NSString *key;
+@property (nonatomic, strong) GADNativeAd *nativeAd;
+@property (nonatomic, assign) int closeDelaySeconds;
+@property (nonatomic, assign) int remainingSeconds;
+@property (nonatomic, strong) UIColor *bgColor;
+@property (nonatomic, strong) UIColor *textColor;
+@property (nonatomic, strong) UIColor *ctaColor;
+@property (nonatomic, strong) UIColor *ctaTextColor;
+@property (nonatomic, strong) GADNativeAdView *adView;
+@property (nonatomic, strong) UILabel *countdownLabel;
+@property (nonatomic, strong) UIButton *closeButton;
+@property (nonatomic, strong) NSTimer *countdownTimer;
+@property (nonatomic, assign) BOOL closing;
+@property (nonatomic, copy) void (^onClose)(GLNAInterstitialController *controller);
+- (void)stopTimer;
+@end
+
+static UIView *GLNAMakeChip(UILabel *label, UIColor *textColor)
+{
+    UIView *chip = [[UIView alloc] init];
+    chip.translatesAutoresizingMaskIntoConstraints = NO;
+    chip.layer.cornerRadius = 4.0;
+    chip.layer.borderWidth = 1.0;
+    chip.layer.borderColor = [textColor colorWithAlphaComponent:CGColorGetAlpha(textColor.CGColor) * 0.35].CGColor;
+    [chip addSubview:label];
+    [NSLayoutConstraint activateConstraints:@[
+        [label.topAnchor constraintEqualToAnchor:chip.topAnchor constant:3.0],
+        [label.bottomAnchor constraintEqualToAnchor:chip.bottomAnchor constant:-3.0],
+        [label.leadingAnchor constraintEqualToAnchor:chip.leadingAnchor constant:8.0],
+        [label.trailingAnchor constraintEqualToAnchor:chip.trailingAnchor constant:-8.0],
+    ]];
+    return chip;
+}
+
+@implementation GLNAInterstitialController
+
+- (BOOL)prefersStatusBarHidden
+{
+    return YES;
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations
+{
+    UIViewController *presenting = self.presentingViewController;
+    if (presenting != nil)
+        return presenting.supportedInterfaceOrientations;
+    return [super supportedInterfaceOrientations];
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    UIView *root = self.view;
+    root.backgroundColor = [UIColor blackColor];
+    UILayoutGuide *safe = root.safeAreaLayoutGuide;
+    GADNativeAd *ad = self.nativeAd;
+    UIColor *secondary = [self.textColor colorWithAlphaComponent:CGColorGetAlpha(self.textColor.CGColor) * 0.6];
+
+    // The ad view starts below the close row so the SDK's AdChoices icon (top-right) never sits under the button.
+    GADNativeAdView *adView = [[GADNativeAdView alloc] init];
+    adView.translatesAutoresizingMaskIntoConstraints = NO;
+    adView.backgroundColor = [UIColor blackColor];
+    [root addSubview:adView];
+    self.adView = adView;
+
+    GADMediaView *media = [[GADMediaView alloc] init];
+    media.translatesAutoresizingMaskIntoConstraints = NO;
+    media.backgroundColor = [UIColor blackColor];
+    media.contentMode = UIViewContentModeScaleAspectFit;
+    media.clipsToBounds = YES;
+    [media setContentHuggingPriority:UILayoutPriorityDefaultLow - 10 forAxis:UILayoutConstraintAxisVertical];
+    [media setContentCompressionResistancePriority:UILayoutPriorityDefaultLow - 10 forAxis:UILayoutConstraintAxisVertical];
+    [adView addSubview:media];
+
+    UIView *panel = [[UIView alloc] init];
+    panel.translatesAutoresizingMaskIntoConstraints = NO;
+    panel.backgroundColor = self.bgColor;
+    panel.layer.cornerRadius = 14.0;
+    if (@available(iOS 11.0, *))
+        panel.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    [adView addSubview:panel];
+
+    UIStackView *content = GLNAMakeStack(UILayoutConstraintAxisVertical, 10.0, UIStackViewAlignmentFill);
+    [panel addSubview:content];
+
+    // Header: icon + [headline, advertiser]
+    UIStackView *header = GLNAMakeStack(UILayoutConstraintAxisHorizontal, 12.0, UIStackViewAlignmentCenter);
+    UIImageView *icon = [[UIImageView alloc] init];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    icon.contentMode = UIViewContentModeScaleAspectFill;
+    icon.clipsToBounds = YES;
+    icon.layer.cornerRadius = 10.0;
+    [NSLayoutConstraint activateConstraints:@[
+        [icon.widthAnchor constraintEqualToConstant:56.0],
+        [icon.heightAnchor constraintEqualToConstant:56.0],
+    ]];
+    UIStackView *titleColumn = GLNAMakeStack(UILayoutConstraintAxisVertical, 2.0, UIStackViewAlignmentFill);
+    UILabel *headline = GLNAMakeLabel(17.0, UIFontWeightBold, self.textColor, 2);
+    UILabel *advertiser = GLNAMakeLabel(13.0, UIFontWeightRegular, secondary, 1);
+    UILabel *rating = GLNAMakeLabel(13.0, UIFontWeightRegular, secondary, 1);
+    [titleColumn addArrangedSubview:headline];
+    [titleColumn addArrangedSubview:advertiser];
+    [titleColumn addArrangedSubview:rating];
+    [header addArrangedSubview:icon];
+    [header addArrangedSubview:titleColumn];
+
+    UILabel *body = GLNAMakeLabel(14.0, UIFontWeightRegular, self.textColor, 3);
+
+    UIStackView *chips = GLNAMakeStack(UILayoutConstraintAxisHorizontal, 8.0, UIStackViewAlignmentCenter);
+    UILabel *store = GLNAMakeLabel(12.0, UIFontWeightRegular, secondary, 1);
+    UILabel *price = GLNAMakeLabel(12.0, UIFontWeightRegular, secondary, 1);
+    UIView *storeChip = GLNAMakeChip(store, self.textColor);
+    UIView *priceChip = GLNAMakeChip(price, self.textColor);
+    UIView *chipFiller = [[UIView alloc] init];
+    chipFiller.translatesAutoresizingMaskIntoConstraints = NO;
+    [chipFiller setContentHuggingPriority:UILayoutPriorityDefaultLow - 1 forAxis:UILayoutConstraintAxisHorizontal];
+    [chips addArrangedSubview:storeChip];
+    [chips addArrangedSubview:priceChip];
+    [chips addArrangedSubview:chipFiller];
+
+    UIButton *cta = GLNAMakeCta(17.0, self.ctaColor, self.ctaTextColor);
+    [cta.heightAnchor constraintEqualToConstant:52.0].active = YES;
+
+    [content addArrangedSubview:header];
+    [content addArrangedSubview:body];
+    [content addArrangedSubview:chips];
+    [content addArrangedSubview:cta];
+
+    UIView *badge = GLNAMakeAdBadge();
+    [adView addSubview:badge];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [adView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:52.0],
+        [adView.leadingAnchor constraintEqualToAnchor:root.leadingAnchor],
+        [adView.trailingAnchor constraintEqualToAnchor:root.trailingAnchor],
+        [adView.bottomAnchor constraintEqualToAnchor:root.bottomAnchor],
+
+        [media.topAnchor constraintEqualToAnchor:adView.topAnchor],
+        [media.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+        [media.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+        [media.bottomAnchor constraintEqualToAnchor:panel.topAnchor constant:-8.0],
+
+        [panel.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor],
+        [panel.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
+        [panel.bottomAnchor constraintEqualToAnchor:adView.bottomAnchor],
+
+        [content.topAnchor constraintEqualToAnchor:panel.topAnchor constant:18.0],
+        [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:16.0],
+        [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-16.0],
+        [content.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-12.0],
+
+        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:6.0],
+        [badge.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:6.0],
+    ]];
+
+    // Bind assets; hide the views whose asset is missing.
+    headline.text = ad.headline;
+    headline.hidden = !GLNAHasText(ad.headline);
+    advertiser.text = ad.advertiser;
+    advertiser.hidden = !GLNAHasText(ad.advertiser);
+    NSString *ratingText = GLNARatingText(ad);
+    rating.text = ratingText;
+    rating.hidden = ratingText == nil;
+    body.text = ad.body;
+    body.hidden = !GLNAHasText(ad.body);
+    UIImage *iconImage = ad.icon.image;
+    icon.image = iconImage;
+    icon.hidden = iconImage == nil;
+    store.text = ad.store;
+    storeChip.hidden = !GLNAHasText(ad.store);
+    price.text = ad.price;
+    priceChip.hidden = !GLNAHasText(ad.price);
+    chips.hidden = storeChip.hidden && priceChip.hidden;
+    [cta setTitle:ad.callToAction forState:UIControlStateNormal];
+    cta.hidden = !GLNAHasText(ad.callToAction);
+
+    adView.headlineView = headline;
+    adView.advertiserView = advertiser;
+    adView.starRatingView = rating;
+    adView.bodyView = body;
+    adView.iconView = icon;
+    adView.storeView = store;
+    adView.priceView = price;
+    adView.callToActionView = cta;
+    adView.mediaView = media;
+    media.mediaContent = ad.mediaContent;
+    adView.nativeAd = ad;
+
+    // Close row: "Close in Ns" countdown, then a round close button.
+    self.countdownLabel = GLNAMakeLabel(13.0, UIFontWeightSemibold, [UIColor whiteColor], 1);
+    self.countdownLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.67];
+    self.countdownLabel.textAlignment = NSTextAlignmentCenter;
+    self.countdownLabel.layer.cornerRadius = 14.0;
+    self.countdownLabel.clipsToBounds = YES;
+    [root addSubview:self.countdownLabel];
+
+    self.closeButton = GLNAMakeRoundGlyphButton(YES, 38.0, [UIColor colorWithWhite:0.0 alpha:0.67], [UIColor whiteColor]);
+    self.closeButton.layer.borderWidth = 1.0;
+    self.closeButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
+    [self.closeButton addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
+    self.closeButton.hidden = YES;
+    [root addSubview:self.closeButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.countdownLabel.topAnchor constraintEqualToAnchor:safe.topAnchor constant:10.0],
+        [self.countdownLabel.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12.0],
+        [self.countdownLabel.heightAnchor constraintEqualToConstant:28.0],
+        [self.countdownLabel.widthAnchor constraintGreaterThanOrEqualToConstant:96.0],
+        [self.closeButton.topAnchor constraintEqualToAnchor:safe.topAnchor constant:7.0],
+        [self.closeButton.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12.0],
+    ]];
+
+    self.remainingSeconds = self.closeDelaySeconds > 0 ? self.closeDelaySeconds : 0;
+    [self refreshCountdown];
+    if (self.remainingSeconds > 0)
+    {
+        __weak GLNAInterstitialController *weakSelf = self;
+        self.countdownTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *timer) {
+            GLNAInterstitialController *strongSelf = weakSelf;
+            if (strongSelf == nil)
+            {
+                [timer invalidate];
+                return;
+            }
+            strongSelf.remainingSeconds -= 1;
+            [strongSelf refreshCountdown];
+        }];
+    }
+}
+
+- (void)refreshCountdown
+{
+    if (self.remainingSeconds <= 0)
+    {
+        [self stopTimer];
+        self.countdownLabel.hidden = YES;
+        self.closeButton.hidden = NO;
+        return;
+    }
+    self.countdownLabel.text = [NSString stringWithFormat:@"  Close in %ds  ", self.remainingSeconds];
+    self.countdownLabel.hidden = NO;
+    self.closeButton.hidden = YES;
+}
+
+- (void)stopTimer
+{
+    [self.countdownTimer invalidate];
+    self.countdownTimer = nil;
+}
+
+- (void)closeTapped
+{
+    if (self.closing)
+        return;
+    self.closing = YES;
+    [self stopTimer];
+    void (^onClose)(GLNAInterstitialController *) = self.onClose;
+    self.onClose = nil;
+    if (onClose != nil)
+        onClose(self);
+}
+
+- (void)viewDidDisappear:(BOOL)animated
+{
+    [super viewDidDisappear:animated];
+    // Only stop when really leaving (the in-app browser presented on top also triggers viewDidDisappear).
+    if (self.isBeingDismissed || self.presentingViewController == nil)
+        [self stopTimer];
+}
+
+- (void)dealloc
+{
+    [_countdownTimer invalidate];
+}
+
+@end
+
+// ---------------------------------------------------------------------------------------------------------------
+// Manager
+// ---------------------------------------------------------------------------------------------------------------
+
+@interface GLNAManager : NSObject <GADNativeAdLoaderDelegate, GADNativeAdDelegate>
+@property (nonatomic, strong) NSMutableDictionary<NSString *, GLNAState *> *states;
++ (instancetype)shared;
+@end
+
+@implementation GLNAManager
+
++ (instancetype)shared
+{
+    static GLNAManager *instance = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        instance = [[GLNAManager alloc] init];
+    });
+    return instance;
+}
+
+- (instancetype)init
+{
+    self = [super init];
+    if (self)
+        _states = [NSMutableDictionary dictionary];
+    return self;
+}
+
+- (GLNAState *)stateForKey:(NSString *)key create:(BOOL)create
+{
+    GLNAState *state = self.states[key];
+    if (state == nil && create)
+    {
+        state = [[GLNAState alloc] init];
+        state.key = key;
+        self.states[key] = state;
+    }
+    return state;
+}
+
+- (GLNAState *)stateForLoader:(GADAdLoader *)loader
+{
+    for (GLNAState *state in self.states.allValues)
+    {
+        if (state.loader == loader)
+            return state;
+    }
+    return nil;
+}
+
+- (GLNAState *)stateForAd:(GADNativeAd *)ad
+{
+    for (GLNAState *state in self.states.allValues)
+    {
+        if (state.shownAd == ad || state.pendingAd == ad)
+            return state;
+    }
+    return nil;
+}
+
+// ----- load -----
+
+- (void)loadKey:(NSString *)key adUnitId:(NSString *)adUnitId
+{
+    GLNAState *state = [self stateForKey:key create:YES];
+    if (state.pendingAd != nil)
+    {
+        GLNAEmit(key, @"loaded", @{ @"adSource" : GLNAAdSource(state.pendingAd.responseInfo) });
+        return;
+    }
+    if (state.loader != nil)
+        return; // a load for this key is already running; it reports loaded / failed
+
+    if (adUnitId.length == 0)
+    {
+        GLNAEmit(key, @"failed", @{ @"error" : @"empty_ad_unit_id" });
+        return;
+    }
+
+    state.adUnitId = adUnitId;
+
+    GADNativeAdMediaAdLoaderOptions *mediaOptions = [[GADNativeAdMediaAdLoaderOptions alloc] init];
+    mediaOptions.mediaAspectRatio = GADMediaAspectRatioAny;
+    GADNativeAdViewAdOptions *viewOptions = [[GADNativeAdViewAdOptions alloc] init];
+    viewOptions.preferredAdChoicesPosition = GADAdChoicesPositionTopRightCorner;
+    GADVideoOptions *videoOptions = [[GADVideoOptions alloc] init];
+    videoOptions.startMuted = YES;
+
+    GADAdLoader *loader = [[GADAdLoader alloc] initWithAdUnitID:adUnitId
+                                             rootViewController:GLNATopViewController()
+                                                        adTypes:@[ GADAdLoaderAdTypeNative ]
+                                                        options:@[ mediaOptions, viewOptions, videoOptions ]];
+    loader.delegate = self;
+    state.loader = loader;
+    [loader loadRequest:[GADRequest request]];
+}
+
+- (void)adLoader:(GADAdLoader *)adLoader didReceiveNativeAd:(GADNativeAd *)nativeAd
+{
+    GLNAState *state = [self stateForLoader:adLoader];
+    if (state == nil)
+        return; // destroyed while loading
+    state.loader = nil;
+    state.pendingAd = nativeAd;
+    nativeAd.delegate = self;
+
+    NSString *key = [state.key copy];
+    __weak GADNativeAd *weakAd = nativeAd;
+    nativeAd.paidEventHandler = ^(GADAdValue *value) {
+        GADNativeAd *strongAd = weakAd;
+        long long micros = [[value.value decimalNumberByMultiplyingByPowerOf10:6] longLongValue];
+        NSString *currency = GLNAHasText(value.currencyCode) ? value.currencyCode : @"";
+        NSString *source = strongAd != nil ? GLNAAdSource(strongAd.responseInfo) : @"";
+        GLNAEmit(key, @"paid", @{
+            @"valueMicros" : @(micros),
+            @"currency" : currency,
+            @"precision" : @((NSInteger)value.precision),
+            @"adSource" : source,
+        });
+    };
+
+    GLNAEmit(key, @"loaded", @{ @"adSource" : GLNAAdSource(nativeAd.responseInfo) });
+}
+
+- (void)adLoader:(GADAdLoader *)adLoader didFailToReceiveAdWithError:(NSError *)error
+{
+    GLNAState *state = [self stateForLoader:adLoader];
+    if (state == nil)
+        return;
+    state.loader = nil;
+    NSString *message = error.localizedDescription;
+    if (!GLNAHasText(message))
+        message = [NSString stringWithFormat:@"error_%ld", (long)error.code];
+    GLNAEmit(state.key, @"failed", @{ @"error" : message });
+}
+
+// ----- SDK ad events -----
+
+- (void)nativeAdDidRecordImpression:(GADNativeAd *)nativeAd
+{
+    GLNAState *state = [self stateForAd:nativeAd];
+    if (state != nil)
+        GLNAEmit(state.key, @"impression", nil);
+}
+
+- (void)nativeAdDidRecordClick:(GADNativeAd *)nativeAd
+{
+    GLNAState *state = [self stateForAd:nativeAd];
+    if (state != nil)
+        GLNAEmit(state.key, @"clicked", nil);
+}
+
+// ----- teardown -----
+
+- (void)releaseAd:(GADNativeAd *)ad
+{
+    if (ad == nil)
+        return;
+    ad.delegate = nil;
+    ad.paidEventHandler = nil;
+}
+
+// Removes whatever is on screen for the key. The shown ad is spent and released. No event.
+- (void)tearDownView:(GLNAState *)state
+{
+    [state.collapseButtonTimer invalidate];
+    state.collapseButtonTimer = nil;
+
+    if (state.adView != nil)
+    {
+        state.adView.nativeAd = nil;
+        [state.adView removeFromSuperview];
+        state.adView = nil;
+    }
+    state.row = nil;
+    state.mediaView = nil;
+    state.collapseButton = nil;
+    state.heightConstraint = nil;
+    state.rowHeightConstraint = nil;
+
+    GLNAInterstitialController *interstitial = state.interstitial;
+    state.interstitial = nil;
+    if (interstitial != nil)
+    {
+        interstitial.closing = YES; // no `closed` for hide / destroy
+        interstitial.onClose = nil;
+        [interstitial stopTimer];
+        interstitial.adView.nativeAd = nil;
+        if (interstitial.presentingViewController != nil)
+            [interstitial.presentingViewController dismissViewControllerAnimated:NO completion:nil];
+    }
+
+    if (state.shownAd != nil)
+    {
+        [self releaseAd:state.shownAd];
+        state.shownAd = nil;
+    }
+    state.format = GLNAShownNone;
+}
+
+- (void)hideKey:(NSString *)key
+{
+    GLNAState *state = [self stateForKey:key create:NO];
+    if (state != nil)
+        [self tearDownView:state];
+}
+
+- (void)destroyKey:(NSString *)key
+{
+    GLNAState *state = [self stateForKey:key create:NO];
+    if (state == nil)
+        return;
+    [self tearDownView:state];
+    if (state.loader != nil)
+    {
+        state.loader.delegate = nil;
+        state.loader = nil;
+    }
+    [self releaseAd:state.pendingAd];
+    state.pendingAd = nil;
+    [self.states removeObjectForKey:key];
+}
+
+// Takes the loaded ad for a show. Returns nil (and emits show_failed) when there is none.
+- (GADNativeAd *)takeAdForShow:(GLNAState *)state key:(NSString *)key
+{
+    if (state == nil || state.pendingAd == nil)
+    {
+        GLNAEmit(key, @"show_failed", @{ @"error" : @"no_ad_loaded" });
+        return nil;
+    }
+    GADNativeAd *ad = state.pendingAd;
+    state.pendingAd = nil;
+    [self tearDownView:state]; // the previous view (and its spent ad) goes only now
+    state.shownAd = ad;
+    return ad;
+}
+
+// ----- banner -----
+
+- (void)showBannerKey:(NSString *)key heightDp:(int)heightDp top:(BOOL)top
+                   bg:(int)bg text:(int)text cta:(int)cta ctaText:(int)ctaText
+{
+    GLNAState *state = [self stateForKey:key create:NO];
+    GADNativeAd *ad = nil;
+    if (state != nil && state.pendingAd == nil && state.shownAd != nil && state.format == GLNAShownBanner)
+    {
+        ad = state.shownAd; // same ad, already visible: rebuild the layout in place
+        state.shownAd = nil;
+        [self tearDownView:state];
+        state.shownAd = ad;
+        if (![self buildBanner:state ad:ad heightDp:heightDp top:top bg:bg text:text cta:cta ctaText:ctaText])
+            [self tearDownView:state];
+        return;
+    }
+
+    ad = [self takeAdForShow:state key:key];
+    if (ad == nil)
+        return;
+    if (![self buildBanner:state ad:ad heightDp:heightDp top:top bg:bg text:text cta:cta ctaText:ctaText])
+    {
+        [self tearDownView:state];
+        GLNAEmit(key, @"show_failed", @{ @"error" : @"no_root_view" });
+        return;
+    }
+    GLNAEmit(key, @"shown", nil);
+}
+
+- (BOOL)buildBanner:(GLNAState *)state ad:(GADNativeAd *)ad heightDp:(int)heightDp top:(BOOL)top
+                 bg:(int)bg text:(int)text cta:(int)cta ctaText:(int)ctaText
+{
+    UIView *host = GLNARootViewController().view;
+    if (host == nil)
+        return NO;
+
+    CGFloat height = heightDp > 0 ? (CGFloat)heightDp : 100.0;
+
+    GADNativeAdView *adView = [[GADNativeAdView alloc] init];
+    adView.translatesAutoresizingMaskIntoConstraints = NO;
+    adView.backgroundColor = GLNAColor(bg);
+    adView.clipsToBounds = YES;
+
+    GLNARow *row = GLNAMakeRow(height, GLNAColor(text), GLNAColor(cta), GLNAColor(ctaText));
+    [adView addSubview:row.stack];
+    UIView *badge = GLNAMakeAdBadge();
+    [adView addSubview:badge];
+
+    [host addSubview:adView];
+    UILayoutGuide *safe = host.safeAreaLayoutGuide;
+    NSLayoutConstraint *edge = top ? [adView.topAnchor constraintEqualToAnchor:safe.topAnchor]
+                                   : [adView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor];
+    NSLayoutConstraint *heightConstraint = [adView.heightAnchor constraintEqualToConstant:height];
+    [NSLayoutConstraint activateConstraints:@[
+        edge,
+        heightConstraint,
+        [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+        [adView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+
+        [row.stack.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:8.0],
+        [row.stack.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-8.0],
+        [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:adView.topAnchor constant:4.0],
+        [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:adView.bottomAnchor constant:-4.0],
+        [row.stack.centerYAnchor constraintEqualToAnchor:adView.centerYAnchor],
+
+        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:2.0],
+        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:2.0],
+    ]];
+
+    GLNAFillRow(row, ad, NO, NO);
+    GLNARegisterRow(adView, row);
+    ad.rootViewController = GLNATopViewController();
+    adView.nativeAd = ad;
+    [host bringSubviewToFront:adView];
+
+    state.adView = adView;
+    state.row = row;
+    state.heightConstraint = heightConstraint;
+    state.format = GLNAShownBanner;
+    return YES;
+}
+
+// ----- collapsible -----
+
+- (CGFloat)expandedHeightFor:(CGFloat)collapsed
+{
+    CGFloat screenHeight = [UIScreen mainScreen].bounds.size.height;
+    return MAX(collapsed, floor(screenHeight * 0.45));
+}
+
+- (CGFloat)expandedRowHeightFor:(CGFloat)collapsed expanded:(CGFloat)expanded
+{
+    return MIN(MAX(collapsed, 76.0), expanded);
+}
+
+- (void)showCollapsibleKey:(NSString *)key collapsedDp:(int)collapsedDp startExpanded:(BOOL)startExpanded
+        buttonDelaySeconds:(int)buttonDelaySeconds bg:(int)bg text:(int)text cta:(int)cta ctaText:(int)ctaText
+{
+    GLNAState *state = [self stateForKey:key create:NO];
+    BOOL relayout = state != nil && state.pendingAd == nil && state.shownAd != nil && state.format == GLNAShownCollapsible;
+    GADNativeAd *ad = nil;
+    if (relayout)
+    {
+        ad = state.shownAd; // same ad, already visible: rebuild the layout in place
+        state.shownAd = nil;
+        [self tearDownView:state];
+        state.shownAd = ad;
+    }
+    else
+    {
+        ad = [self takeAdForShow:state key:key];
+        if (ad == nil)
+            return;
+    }
+
+    if (![self buildCollapsible:state ad:ad collapsedDp:collapsedDp expanded:startExpanded
+             buttonDelaySeconds:buttonDelaySeconds bg:bg text:text cta:cta ctaText:ctaText])
+    {
+        [self tearDownView:state];
+        if (!relayout)
+            GLNAEmit(key, @"show_failed", @{ @"error" : @"no_root_view" });
+        return;
+    }
+    if (!relayout)
+        GLNAEmit(key, @"shown", nil);
+    GLNAEmit(key, startExpanded ? @"expanded" : @"collapsed", nil);
+}
+
+- (BOOL)buildCollapsible:(GLNAState *)state ad:(GADNativeAd *)ad collapsedDp:(int)collapsedDp expanded:(BOOL)expanded
+      buttonDelaySeconds:(int)buttonDelaySeconds bg:(int)bg text:(int)text cta:(int)cta ctaText:(int)ctaText
+{
+    UIView *host = GLNARootViewController().view;
+    if (host == nil)
+        return NO;
+
+    CGFloat collapsed = collapsedDp > 0 ? (CGFloat)collapsedDp : 50.0;
+    CGFloat expandedHeight = [self expandedHeightFor:collapsed];
+    CGFloat expandedRow = [self expandedRowHeightFor:collapsed expanded:expandedHeight];
+
+    GADNativeAdView *adView = [[GADNativeAdView alloc] init];
+    adView.translatesAutoresizingMaskIntoConstraints = NO;
+    adView.backgroundColor = GLNAColor(bg);
+    adView.clipsToBounds = YES;
+
+    GADMediaView *media = [[GADMediaView alloc] init];
+    media.translatesAutoresizingMaskIntoConstraints = NO;
+    media.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+    media.contentMode = UIViewContentModeScaleAspectFit;
+    media.clipsToBounds = YES;
+    [adView addSubview:media];
+
+    UIView *rowHost = [[UIView alloc] init];
+    rowHost.translatesAutoresizingMaskIntoConstraints = NO;
+    rowHost.backgroundColor = [UIColor clearColor];
+    [adView addSubview:rowHost];
+
+    GLNARow *row = GLNAMakeRow(collapsed, GLNAColor(text), GLNAColor(cta), GLNAColor(ctaText));
+    [rowHost addSubview:row.stack];
+
+    UIView *badge = GLNAMakeAdBadge();
+    [adView addSubview:badge];
+
+    // Collapse button: circle with a down chevron; kept left of the AdChoices corner (top-right of the ad view).
+    UIColor *buttonBg = [UIColor colorWithWhite:0.0 alpha:0.55];
+    UIButton *collapseButton = GLNAMakeRoundGlyphButton(NO, 28.0, buttonBg, [UIColor whiteColor]);
+    [collapseButton addTarget:self action:@selector(collapseTapped:) forControlEvents:UIControlEventTouchUpInside];
+    collapseButton.accessibilityLabel = @"Collapse ad";
+    collapseButton.hidden = YES;
+    [adView addSubview:collapseButton];
+
+    [host addSubview:adView];
+    UILayoutGuide *safe = host.safeAreaLayoutGuide;
+    NSLayoutConstraint *heightConstraint = [adView.heightAnchor constraintEqualToConstant:expanded ? expandedHeight : collapsed];
+    NSLayoutConstraint *rowHeight = [rowHost.heightAnchor constraintEqualToConstant:expanded ? expandedRow : collapsed];
+    [NSLayoutConstraint activateConstraints:@[
+        [adView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+        [adView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+        [adView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+        heightConstraint,
+
+        [rowHost.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor],
+        [rowHost.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
+        [rowHost.bottomAnchor constraintEqualToAnchor:adView.bottomAnchor],
+        rowHeight,
+
+        [media.topAnchor constraintEqualToAnchor:adView.topAnchor],
+        [media.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor],
+        [media.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor],
+        [media.bottomAnchor constraintEqualToAnchor:rowHost.topAnchor],
+
+        [row.stack.leadingAnchor constraintEqualToAnchor:rowHost.leadingAnchor constant:8.0],
+        [row.stack.trailingAnchor constraintEqualToAnchor:rowHost.trailingAnchor constant:-8.0],
+        [row.stack.topAnchor constraintGreaterThanOrEqualToAnchor:rowHost.topAnchor constant:4.0],
+        [row.stack.bottomAnchor constraintLessThanOrEqualToAnchor:rowHost.bottomAnchor constant:-4.0],
+        [row.stack.centerYAnchor constraintEqualToAnchor:rowHost.centerYAnchor],
+
+        [badge.topAnchor constraintEqualToAnchor:adView.topAnchor constant:2.0],
+        [badge.leadingAnchor constraintEqualToAnchor:adView.leadingAnchor constant:2.0],
+
+        [collapseButton.topAnchor constraintEqualToAnchor:adView.topAnchor constant:6.0],
+        [collapseButton.trailingAnchor constraintEqualToAnchor:adView.trailingAnchor constant:-30.0],
+    ]];
+
+    GLNAFillRow(row, ad, YES, YES);
+    if (!expanded)
+        GLNASetRowCompact(row, ad, YES);
+    media.hidden = !expanded;
+
+    GLNARegisterRow(adView, row);
+    adView.mediaView = media;
+    media.mediaContent = ad.mediaContent;
+    ad.rootViewController = GLNATopViewController();
+    adView.nativeAd = ad;
+    [host bringSubviewToFront:adView];
+
+    state.adView = adView;
+    state.row = row;
+    state.mediaView = media;
+    state.collapseButton = collapseButton;
+    state.heightConstraint = heightConstraint;
+    state.rowHeightConstraint = rowHeight;
+    state.collapsedHeight = collapsed;
+    state.expanded = expanded;
+    state.format = GLNAShownCollapsible;
+
+    if (expanded)
+    {
+        if (buttonDelaySeconds <= 0)
+        {
+            collapseButton.hidden = NO;
+        }
+        else
+        {
+            __weak UIButton *weakButton = collapseButton;
+            __weak GLNAState *weakState = state;
+            state.collapseButtonTimer = [NSTimer scheduledTimerWithTimeInterval:(NSTimeInterval)buttonDelaySeconds
+                                                                        repeats:NO
+                                                                          block:^(NSTimer *timer) {
+                GLNAState *strongState = weakState;
+                if (strongState != nil && strongState.collapseButtonTimer == timer)
+                    strongState.collapseButtonTimer = nil;
+                UIButton *button = weakButton;
+                if (button != nil && strongState != nil && strongState.expanded && strongState.collapseButton == button)
+                    button.hidden = NO;
+            }];
+        }
+    }
+    return YES;
+}
+
+- (void)collapseTapped:(UIButton *)sender
+{
+    GLNAState *state = nil;
+    for (GLNAState *candidate in self.states.allValues)
+    {
+        if (candidate.collapseButton == sender)
+        {
+            state = candidate;
+            break;
+        }
+    }
+    if (state == nil || state.format != GLNAShownCollapsible || !state.expanded || state.collapseButton != sender)
+        return;
+
+    state.expanded = NO;
+    [state.collapseButtonTimer invalidate];
+    state.collapseButtonTimer = nil;
+    sender.hidden = YES;
+
+    UIView *host = state.adView.superview;
+    GADMediaView *media = state.mediaView;
+    GLNARow *row = state.row;
+    GADNativeAd *ad = state.shownAd;
+    state.heightConstraint.constant = state.collapsedHeight;
+    state.rowHeightConstraint.constant = state.collapsedHeight;
+    [UIView animateWithDuration:0.25
+        animations:^{
+            GLNASetRowCompact(row, ad, YES);
+            media.alpha = 0.0;
+            [host layoutIfNeeded];
+        }
+        completion:^(BOOL finished) {
+            media.hidden = YES;
+            media.alpha = 1.0;
+        }];
+
+    GLNAEmit(state.key, @"collapsed", nil);
+}
+
+// ----- interstitial -----
+
+- (void)showInterstitialKey:(NSString *)key closeDelaySeconds:(int)closeDelaySeconds
+                         bg:(int)bg text:(int)text cta:(int)cta ctaText:(int)ctaText
+{
+    GLNAState *state = [self stateForKey:key create:NO];
+    if (state != nil && state.format == GLNAShownInterstitial && state.interstitial != nil && state.pendingAd == nil)
+        return; // already on screen with this ad
+
+    UIViewController *top = GLNATopViewController();
+    if (top == nil)
+    {
+        GLNAEmit(key, @"show_failed", @{ @"error" : (state != nil && state.pendingAd != nil) ? @"no_view_controller" : @"no_ad_loaded" });
+        return;
+    }
+
+    GADNativeAd *ad = [self takeAdForShow:state key:key];
+    if (ad == nil)
+        return;
+    // `top` may have been our own interstitial that takeAdForShow just dismissed.
+    top = GLNATopViewController();
+    if (top == nil)
+    {
+        [self tearDownView:state];
+        GLNAEmit(key, @"show_failed", @{ @"error" : @"no_view_controller" });
+        return;
+    }
+
+    GLNAInterstitialController *controller = [[GLNAInterstitialController alloc] init];
+    controller.key = key;
+    controller.nativeAd = ad;
+    controller.closeDelaySeconds = closeDelaySeconds;
+    controller.bgColor = GLNAColor(bg);
+    controller.textColor = GLNAColor(text);
+    controller.ctaColor = GLNAColor(cta);
+    controller.ctaTextColor = GLNAColor(ctaText);
+    controller.modalPresentationStyle = UIModalPresentationFullScreen;
+    controller.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+
+    __weak GLNAManager *weakSelf = self;
+    controller.onClose = ^(GLNAInterstitialController *closing) {
+        [weakSelf closeInterstitial:closing];
+    };
+
+    state.interstitial = controller;
+    state.format = GLNAShownInterstitial;
+    ad.rootViewController = controller;
+
+    [top presentViewController:controller animated:YES completion:^{
+        GLNAEmit(key, @"shown", nil);
+    }];
+}
+
+- (void)closeInterstitial:(GLNAInterstitialController *)controller
+{
+    NSString *key = controller.key;
+    GLNAState *state = [self stateForKey:key create:NO];
+    if (state != nil && state.interstitial == controller)
+    {
+        state.interstitial = nil;
+        if (state.shownAd != nil)
+        {
+            [self releaseAd:state.shownAd];
+            state.shownAd = nil;
+        }
+        state.format = GLNAShownNone;
+    }
+
+    UIViewController *presenting = controller.presentingViewController;
+    if (presenting != nil)
+    {
+        [presenting dismissViewControllerAnimated:YES completion:^{
+            controller.adView.nativeAd = nil;
+            GLNAEmit(key, @"closed", nil);
+        }];
+    }
+    else
+    {
+        controller.adView.nativeAd = nil;
+        GLNAEmit(key, @"closed", nil);
+    }
+}
+
+@end
+
+#endif // GLNA_HAS_GMA
+
+// ---------------------------------------------------------------------------------------------------------------
+// C API (P/Invoke from C#). C strings are copied before any dispatch to the main queue.
+// ---------------------------------------------------------------------------------------------------------------
+
+static void GLNAOnMain(dispatch_block_t block)
+{
+    if ([NSThread isMainThread])
+        block();
+    else
+        dispatch_async(dispatch_get_main_queue(), block);
+}
+
+extern "C" {
+
+void GameLibNativeAds_Initialize(GameLibNativeAdsCallback callback)
+{
+    gGLNACallback = callback;
+}
+
+void GameLibNativeAds_Load(const char *key, const char *adUnitId)
+{
+    NSString *keyCopy = GLNACopyString(key);
+    NSString *unitCopy = GLNACopyString(adUnitId);
+#if GLNA_HAS_GMA
+    GLNAOnMain(^{
+        [[GLNAManager shared] loadKey:keyCopy adUnitId:unitCopy];
+    });
+#else
+    (void)unitCopy;
+    GLNAOnMain(^{
+        GLNAEmit(keyCopy, @"failed", @{ @"error" : @"sdk_missing" });
+    });
+#endif
+}
+
+void GameLibNativeAds_ShowBanner(const char *key, int heightDp, bool top, int bg, int text, int cta, int ctaText)
+{
+#if GLNA_HAS_GMA
+    NSString *keyCopy = GLNACopyString(key);
+    BOOL topCopy = top ? YES : NO;
+    GLNAOnMain(^{
+        [[GLNAManager shared] showBannerKey:keyCopy heightDp:heightDp top:topCopy bg:bg text:text cta:cta ctaText:ctaText];
+    });
+#else
+    (void)key; (void)heightDp; (void)top; (void)bg; (void)text; (void)cta; (void)ctaText;
+#endif
+}
+
+void GameLibNativeAds_ShowCollapsible(const char *key, int collapsedDp, bool startExpanded, int buttonDelaySeconds,
+                                      int bg, int text, int cta, int ctaText)
+{
+#if GLNA_HAS_GMA
+    NSString *keyCopy = GLNACopyString(key);
+    BOOL expandedCopy = startExpanded ? YES : NO;
+    GLNAOnMain(^{
+        [[GLNAManager shared] showCollapsibleKey:keyCopy collapsedDp:collapsedDp startExpanded:expandedCopy
+                              buttonDelaySeconds:buttonDelaySeconds bg:bg text:text cta:cta ctaText:ctaText];
+    });
+#else
+    (void)key; (void)collapsedDp; (void)startExpanded; (void)buttonDelaySeconds;
+    (void)bg; (void)text; (void)cta; (void)ctaText;
+#endif
+}
+
+void GameLibNativeAds_ShowInterstitial(const char *key, int closeDelaySeconds, int bg, int text, int cta, int ctaText)
+{
+#if GLNA_HAS_GMA
+    NSString *keyCopy = GLNACopyString(key);
+    GLNAOnMain(^{
+        [[GLNAManager shared] showInterstitialKey:keyCopy closeDelaySeconds:closeDelaySeconds
+                                               bg:bg text:text cta:cta ctaText:ctaText];
+    });
+#else
+    (void)key; (void)closeDelaySeconds; (void)bg; (void)text; (void)cta; (void)ctaText;
+#endif
+}
+
+void GameLibNativeAds_Hide(const char *key)
+{
+#if GLNA_HAS_GMA
+    NSString *keyCopy = GLNACopyString(key);
+    GLNAOnMain(^{
+        [[GLNAManager shared] hideKey:keyCopy];
+    });
+#else
+    (void)key;
+#endif
+}
+
+void GameLibNativeAds_Destroy(const char *key)
+{
+#if GLNA_HAS_GMA
+    NSString *keyCopy = GLNACopyString(key);
+    GLNAOnMain(^{
+        [[GLNAManager shared] destroyKey:keyCopy];
+    });
+#else
+    (void)key;
+#endif
+}
+
+} // extern "C"

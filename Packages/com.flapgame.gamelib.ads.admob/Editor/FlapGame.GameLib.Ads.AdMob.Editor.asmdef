@@ -1,0 +1,22 @@
+{
+  "name": "FlapGame.GameLib.Ads.AdMob.Editor",
+  "rootNamespace": "FlapGame.GameLib",
+  "references": [],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [
+    {
+      "name": "com.google.ads.mobile",
+      "expression": "",
+      "define": "GAMELIB_ADMOB"
+    }
+  ],
+  "noEngineReferences": false
+}

@@ -54,12 +54,50 @@ namespace FlapGame.GameLib.Ads
                  "banners to be fully functional). Alpha 0 = not set.")]
         public Color BannerBackgroundColor = Color.clear;
 
+        [Header("Native only (AdMob)")]
+        [Tooltip("NativeBanner / NativeCollapsible: bar height in dp (the collapsed bar for NativeCollapsible). 0 = default " +
+                 "(NativeBanner 100, NativeCollapsible 50).")]
+        [Min(0)] public int NativeHeightDp;
+
+        [Tooltip("NativeInterstitial: seconds before the close button appears (a 'Close in Ns' countdown shows meanwhile). " +
+                 "0 = the close button shows at once. Remote config can override it.")]
+        [Min(0)] public int NativeCloseDelaySeconds = 5;
+
+        [Tooltip("NativeCollapsible: seconds after the ad opens expanded before its collapse button appears. Remote config " +
+                 "can override it.")]
+        [Min(0)] public int NativeCollapseButtonDelaySeconds = 1;
+
+        [Tooltip("NativeCollapsible: each show opens the ad expanded (media visible). Off = it shows as the collapsed bar.")]
+        public bool NativeStartExpanded = true;
+
+        [Tooltip("NativeCollapsible: hide the ad when the player collapses it (the game shows it again with ShowBanner). " +
+                 "Off = the collapsed bar stays on screen. INativeCollapseSource.NativeCollapsed fires either way.")]
+        public bool NativeHideOnCollapse = true;
+
+        [Tooltip("Native: background of the ad view.")]
+        public Color NativeBackgroundColor = Color.white;
+
+        [Tooltip("Native: headline / body text color.")]
+        public Color NativeTextColor = new(0.067f, 0.067f, 0.067f, 1f);
+
+        [Tooltip("Native: call-to-action button color.")]
+        public Color NativeCtaColor = new(0.039f, 0.494f, 0.988f, 1f);
+
+        [Tooltip("Native: call-to-action button text color.")]
+        public Color NativeCtaTextColor = Color.white;
+
         [Header("AppLovin MAX only")]
         [Tooltip("Extra parameters for this placement's MAX ad unit (MaxSdk.Set*ExtraParameter), set before it loads - only " +
                  "the ones AppLovin documents or support asks for.")]
         public List<AdKeyValue> MaxExtraParameters = new();
 
-        public bool IsBannerLike => Format == AdFormat.Banner || Format == AdFormat.Mrec;
+        public bool IsBannerLike => Format is AdFormat.Banner or AdFormat.Mrec or AdFormat.NativeBanner or AdFormat.NativeCollapsible;
+
+        /// <summary>(0.9.0) NativeBanner, NativeCollapsible or NativeInterstitial.</summary>
+        public bool IsNative => Format is AdFormat.NativeBanner or AdFormat.NativeCollapsible or AdFormat.NativeInterstitial;
+
+        /// <summary>(0.9.0) <see cref="NativeHeightDp"/>, or the format's default when 0 (NativeBanner 100, NativeCollapsible 50).</summary>
+        public int EffectiveNativeHeightDp => NativeHeightDp > 0 ? NativeHeightDp : Format == AdFormat.NativeCollapsible ? 50 : 100;
 
         public AdPlacement Clone()
         {

@@ -203,7 +203,8 @@ namespace FlapGame.GameLib.Ads
         /// Shows an interstitial ad and invokes <paramref name="onCompleted"/> when the user dismisses it
         /// or when it could not be shown at all. The callback ALWAYS fires (Completed, Skipped or Failed) —
         /// use this for game-flow continuation, not for granting rewards.
-        /// Returns the raw <see cref="AdShowResult"/>.
+        /// Returns the raw <see cref="AdShowResult"/>. (0.9.0) Also shows a <see cref="AdFormat.NativeInterstitial"/>
+        /// placement (same pacing rules).
         /// </summary>
         public static async ValueTask<AdShowResult> ShowInterstitialAsync(
             this IAdsService ads,
@@ -263,6 +264,7 @@ namespace FlapGame.GameLib.Ads
         /// <see cref="IAdsService.DestroyBanner"/>. Completed = accepted: a banner requested before
         /// the ad SDKs are up is shown once its provider is ready. Failed = it cannot be shown.
         /// </para>
+        /// <para>(0.9.0) Also shows <see cref="AdFormat.NativeBanner"/> / <see cref="AdFormat.NativeCollapsible"/> placements.</para>
         /// </summary>
         public static ValueTask<AdShowResult> ShowBannerAsync(
             this IAdsService ads,

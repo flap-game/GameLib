@@ -21,6 +21,32 @@ Test mode: tick *Test Mode* on `AdsModule` and add the hashed device id AdMob pr
 
 Revenue is reported per impression (`OnAdPaid`) with the currency AdMob gives and the network from the response info.
 
+## Native ads
+
+Three AdMob-only formats (0.9.0), drawn by GameLib's own native views (Java in `Plugins/Android`, Objective-C++ in
+`Plugins/iOS`, built in code: no layouts or image assets). Each view has the "AD" badge, registers every asset with the
+SDK (clicks and impressions are tracked by Google) and hides the assets an ad does not have.
+
+| Format | Shown with | Look |
+|---|---|---|
+| `NativeBanner` | `ShowBanner` / `HideBanner` | Full-width bar at the bottom (or top: `Position` Top / TopLeft / TopRight) of the safe area, `NativeHeightDp` high (0 = 100). |
+| `NativeCollapsible` | `ShowBanner` / `HideBanner` | Bottom bar `NativeHeightDp` high (0 = 50). With `NativeStartExpanded` each show opens it over ~45 % of the screen with its media; a collapse button appears after `NativeCollapseButtonDelaySeconds`. |
+| `NativeInterstitial` | like an interstitial | Full screen; a "Close in Ns" countdown (`NativeCloseDelaySeconds`, 0 = close button at once). Follows the interstitial pacing. |
+
+- Colors: `NativeBackgroundColor`, `NativeTextColor`, `NativeCtaColor`, `NativeCtaTextColor` on the placement.
+- Banner-like natives behave like banners: loaded on the first `ShowBanner` (or on activation with `PreloadBanner`), shown
+  once loaded. A shown native ad is spent: `HideBanner` removes it and a fresh one loads while the placement is allowed;
+  `DestroyBanner` releases it without reloading. Load failures retry with the usual backoff (2 s .. 60 s).
+- `IBannerMetrics`: the bar height (`NativeHeightDp` in pixels; the collapsed bar for `NativeCollapsible`) while it is on
+  screen; the expected height is the same value before it loads.
+- `INativeCollapseSource.NativeExpandedChanged`: true when a show opens a `NativeCollapsible` expanded, false when the
+  player collapses it (with `NativeHideOnCollapse` the ads service then hides it). A show that opens collapsed raises nothing.
+- Clicks raise `IAdClickSource.AdClicked`; paid events raise `ImpressionPaid` like the other formats.
+- Test mode without a unit id: Google's native demo unit (Android `ca-app-pub-3940256099942544/2247696110`, iOS
+  `ca-app-pub-3940256099942544/3986624511`).
+- Natives run on Android / iOS devices only. In the Editor every native load fails with `unsupported_platform` (and is
+  retried with backoff), so the placement stays not ready there.
+
 ## Mediation adapters
 
 AdMob mediation (other networks bidding or in a waterfall inside an AdMob mediation group) needs Google's adapter for
