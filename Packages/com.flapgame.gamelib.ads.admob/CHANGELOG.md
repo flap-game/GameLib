@@ -7,6 +7,9 @@
 - Test mode uses Google's native demo units for native placements without a unit id.
 - Fix: hiding a collapsible banner while it is expanded left the SDK's expanded overlay on screen. The view is now
   destroyed (the next show loads a new one) and the expansion is reported closed, also when the placement is turned off.
+- A collapsible banner opening its expanded panel by itself is no longer reported as fullscreen content: interstitials
+  (standard and native) now show over it instead of being refused with `AnotherAdShowing`. A tap that opens the ad's
+  page is still reported.
 
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.

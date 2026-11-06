@@ -96,6 +96,9 @@ namespace FlapGame.GameLib.Ads
         /// <inheritdoc />
         public event Action<string, bool> BannerExpandedChanged;
 
+        // (0.9.0) Fullscreen content that opens within this many seconds of a banner tap was opened by the tap.
+        private const float BannerTapToOpenSeconds = 3f;
+
         /// <inheritdoc />
         public event Action<string, bool> NativeExpandedChanged;
 
@@ -183,7 +186,7 @@ namespace FlapGame.GameLib.Ads
                 ReleaseFullscreen(unit.Slot);
                 ReleaseNative(unit.Slot);
             }
-            bool wasExpanded = unit.BannerExpanded;
+            bool wasExpanded = unit.BannerExpansionReported;
             ReleaseBanner(unit);
             ReleaseNative(unit);
             if (wasExpanded) BannerExpandedChanged?.Invoke(placementId, false);
@@ -309,7 +312,7 @@ namespace FlapGame.GameLib.Ads
             if (unit.NativeKey != null) { DestroyNative(unit); return; }
             if (unit.Banner == null) return;
             bool wasLoaded = unit.BannerLoaded;
-            bool wasExpanded = unit.BannerExpanded;
+            bool wasExpanded = unit.BannerExpansionReported;
             unit.Generation++; // a pending banner retry belongs to the destroyed view
             unit.RetryPending = false;
             unit.RetryAttempt = 0;
@@ -746,17 +749,19 @@ namespace FlapGame.GameLib.Ads
         private void DropExpandedBanner(Unit unit)
         {
             bool wasLoaded = unit.BannerLoaded;
+            bool wasReported = unit.BannerExpansionReported;
             unit.Generation++;
             unit.RetryPending = false;
             unit.RetryAttempt = 0;
             ReleaseBanner(unit);
-            BannerExpandedChanged?.Invoke(unit.Id, false);
+            if (wasReported) BannerExpandedChanged?.Invoke(unit.Id, false);
             if (wasLoaded) RaiseReadyChanged(unit.Id);
         }
 
         private static void ReleaseBanner(Unit unit)
         {
             unit.BannerExpanded = false;
+            unit.BannerExpansionReported = false;
             unit.Banner?.Destroy();
             unit.Banner        = null;
             unit.BannerLoaded  = false;
@@ -1030,18 +1035,30 @@ namespace FlapGame.GameLib.Ads
                 });
             });
             banner.OnAdPaid += value => RunOnMain(() => RaisePaid(unit, value, SafeAdSource(banner.GetResponseInfo)));
-            banner.OnAdClicked += () => RunOnMain(() => RaiseClicked(unit.Id));
+            banner.OnAdClicked += () => RunOnMain(() =>
+            {
+                unit.BannerClickedAt = Time.realtimeSinceStartup;
+                RaiseClicked(unit.Id);
+            });
             banner.OnAdFullScreenContentOpened += () => RunOnMain(() =>
             {
                 if (disposed || !ReferenceEquals(unit.Banner, banner)) return;
                 unit.BannerExpanded = true;
-                BannerExpandedChanged?.Invoke(unit.Id, true);
+                // (0.9.0) A collapsible banner opening its expanded panel by itself is a bigger banner, not a fullscreen
+                // ad: reporting it made the service refuse every interstitial while it stayed open. Fullscreen content
+                // opened by a tap (in-app page, store) is still reported.
+                bool byTap = Time.realtimeSinceStartup - unit.BannerClickedAt < BannerTapToOpenSeconds;
+                unit.BannerExpansionReported = byTap || p.Size != BannerSize.Collapsible;
+                if (unit.BannerExpansionReported) BannerExpandedChanged?.Invoke(unit.Id, true);
+                else if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner {unit.Id} expanded its collapsible panel.");
             });
             banner.OnAdFullScreenContentClosed += () => RunOnMain(() =>
             {
                 if (disposed || !ReferenceEquals(unit.Banner, banner) || !unit.BannerExpanded) return;
+                bool reported = unit.BannerExpansionReported;
                 unit.BannerExpanded = false;
-                BannerExpandedChanged?.Invoke(unit.Id, false);
+                unit.BannerExpansionReported = false;
+                if (reported) BannerExpandedChanged?.Invoke(unit.Id, false);
             });
 
             banner.Hide(); // created hidden; OnBannerAdLoaded applies the desired visibility
@@ -1548,6 +1565,8 @@ namespace FlapGame.GameLib.Ads
             // Desired visibility: Show() before the ad finished loading must still win.
             public bool BannerVisible;
             public bool BannerExpanded; // (0.9.0) the banner's fullscreen content (collapsible expansion, in-app page) is open
+            public bool BannerExpansionReported; // (0.9.0) ... and it was reported through BannerExpandedChanged (opened by a tap)
+            public float BannerClickedAt = float.NegativeInfinity; // realtimeSinceStartup of the last banner tap
 
             // Banner-like native (NativeBanner / NativeCollapsible) only; BannerLoaded = an unspent native ad is loaded.
             /// <summary>Bridge key; null for every other format.</summary>

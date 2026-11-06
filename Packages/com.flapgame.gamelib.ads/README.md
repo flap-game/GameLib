@@ -110,7 +110,9 @@ Turn on `Pause Game During Fullscreen Ads` (`Time.timeScale = 0`) and / or `Mute
 (`AudioListener.pause`) on the AdsModule asset: both are put back when the ad closes, unless the game changed them during
 the ad. A game with its own pause listens to `((CompositeAdsService)ads).FullscreenShowingChanged` instead - not both.
 A banner or MREC that opens fullscreen content (an expandable creative; MAX and AdMob report it) counts as a fullscreen
-ad until it closes or the game hides it: the pause applies, and no other fullscreen ad shows over it.
+ad until it closes or the game hides it: the pause applies, and no other fullscreen ad shows over it. (0.9.0) Not the
+panel an AdMob collapsible banner opens by itself after it loads: that is a bigger banner, and interstitials show over
+it (banners and native bars always stay under fullscreen ads). Fullscreen content opened by a tap still counts.
 
 ## App open rule
 
@@ -155,7 +157,7 @@ views are drawn by GameLib in code on Android and iOS (icon, headline, body, rat
 | Format | Shows as | Call |
 |---|---|---|
 | `NativeBanner` | Full-width bar at the bottom (or top, `Position = Top`) of the safe area, `Native Height Dp` tall (0 = 100). | `ShowBannerAsync` / `HideBanner` |
-| `NativeCollapsible` | Bottom bar `Native Height Dp` tall (0 = 50) that opens expanded over ~45% of the screen with the ad's media. A collapse button appears `Native Collapse Button Delay Seconds` after it opens. Always at the bottom (Doctor warns on `Position = Top`). | `ShowBannerAsync` / `HideBanner` |
+| `NativeCollapsible` | Bottom bar `Native Height Dp` tall (0 = 50) that opens expanded over ~45% of the screen with the ad's media. A collapse button appears `Native Collapse Button Delay Seconds` after it opens. Always at the bottom (`Position` is ignored). | `ShowBannerAsync` / `HideBanner` |
 | `NativeInterstitial` | Full screen; a "Close in Ns" countdown, then a close button after `Native Close Delay Seconds`. | `ShowInterstitialAsync` |
 
 - Native bars are banners for everything else: no-ads hides them, `GetVisibleBannerHeightPixels` / `BannerHeightChanged`
