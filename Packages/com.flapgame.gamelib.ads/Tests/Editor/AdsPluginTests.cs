@@ -13,7 +13,7 @@ namespace FlapGame.GameLib.Ads.Tests
 {
     /// <summary>Scriptable <see cref="IAdsProviderAdapter"/> shared by the ads tests.</summary>
     internal sealed class FakeAdsAdapter : IAdsProviderAdapter, ISuppressibleAdsAdapter, IBannerMetrics, IAdClickSource, IAdsDebugger, IAdsAudio, IRewardVerification,
-                                          IAdsCreativeDebugger, IAdSegments, IBannerExpansion
+                                          IAdsCreativeDebugger, IAdSegments, IBannerExpansion, INativeCollapseSource
     {
         public int DebuggerOpened;
         public bool DebuggerResult = true;
@@ -28,6 +28,8 @@ namespace FlapGame.GameLib.Ads.Tests
         public void ApplySegments(IReadOnlyDictionary<int, int[]> segments) => SegmentCalls.Add(segments);
         public event Action<string, bool> BannerExpandedChanged;
         public void Expand(string id, bool expanded) => BannerExpandedChanged?.Invoke(id, expanded);
+        public event Action<string, bool> NativeExpandedChanged;
+        public void NativeExpand(string id, bool expanded) => NativeExpandedChanged?.Invoke(id, expanded);
 
         public readonly HashSet<string> Ready = new();
         public readonly HashSet<string> Active = new();
@@ -746,6 +748,22 @@ namespace FlapGame.GameLib.Ads.Tests
 
             var withCountry = new AdImpression("inter", "max", AdFormat.Interstitial, "m1", "x", 0.01, "USD", null, " vn ");
             Assert.That(AdsModule.ToAdRevenue(withCountry).CountryCode, Is.EqualTo("VN"), "AppsFlyer's 'country': two letters, upper case");
+        }
+
+        [TestCase(AdFormat.NativeBanner)]
+        [TestCase(AdFormat.NativeCollapsible)]
+        [TestCase(AdFormat.NativeInterstitial)]
+        public void NativeImpression_MapsToNativeAdRevenue(AdFormat format)
+        {
+            var impression = new AdImpression("p", "admob", format, "ca-app-pub-x/1", "Reservation campaign", 0.004, "USD", "estimated");
+            AdRevenue r = AdsModule.ToAdRevenue(impression);
+            Assert.That(r.Format, Is.EqualTo(AdFormatKind.Native));
+            Assert.That(r.Platform, Is.EqualTo("AdMob"));
+            Assert.That(r.Network, Is.EqualTo("Reservation campaign"));
+            Assert.That(r.Placement, Is.EqualTo("p"));
+            Assert.That(r.AdUnitId, Is.EqualTo("ca-app-pub-x/1"));
+            Assert.That(r.Value, Is.EqualTo(0.004));
+            Assert.That(r.Precision, Is.EqualTo("estimated"));
         }
 
         [Test]

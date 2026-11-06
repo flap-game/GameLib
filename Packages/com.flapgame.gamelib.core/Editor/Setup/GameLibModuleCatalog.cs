@@ -27,6 +27,15 @@ namespace FlapGame.GameLib.Editor
         public string RegistryName { get; set; }
         public string RegistryUrl { get; set; }
         public string[] RegistryScopes { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// Optional SDKs only: the CLI key (<c>-gamelibOptional</c>). Null means the last part of <see cref="PackageName"/>.
+        /// </summary>
+        public string Key { get; set; }
+        /// <summary>
+        /// Optional SDKs only: packages installed and removed together with this one (MAX ships each network's adapter as
+        /// an <c>.android</c> and an <c>.ios</c> package).
+        /// </summary>
+        public SdkRequirement[] Companions { get; set; } = Array.Empty<SdkRequirement>();
     }
 
     public sealed class GameLibModuleInfo
@@ -113,8 +122,12 @@ namespace FlapGame.GameLib.Editor
 
         /// <summary>
         /// Google's mediation adapter for one network, from OpenUPM (<c>com.google.ads.mobile.mediation.&lt;network&gt;</c>,
-        /// under the <c>com.google.ads.mobile</c> scope). Versions pinned 2026-10-27: the newest, each needing Google Mobile Ads
-        /// 11.0.0 or later (Verve 11.2.0) - GameLib installs 11.6.0.
+        /// under the <c>com.google.ads.mobile</c> scope). Versions pinned 2026-11-06 from the AdMob + MAX version set
+        /// (<c>com.flapgame.gamelib.ads/Documentation~/mediation-versions.json</c>, checked by
+        /// <c>Tools/mediation_versions.py check</c>): each one's native SDK equals what the matching MAX adapter pins, so a
+        /// game with both stacks still passes pod install. Change them there first. Each needs Google Mobile Ads 11.0.0 or
+        /// later (Verve 11.2.0) - GameLib installs 11.6.0. Verve is 1.1.3, not OpenUPM's "latest" 3.38.0: that is a broken
+        /// publish (myTarget's adapter inside, an iOS pod that does not exist).
         /// </summary>
         public static SdkRequirement AdMobMediation(string network, string displayName, string version) => new()
         {
@@ -127,8 +140,55 @@ namespace FlapGame.GameLib.Editor
             RegistryScopes = new[] { "com.google.ads.mobile" },
         };
 
-        /// <summary>The short name of an optional SDK for the CLI: the last part of its package name (<c>pangle</c>).</summary>
-        public static string OptionalKey(SdkRequirement sdk) => sdk.PackageName.Substring(sdk.PackageName.LastIndexOf('.') + 1);
+        /// <summary>The AppLovin MAX scoped registry: the MAX SDK and its adapters.</summary>
+        public const string MaxRegistryUrl = "https://unity.packages.applovin.com/";
+        private static readonly string[] MaxRegistryScopes = { "com.applovin.mediation.ads", "com.applovin.mediation.adapters", "com.applovin.mediation.dsp" };
+
+        /// <summary>
+        /// AppLovin MAX SDK version a new install gets. Pinned with the AdMob + MAX version set: Google's AppLovin adapter
+        /// pins the AppLovin iOS SDK exactly (8.6.6 ships 13.6.4), so MAX core and that adapter move together.
+        /// </summary>
+        public const string MaxVersion = "8.6.6";
+
+        /// <summary>
+        /// AppLovin's adapter for one MAX network: <c>com.applovin.mediation.adapters.&lt;network&gt;.android</c> plus its
+        /// <c>.ios</c> twin, installed and removed together. CLI key <c>max-&lt;network&gt;</c> (AdMob's adapters use the bare
+        /// network name). Versions pinned 2026-11-06 from the AdMob + MAX version set, like <see cref="AdMobMediation"/>.
+        /// Networks MAX 8.6.6 treats as obsolete (HyprMX, maio, myTarget, CSJ, Tencent) are left out: it uninstalls them.
+        /// </summary>
+        public static SdkRequirement MaxMediation(string network, string displayName, string androidVersion, string iosVersion) => new()
+        {
+            DisplayName = displayName,
+            PackageName = $"com.applovin.mediation.adapters.{network}.android",
+            Source = SdkSource.ScopedRegistry,
+            Location = androidVersion,
+            RegistryName = "AppLovin MAX Unity",
+            RegistryUrl = MaxRegistryUrl,
+            RegistryScopes = MaxRegistryScopes,
+            Key = "max-" + network,
+            Companions = new[]
+            {
+                new SdkRequirement
+                {
+                    DisplayName = displayName + " (iOS)",
+                    PackageName = $"com.applovin.mediation.adapters.{network}.ios",
+                    Source = SdkSource.ScopedRegistry,
+                    Location = iosVersion,
+                    RegistryName = "AppLovin MAX Unity",
+                    RegistryUrl = MaxRegistryUrl,
+                    RegistryScopes = MaxRegistryScopes,
+                },
+            },
+        };
+
+        /// <summary>
+        /// The short name of an optional SDK for the CLI: <see cref="SdkRequirement.Key"/>, else the last part of its package
+        /// name (<c>pangle</c>).
+        /// </summary>
+        public static string OptionalKey(SdkRequirement sdk) => sdk.Key ?? sdk.PackageName.Substring(sdk.PackageName.LastIndexOf('.') + 1);
+
+        /// <summary>An optional SDK with its <see cref="SdkRequirement.Companions"/>.</summary>
+        public static IEnumerable<SdkRequirement> WithCompanions(SdkRequirement sdk) => new[] { sdk }.Concat(sdk.Companions);
 
         public static IReadOnlyList<GameLibModuleInfo> All { get; } = new[]
         {
@@ -178,10 +238,37 @@ namespace FlapGame.GameLib.Editor
                         DisplayName = "AppLovin MAX SDK",
                         PackageName = "com.applovin.mediation.ads",
                         Source = SdkSource.ScopedRegistry,
+                        Location = MaxVersion,
                         RegistryName = "AppLovin MAX Unity",
-                        RegistryUrl = "https://unity.packages.applovin.com/",
-                        RegistryScopes = new[] { "com.applovin.mediation.ads", "com.applovin.mediation.adapters", "com.applovin.mediation.dsp" },
+                        RegistryUrl = MaxRegistryUrl,
+                        RegistryScopes = MaxRegistryScopes,
                     },
+                },
+                OptionalSdksTitle = "Mediation adapters (one per network in the MAX ad units; Android + iOS together)",
+                OptionalSdks = new[]
+                {
+                    MaxMediation("bidmachine", "BidMachine", "3080001.0.0", "308020000.0.0"),
+                    MaxMediation("bigoads", "BIGO Ads", "6010000.0.0", "6010001.0.0"),
+                    MaxMediation("chartboost", "Chartboost", "9140101.0.0", "9140200.0.0"),
+                    MaxMediation("fyber", "DT Exchange", "8050000.0.0", "8050100.0.0"),
+                    MaxMediation("googleadmanager", "Google Ad Manager", "25050000.0.0", "13110000.0.0"),
+                    MaxMediation("google", "Google AdMob", "25050000.0.0", "13110000.0.0"),
+                    MaxMediation("inmobi", "InMobi", "11050001.0.0", "11050000.0.0"),
+                    MaxMediation("ironsource", "ironSource", "907000000.0.0", "907000000.0.0"),
+                    MaxMediation("vungle", "Liftoff Monetize", "7070400.0.0", "7070300.0.0"),
+                    MaxMediation("line", "LINE", "300001010.1.0", "3000100.0.0"),
+                    MaxMediation("facebook", "Meta Audience Network", "6220001.0.0", "6220004.0.0"),
+                    MaxMediation("mintegral", "Mintegral", "17019100.0.0", "801080000.0.0"),
+                    MaxMediation("mobilefuse", "MobileFuse", "1130100.0.0", "1130000.0.0"),
+                    MaxMediation("moloco", "Moloco", "4130001.0.0", "4110101.0.0"),
+                    MaxMediation("ogurypresage", "Ogury", "6030101.0.0", "5030100.0.0"),
+                    MaxMediation("bytedance", "Pangle", "803000401.0.0", "803000800.0.0"),
+                    MaxMediation("pubmatic", "PubMatic", "5040100.0.0", "5040100.0.0"),
+                    MaxMediation("smaato", "Smaato", "23020300.0.0", "23020300.0.0"),
+                    MaxMediation("unityads", "Unity Ads", "4210001.0.0", "4210001.0.0"),
+                    MaxMediation("verve", "Verve", "3090300.0.0", "3090300.0.0"),
+                    MaxMediation("yandex", "Yandex", "8060000.0.0", "8060000.0.0"),
+                    MaxMediation("ysonetwork", "YSO Network", "1030900.0.0", "1020100.0.0"),
                 },
             },
             new GameLibModuleInfo
@@ -208,24 +295,24 @@ namespace FlapGame.GameLib.Editor
                 OptionalSdks = new[]
                 {
                     AdMobMediation("applovin", "AppLovin", "8.7.7"),
-                    AdMobMediation("bidmachine", "BidMachine", "1.5.1"),
+                    AdMobMediation("bidmachine", "BidMachine", "1.5.3"),
                     AdMobMediation("bigo", "Bigo", "3.1.0"),
                     AdMobMediation("chartboost", "Chartboost", "4.15.2"),
-                    AdMobMediation("dtexchange", "DT Exchange", "3.6.0"),
+                    AdMobMediation("dtexchange", "DT Exchange", "3.7.0"),
                     AdMobMediation("imobile", "i-mobile", "1.3.16"),
-                    AdMobMediation("inmobi", "InMobi", "5.4.0"),
-                    AdMobMediation("ironsource", "ironSource", "4.8.1"),
+                    AdMobMediation("inmobi", "InMobi", "5.4.1"),
+                    AdMobMediation("ironsource", "ironSource", "4.9.0"),
                     AdMobMediation("liftoffmonetize", "Liftoff Monetize", "5.7.10"),
                     AdMobMediation("line", "LINE", "2.2.1"),
                     AdMobMediation("maio", "maio", "3.1.11"),
                     AdMobMediation("metaaudiencenetwork", "Meta Audience Network", "3.20.1"),
-                    AdMobMediation("mintegral", "Mintegral", "2.2.6"),
-                    AdMobMediation("moloco", "Moloco", "3.10.1"),
-                    AdMobMediation("mytarget", "myTarget", "3.42.0"),
+                    AdMobMediation("mintegral", "Mintegral", "2.2.7"),
+                    AdMobMediation("moloco", "Moloco", "3.11.0"),
+                    AdMobMediation("mytarget", "myTarget", "3.43.0"),
                     AdMobMediation("pangle", "Pangle", "7.2.2"),
                     AdMobMediation("pubmatic", "PubMatic", "2.4.1"),
                     AdMobMediation("unity", "Unity Ads", "3.22.0"),
-                    AdMobMediation("verve", "Verve", "3.38.0"),
+                    AdMobMediation("verve", "Verve", "1.1.3"),
                 },
             },
             new GameLibModuleInfo

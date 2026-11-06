@@ -293,19 +293,28 @@ namespace FlapGame.GameLib.Editor
                 {
                     using (new EditorGUILayout.HorizontalScope())
                     {
-                        bool has = installed.TryGetValue(sdk.PackageName, out PackageInfo info);
-                        EditorGUILayout.LabelField($"{(has ? "✔" : "○")}  {sdk.DisplayName}", has ? $"{info.version}" : $"{sdk.Location}");
+                        // With its companions (a MAX network's .ios package): installed only when all of them are.
+                        List<SdkRequirement> parts = GameLibModuleCatalog.WithCompanions(sdk).ToList();
+                        bool has = parts.All(p => installed.ContainsKey(p.PackageName));
+                        bool any = parts.Any(p => installed.ContainsKey(p.PackageName));
+                        string versions = string.Join(" / ", parts.Select(p => installed.TryGetValue(p.PackageName, out PackageInfo info) ? info.version : p.Location));
+                        EditorGUILayout.LabelField($"{(has ? "✔" : any ? "◐" : "○")}  {sdk.DisplayName}", versions);
                         using (new EditorGUI.DisabledScope(pendingRequest != null))
                         {
                             if (!has && GUILayout.Button("Install", GUILayout.Width(70)))
                             {
                                 var manifest = new ManifestManager();
-                                manifest.EnsureScopedRegistry(sdk.RegistryName, sdk.RegistryUrl, sdk.RegistryScopes);
+                                foreach (SdkRequirement p in parts)
+                                    manifest.EnsureScopedRegistry(p.RegistryName, p.RegistryUrl, p.RegistryScopes);
                                 manifest.Save();
-                                StartRequest(Client.Add($"{sdk.PackageName}@{sdk.Location}"), $"Installing {sdk.DisplayName}...");
+                                StartRequest(Client.AddAndRemove(parts.Where(p => !installed.ContainsKey(p.PackageName))
+                                                                      .Select(p => $"{p.PackageName}@{p.Location}").ToArray()),
+                                             $"Installing {sdk.DisplayName}...");
                             }
-                            if (has && GUILayout.Button("Remove", GUILayout.Width(70)))
-                                StartRequest(Client.Remove(sdk.PackageName), $"Removing {sdk.DisplayName}...");
+                            if (any && GUILayout.Button("Remove", GUILayout.Width(70)))
+                                StartRequest(Client.AddAndRemove(null, parts.Where(p => installed.ContainsKey(p.PackageName))
+                                                                           .Select(p => p.PackageName).ToArray()),
+                                             $"Removing {sdk.DisplayName}...");
                         }
                     }
                 }

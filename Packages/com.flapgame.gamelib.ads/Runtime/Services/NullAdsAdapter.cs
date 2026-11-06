@@ -161,7 +161,7 @@ namespace FlapGame.GameLib.Ads
         /// <inheritdoc />
         public async ValueTask<AdShowResult> ShowAsync(string placementId, CancellationToken cancellationToken = default)
         {
-            bool banner = placementId != null && formats.TryGetValue(placementId, out AdFormat f) && (f == AdFormat.Banner || f == AdFormat.Mrec);
+            bool banner = placementId != null && formats.TryGetValue(placementId, out AdFormat f) && (f is AdFormat.Banner or AdFormat.Mrec or AdFormat.NativeBanner or AdFormat.NativeCollapsible);
             if (!IsPlacementReady(placementId) && !(banner && initialized && served.Contains(placementId)))
             {
                 Debug.LogWarning($"{LogPrefix} '{placementId}' not shown: not served by the Null adapter.");

@@ -403,4 +403,98 @@ namespace FlapGame.GameLib.Ads.Editor
             EditorGUI.EndProperty();
         }
     }
+
+    /// <summary>
+    /// (0.9.0) Placement row: the default fields, minus the ones its <see cref="AdPlacement.Format"/> never reads - the
+    /// Native fields only for native formats (each on the native format that uses it), and the banner-only / MAX-only
+    /// fields hidden for natives (AdMob only; a native bar takes Position but not Size, Custom Center, preload or MAX color).
+    /// </summary>
+    [CustomPropertyDrawer(typeof(AdPlacement))]
+    public sealed class AdPlacementDrawer : PropertyDrawer
+    {
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            float height = EditorGUIUtility.singleLineHeight;
+            if (!property.isExpanded) return height;
+            AdFormat format = FormatOf(property);
+            foreach (SerializedProperty child in VisibleChildren(property))
+                if (Shows(child.name, format))
+                    height += EditorGUI.GetPropertyHeight(child, true) + EditorGUIUtility.standardVerticalSpacing;
+            return height;
+        }
+
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+        {
+            EditorGUI.BeginProperty(position, label, property);
+            var row = new Rect(position.x, position.y, position.width, EditorGUIUtility.singleLineHeight);
+            property.isExpanded = EditorGUI.Foldout(row, property.isExpanded, label, true);
+            if (property.isExpanded)
+            {
+                AdFormat format = FormatOf(property);
+                float y = row.yMax + EditorGUIUtility.standardVerticalSpacing;
+                EditorGUI.indentLevel++;
+                foreach (SerializedProperty child in VisibleChildren(property))
+                {
+                    if (!Shows(child.name, format)) continue;
+                    float h = EditorGUI.GetPropertyHeight(child, true);
+                    EditorGUI.PropertyField(new Rect(position.x, y, position.width, h), child, true);
+                    y += h + EditorGUIUtility.standardVerticalSpacing;
+                }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUI.EndProperty();
+        }
+
+        private static AdFormat FormatOf(SerializedProperty property)
+        {
+            SerializedProperty format = property.FindPropertyRelative(nameof(AdPlacement.Format));
+            return format != null ? (AdFormat)format.intValue : AdFormat.Interstitial;
+        }
+
+        private static IEnumerable<SerializedProperty> VisibleChildren(SerializedProperty property)
+        {
+            SerializedProperty child = property.Copy();
+            SerializedProperty end = property.GetEndProperty();
+            if (!child.NextVisible(true)) yield break;
+            while (!SerializedProperty.EqualContents(child, end))
+            {
+                yield return child.Copy();
+                if (!child.NextVisible(false)) yield break;
+            }
+        }
+
+        // Which fields a format reads. Everything not named here shows for every format (as before 0.9.0).
+        private static bool Shows(string field, AdFormat format)
+        {
+            bool native = format is AdFormat.NativeBanner or AdFormat.NativeCollapsible or AdFormat.NativeInterstitial;
+            switch (field)
+            {
+                case nameof(AdPlacement.NativeHeightDp):
+                    return format is AdFormat.NativeBanner or AdFormat.NativeCollapsible;
+                case nameof(AdPlacement.NativeBannerHeight):
+                    return format == AdFormat.NativeBanner;
+                case nameof(AdPlacement.NativeCloseDelaySeconds):
+                    return format == AdFormat.NativeInterstitial;
+                case nameof(AdPlacement.NativeCollapseButtonDelaySeconds):
+                case nameof(AdPlacement.NativeStartExpanded):
+                case nameof(AdPlacement.NativeHideOnCollapse):
+                    return format == AdFormat.NativeCollapsible;
+                case nameof(AdPlacement.NativeBackgroundColor):
+                case nameof(AdPlacement.NativeTextColor):
+                case nameof(AdPlacement.NativeCtaColor):
+                case nameof(AdPlacement.NativeCtaTextColor):
+                    return native;
+                case nameof(AdPlacement.Size):
+                case nameof(AdPlacement.CustomCenter):
+                case nameof(AdPlacement.PreloadBanner):
+                case nameof(AdPlacement.BannerBackgroundColor):
+                case nameof(AdPlacement.MaxExtraParameters):
+                    return !native;
+                case nameof(AdPlacement.Position):
+                    return format != AdFormat.NativeInterstitial;
+                default:
+                    return true;
+            }
+        }
+    }
 }

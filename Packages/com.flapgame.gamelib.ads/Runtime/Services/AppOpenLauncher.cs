@@ -33,6 +33,8 @@ namespace FlapGame.GameLib.Ads
         private readonly IAppLifecycle lifecycle;
         private readonly string placementId;
         private readonly CancellationTokenSource lifetime = new();
+        private readonly IAdClickSource clicks;
+        private float lastClickAt = float.NegativeInfinity;
 
         private bool showing;
         private bool started;
@@ -50,7 +52,17 @@ namespace FlapGame.GameLib.Ads
             if (ads is CompositeAdsService composite)
                 AdsStarted = () => composite.IsInitialized || composite.HasActiveRoute(placementId);
             lifecycle.Resumed += OnResumed;
+            clicks = ads as IAdClickSource;
+            if (clicks != null) clicks.AdClicked += OnAdClicked;
         }
+
+        /// <summary>
+        /// (0.9.0) A return waits this long before showing, and shows nothing when an ad click reaches the game in that
+        /// time. SDK click callbacks are marshalled to the main thread, so a click that leaves the app at once (a store
+        /// page, a system "open another app" prompt) is only seen after the return - the return from that click would
+        /// otherwise show an app open ad. Measured on Android: the click arrived 0.11 s after the resume. 0 = no wait.
+        /// </summary>
+        public float LateClickGraceSeconds { get; set; } = 0.5f;
 
         /// <summary>
         /// How long a launch waits for the app open ad to load, counted from <see cref="AdsStarted"/> (consent and SDK
@@ -163,6 +175,7 @@ namespace FlapGame.GameLib.Ads
             if (disposed) return;
             disposed = true;
             lifecycle.Resumed -= OnResumed;
+            if (clicks != null) clicks.AdClicked -= OnAdClicked;
             lifetime.Cancel();
             lifetime.Dispose();
         }
@@ -173,7 +186,36 @@ namespace FlapGame.GameLib.Ads
 
             if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Resume: {info}.");
             if (info.FromExternalActivity || info.TimeAway.TotalSeconds < MinBackgroundSeconds) return;
-            _ = TryShowAsync("return");
+            _ = ReturnAsync();
+        }
+
+        private void OnAdClicked(string placementId) => lastClickAt = Time.realtimeSinceStartup;
+
+        private async Task ReturnAsync()
+        {
+            if (clicks != null && LateClickGraceSeconds > 0f)
+            {
+                float resumedAt = Time.realtimeSinceStartup;
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(LateClickGraceSeconds), lifetime.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+                if (disposed || lifecycle.IsPaused) return;
+                if (lastClickAt >= resumedAt)
+                {
+                    if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Not shown on return: an ad click arrived just after it (the return from that click).");
+                    return;
+                }
+            }
+            await TryShowAsync("return");
         }
 
         private async Task<bool> LaunchAdAsync()

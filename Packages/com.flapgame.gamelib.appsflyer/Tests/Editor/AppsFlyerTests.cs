@@ -101,6 +101,23 @@ namespace FlapGame.GameLib.AppsFlyer.Tests
         }
 
         [Test]
+        public void NativeAdRevenue_IsAdTypeNative_WithAdMobMediation()
+        {
+            var backend = new FakeBackend();
+            new AppsFlyerSink(backend, AppsFlyerPurchaseMode.Manual, false, null).TrackAdRevenue(new AdRevenue
+            {
+                Platform = "AdMob", Network = "Reservation campaign", Format = AdFormatKind.Native, AdUnitId = "n1",
+                Placement = "home_native", Value = 0.004, Currency = "USD",
+            });
+
+            Assert.That(backend.Revenue.Values["ad_type"], Is.EqualTo("native"));
+            Assert.That(backend.Revenue.Mediation, Is.EqualTo(AdMediation.GoogleAdMob));
+            Assert.That(backend.Revenue.Network, Is.EqualTo("Reservation campaign"));
+            Assert.That(backend.Revenue.Values["placement"], Is.EqualTo("home_native"));
+            Assert.That(backend.Revenue.Revenue, Is.EqualTo(0.004));
+        }
+
+        [Test]
         public void Purchase_Manual_IsAfPurchase_OtherModesSendNothing()
         {
             var purchase = new PurchaseRecord

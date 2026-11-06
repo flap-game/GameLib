@@ -71,13 +71,24 @@ namespace FlapGame.GameLib.Ads
                  "(e.g. GameAds_LaunchCount) so its players keep their count.")]
         public string AppOpenLaunchCountKey;
 
-        [Header("While A Fullscreen Ad Is Up")]
-        [Tooltip("Time.timeScale = 0 while an interstitial, rewarded or app open ad is on screen; put back when it closes. " +
-                 "Leave off when the game already pauses on FullscreenShowingChanged.")]
-        public bool PauseGameDuringFullscreenAds;
+        [Header("Banners")]
+        [Tooltip("(0.9.0) On: GetBannerHeightPixels / GetExpectedBannerHeightPixels report only the part of a bar above the " +
+                 "safe area - the space a UI laid out in the safe area must leave free. On iOS a bottom NativeBanner and " +
+                 "bottom standard banners sit on the screen's bottom edge, over the home indicator area, so their full " +
+                 "height would leave an extra gap the size of that inset. Off: the bar's full height. No difference on " +
+                 "Android, where bars end where Unity's screen ends.")]
+        public bool BannerHeightAboveSafeArea = true;
 
-        [Tooltip("AudioListener.pause while a fullscreen ad is on screen, so game music does not play under the ad's sound.")]
-        public bool MuteAudioDuringFullscreenAds;
+        [Header("While A Fullscreen Ad Is Up")]
+        [Tooltip("Time.timeScale = 0 while an interstitial, rewarded, rewarded interstitial, native interstitial or app open " +
+                 "ad is on screen (or a banner's tapped page); put back when it closes. On by default (0.9.0): on iOS the ad " +
+                 "is presented over a game that keeps running. Turn off only when the game already pauses on " +
+                 "FullscreenShowingChanged.")]
+        public bool PauseGameDuringFullscreenAds = true;
+
+        [Tooltip("AudioListener.pause while a fullscreen ad is on screen, so game music and sounds do not play under the ad. " +
+                 "On by default (0.9.0). An AudioSource with ignoreListenerPause keeps playing.")]
+        public bool MuteAudioDuringFullscreenAds = true;
 
         [Header("Startup")]
         [Tooltip("Run consent + SDK initialization in the background so bootstrap is not blocked by network round-trips.")]
@@ -194,6 +205,8 @@ namespace FlapGame.GameLib.Ads
                             WarnEmptyKeys(issues, p.MaxExtraParameters, $"Placement '{p.Id}' Max Extra Parameters");
                         if (p.Format == AdFormat.RewardedInterstitial && r.EffectiveProviderId == AdProviderIds.Max)
                             issues.Add(GameLibIssue.Error($"Placement '{p.Id}': MAX has no rewarded interstitial - route it to AdMob, or use an Interstitial / Rewarded placement on MAX."));
+                        if (p.IsNative && r.EffectiveProviderId == AdProviderIds.Max)
+                            issues.Add(GameLibIssue.Error($"Placement '{p.Id}': MAX has no native ads ({p.Format} is AdMob only) - route it to AdMob, or use a Banner / Interstitial placement on MAX."));
                     }
             }
 
@@ -384,6 +397,7 @@ namespace FlapGame.GameLib.Ads
                 AdFormat.Mrec         => AdFormatKind.Mrec,
                 AdFormat.AppOpen      => AdFormatKind.AppOpen,
                 AdFormat.RewardedInterstitial => AdFormatKind.RewardedInterstitial,
+                AdFormat.NativeBanner or AdFormat.NativeCollapsible or AdFormat.NativeInterstitial => AdFormatKind.Native,
                 _                     => AdFormatKind.Unknown,
             },
             AdUnitId  = impression.AdUnitId,
@@ -696,6 +710,8 @@ namespace FlapGame.GameLib.Ads
             private readonly IAdsPlanSource planSource;
             private readonly IAnalytics analytics;
             private IDisposable fullscreenScope;
+            private int pauses;
+            private bool disposed;
 
             public Wiring(CompositeAdsService ads, IEntitlements entitlements, IAppLifecycle lifecycle, IAdsPlanSource planSource, IAnalytics analytics)
             {
@@ -712,8 +728,35 @@ namespace FlapGame.GameLib.Ads
                     ads.FullscreenShowingChanged += OnFullscreenShowingChanged;
                     ads.AdClicked += OnAdClicked;
                     ads.DebuggerOpening += OnDebuggerOpening;
+                    lifecycle.Resumed += OnResumed;
+                    lifecycle.PauseChanged += OnPauseChanged;
                 }
             }
+
+            // After the return was judged (AppResumeInfo is fixed before Resumed is raised): a banner page left open
+            // with no close from the SDK must not keep the session in "fullscreen ad showing".
+            // Once more a moment later: the SDK's "opened" for the click that left the app is marshalled to the main thread
+            // and can land just after the resume (measured: 0.09 s), which would mark the banner open again. Skipped when
+            // the app paused again meanwhile - a page really opening (browser, store, in-app AdActivity) pauses it.
+            private void OnResumed(AppResumeInfo info)
+            {
+                ads.ReleaseExpandedBannersOnReturn();
+                _ = ReleaseLateOpenAsync(pauses);
+            }
+
+            private void OnPauseChanged(bool paused)
+            {
+                if (paused) pauses++;
+            }
+
+            private async Task ReleaseLateOpenAsync(int pausesAtResume)
+            {
+                await Task.Delay(LateOpenReleaseMilliseconds);
+                if (disposed || pauses != pausesAtResume || lifecycle.IsPaused) return;
+                ads.ReleaseExpandedBannersOnReturn();
+            }
+
+            private const int LateOpenReleaseMilliseconds = 1000;
 
             private void OnEntitlementChanged(string key, bool owned)
             {
@@ -751,6 +794,12 @@ namespace FlapGame.GameLib.Ads
                 ads.FullscreenShowingChanged -= OnFullscreenShowingChanged;
                 ads.AdClicked -= OnAdClicked;
                 ads.DebuggerOpening -= OnDebuggerOpening;
+                disposed = true;
+                if (lifecycle != null)
+                {
+                    lifecycle.Resumed -= OnResumed;
+                    lifecycle.PauseChanged -= OnPauseChanged;
+                }
                 fullscreenScope?.Dispose();
                 fullscreenScope = null;
             }

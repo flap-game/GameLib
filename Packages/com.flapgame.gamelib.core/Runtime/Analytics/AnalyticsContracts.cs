@@ -101,6 +101,8 @@ namespace FlapGame.GameLib
         Mrec = 4,
         AppOpen = 5,
         RewardedInterstitial = 6,
+        /// <summary>(0.9.0) Native banner / collapsible / interstitial.</summary>
+        Native = 7,
     }
 
     /// <summary>One completed (and granted) purchase.</summary>

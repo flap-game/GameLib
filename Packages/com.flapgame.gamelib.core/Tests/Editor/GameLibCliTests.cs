@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using FlapGame.GameLib.Editor;
@@ -47,6 +48,37 @@ namespace FlapGame.GameLib.Tests
                 CollectionAssert.AreEqual(gma.RegistryScopes, sdk.RegistryScopes);
             }
             Assert.AreEqual("pangle", GameLibModuleCatalog.OptionalKey(admob.OptionalSdks.Single(s => s.DisplayName == "Pangle")));
+        }
+
+        [Test]
+        public void MaxMediationAdapters_ComeAsAndroidPlusIosPairs()
+        {
+            GameLibModuleInfo max = GameLibModuleCatalog.Find("ads.max");
+            SdkRequirement core = max.Sdks.Single(s => s.PackageName == "com.applovin.mediation.ads");
+            Assert.AreEqual(GameLibModuleCatalog.MaxVersion, core.Location, "MAX core is pinned with the version set");
+            Assert.That(max.OptionalSdks, Is.Not.Empty);
+            foreach (SdkRequirement sdk in max.OptionalSdks)
+            {
+                StringAssert.StartsWith("com.applovin.mediation.adapters.", sdk.PackageName);
+                StringAssert.EndsWith(".android", sdk.PackageName);
+                SdkRequirement ios = sdk.Companions.Single();
+                Assert.AreEqual(sdk.PackageName.Replace(".android", ".ios"), ios.PackageName);
+                foreach (SdkRequirement part in GameLibModuleCatalog.WithCompanions(sdk))
+                {
+                    Assert.That(part.Location, Is.Not.Empty, part.PackageName);
+                    Assert.AreEqual(core.RegistryUrl, part.RegistryUrl, "the MAX registry serves them");
+                    CollectionAssert.AreEqual(core.RegistryScopes, part.RegistryScopes);
+                }
+                StringAssert.StartsWith("max-", GameLibModuleCatalog.OptionalKey(sdk));
+            }
+            Assert.AreEqual("max-unityads", GameLibModuleCatalog.OptionalKey(max.OptionalSdks.Single(s => s.DisplayName == "Unity Ads")));
+        }
+
+        [Test]
+        public void OptionalKeys_AreUniqueAcrossModules()
+        {
+            List<string> keys = GameLibModuleCatalog.All.SelectMany(m => m.OptionalSdks).Select(GameLibModuleCatalog.OptionalKey).ToList();
+            CollectionAssert.AllItemsAreUnique(keys);
         }
 
         [Test]

@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.9.0] - 2026-11-06
+- NativeCollapsible and NativeBanner in landscape: the ad's background reaches both side edges of the screen (no empty
+  strip next to a camera cutout); the content, the AD badge and the collapse button stay inside the safe area.
+- NativeCollapsible is drawn above standard banners and native banners, whichever shows first, and takes the touches
+  where they overlap (Android: the overlay's Z; iOS to follow).
+- NativeCollapsible expanded in landscape: media on the left, an info column on the right - header (44dp icon,
+  headline 15sp, rating / store / price), the body on up to 2 lines, then the CTA across the column (40dp). The header
+  stops left of the collapse button; the body shrinks to 1 line or goes when the ad is short. Android; iOS to follow.
+- Native ads: `NativeBanner`, `NativeCollapsible` and `NativeInterstitial`, drawn by GameLib's own native views
+  (Android Java / iOS Objective-C++, in `Plugins/`) through `AdMobNativeBridge` (README: Native ads).
+- `INativeCollapseSource`: a `NativeCollapsible` opened expanded / collapsed by the player.
+- Test mode uses Google's native demo units for native placements without a unit id.
+- Fix: hiding a collapsible banner while it is expanded left the SDK's expanded overlay on screen. The view is now
+  destroyed (the next show loads a new one) and the expansion is reported closed, also when the placement is turned off.
+- A collapsible banner opening its expanded panel by itself is no longer reported as fullscreen content: interstitials
+  (standard and native) now show over it instead of being refused with `AnotherAdShowing`. A tap that opens the ad's
+  page is still reported.
+- Landscape: an expanded `NativeCollapsible` shows its media in a left column and the texts on the right (the media
+  stays at least 120 dp, AdMob's video minimum, which the stacked layout missed on a landscape screen). For games with
+  a fixed orientation: a shown ad keeps the layout of the orientation it was shown in.
+- Native bars under 40 dp (a `Smart` `NativeBanner` in landscape) are one line: icon, headline, "AD", body, rating /
+  advertiser / store, button; what does not fit is dropped (price, store, rating, advertiser, then the body).
+- iOS native: the "AD" badge hugs its text (it could stretch to ~140pt and push the icon and text right), and the native
+  interstitial's close button has the accessibility label "Close ad".
+- iOS: ad bars at the bottom sit on the screen's bottom edge (over the home indicator area) instead of the safe area's,
+  which leaves the game the most room: `NativeBanner` (background across the full screen width, content between the
+  safe area's left and right) and standard banners (`Bottom` / `BottomLeft` / `BottomRight`, not collapsible banners,
+  whose expanded panel needs the SDK's anchored position; moved with a custom position once loaded, so a banner keeps
+  the position of the orientation it loaded in). While one is up the home indicator auto-hides (it comes back on
+  touch) and the bottom edge gesture is deferred; the game's `Device.hideHomeButton` / `deferSystemGesturesMode`
+  come back when the last bar hides. A `NativeCollapsible` (collapsed and expanded) reaches the bottom edge with its
+  background only: its content stays above the bottom inset, which it grows by. The one-line layout of bars under 40 pt is on iOS too (`NativeBanner`).
+- Fix (iOS): `BannerSize.SmallFullWidth` never filled ("Ad request doesn't meet size requirements"): iOS refuses
+  `AdSize.FullWidth` at any height. The width is now the safe area's in dp.
+- iOS native: only the ad's assets (headline, body, icon, button, media, rating, advertiser, store, price) take a click;
+  the "AD" badge, the gaps between them, the background, the collapse / close buttons do not (as on Android). A touch on
+  a native ad's background no longer reaches the game under it either.
+- iOS `NativeCollapsible`: the expanded landscape layout of Android (media left; icon, headline, meta, body, a full-width
+  button on the right), Android's text and icon / button sizes for the bar and the expanded row, and it stays above
+  banners and native banners shown after it. In landscape the background spans the screen's width while the media,
+  "AD", collapse button and AdChoices stay inside the left / right safe area (clear of the Dynamic Island / notch).
+
 ## [0.8.10] - 2026-10-27
 - Banner fullscreen content (`OnAdFullScreenContentOpened` / `Closed`) is reported as an expanded banner.
 

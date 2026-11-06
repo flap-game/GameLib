@@ -28,6 +28,12 @@ namespace FlapGame.GameLib.Ads
         public int? ShowEveryNthRequest;
         public bool? SuppressedByNoAds;
 
+        /// <summary>(0.9.0) <see cref="AdPlacement.NativeCloseDelaySeconds"/> (NativeInterstitial). Null = local value.</summary>
+        public int? NativeCloseDelaySeconds;
+
+        /// <summary>(0.9.0) <see cref="AdPlacement.NativeCollapseButtonDelaySeconds"/> (NativeCollapsible). Null = local value.</summary>
+        public int? NativeCollapseButtonDelaySeconds;
+
         [Preserve]
         public AdPlacementOverride() { }
 
@@ -40,6 +46,8 @@ namespace FlapGame.GameLib.Ads
             MaxShowsPerSession = p.MaxShowsPerSession,
             ShowEveryNthRequest = p.ShowEveryNthRequest,
             SuppressedByNoAds  = p.SuppressedByNoAds,
+            NativeCloseDelaySeconds          = p.NativeCloseDelaySeconds,
+            NativeCollapseButtonDelaySeconds = p.NativeCollapseButtonDelaySeconds,
         };
     }
 }

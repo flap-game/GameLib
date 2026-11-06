@@ -66,6 +66,12 @@ namespace FlapGame.GameLib.Ads
         public float? WaitForFillSeconds;
         public bool?  SuppressedByNoAds;
 
+        /// <summary>(0.9.0) <see cref="AdPlacement.NativeCloseDelaySeconds"/> (NativeInterstitial). Null = local value.</summary>
+        public int?   NativeCloseDelaySeconds;
+
+        /// <summary>(0.9.0) <see cref="AdPlacement.NativeCollapseButtonDelaySeconds"/> (NativeCollapsible). Null = local value.</summary>
+        public int?   NativeCollapseButtonDelaySeconds;
+
         /// <summary>False = the placement never shows (<c>AdBlockReason.PlacementDisabled</c>) and nothing loads for it.</summary>
         public bool? Enabled;
 

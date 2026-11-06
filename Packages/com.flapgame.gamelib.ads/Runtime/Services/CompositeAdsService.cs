@@ -16,7 +16,7 @@ namespace FlapGame.GameLib.Ads
     /// legacy <c>ads_placements</c> overrides (<see cref="ApplyOverrides(IEnumerable{AdPlacementOverride})"/>).
     /// </para>
     /// </summary>
-    public sealed class CompositeAdsService : IAdsService, IBannerMetrics, IAdClickSource, IDisposable
+    public sealed class CompositeAdsService : IAdsService, IBannerMetrics, IAdClickSource, INativeCollapseSource, IDisposable
     {
         private const string LogPrefix = "[Ads]";
 
@@ -56,6 +56,9 @@ namespace FlapGame.GameLib.Ads
         // Banners the game wants visible (ShowAsync until HideBanner / DestroyBanner), and the provider asked to show each.
         private readonly HashSet<string> wantedBanners = new();
         private readonly Dictionary<string, string> bannerProvider = new();
+        // NativeCollapsible placements reported expanded since their last show / hide: only a collapse of one of these is
+        // the player's (a show with NativeStartExpanded off also reports collapsed, and must not hide the ad).
+        private readonly HashSet<string> expandedNatives = new();
         private readonly Func<bool> noAdsOwned;
         private readonly Func<float> now;
         private readonly Func<IAdsProviderAdapter, AdsProviderContext> contextFactory;
@@ -128,6 +131,14 @@ namespace FlapGame.GameLib.Ads
         public event Action<string> AdClicked;
 
         /// <summary>
+        /// (0.9.0) A <see cref="AdFormat.NativeCollapsible"/> placement of an adapter that reports it
+        /// (<see cref="INativeCollapseSource"/>) opened expanded (true) or collapsed (false). When the player collapses (false after true) a
+        /// placement with <see cref="AdPlacement.NativeHideOnCollapse"/> on, the composite hides it (as
+        /// <see cref="HideBanner"/>) before raising false; the game shows it again with ShowBanner.
+        /// </summary>
+        public event Action<string, bool> NativeExpandedChanged;
+
+        /// <summary>
         /// Raised with the provider id right before an SDK debug screen opens (<see cref="OpenDebuggerAsync"/>). On Android
         /// it is a separate activity: the installer marks the trip as game-initiated, so the return shows no app open ad.
         /// </summary>
@@ -193,6 +204,12 @@ namespace FlapGame.GameLib.Ads
                     Action<string, bool> expanded = OnAdapterBannerExpanded;
                     expansion.BannerExpandedChanged += expanded;
                     unsubscribe.Add(() => expansion.BannerExpandedChanged -= expanded);
+                }
+                if (a is INativeCollapseSource nativeCollapse)
+                {
+                    Action<string, bool> changed = OnAdapterNativeExpanded;
+                    nativeCollapse.NativeExpandedChanged += changed;
+                    unsubscribe.Add(() => nativeCollapse.NativeExpandedChanged -= changed);
                 }
             }
 
@@ -420,9 +437,9 @@ namespace FlapGame.GameLib.Ads
         }
 
         // Interstitial pacing (session grace, interval, level gate, shared timer): interstitials, rewarded interstitials -
-        // shown without the player asking - and app opens when the policy says so.
+        // shown without the player asking -, native interstitials (0.9.0) and app opens when the policy says so.
         private bool FollowsInterstitialRules(AdPlacement p) =>
-            p.Format is AdFormat.Interstitial or AdFormat.RewardedInterstitial
+            p.Format is AdFormat.Interstitial or AdFormat.RewardedInterstitial or AdFormat.NativeInterstitial
             || (p.Format == AdFormat.AppOpen && policy.AppOpenFollowsInterstitialRules);
 
         private void RaiseReadyChangedForFullscreen()
@@ -670,6 +687,8 @@ namespace FlapGame.GameLib.Ads
                 if (o.MaxShowsPerSession.HasValue) merged.MaxShowsPerSession = o.MaxShowsPerSession;
                 if (o.ShowEveryNthRequest.HasValue) merged.ShowEveryNthRequest = o.ShowEveryNthRequest;
                 if (o.SuppressedByNoAds.HasValue)  merged.SuppressedByNoAds  = o.SuppressedByNoAds;
+                if (o.NativeCloseDelaySeconds.HasValue) merged.NativeCloseDelaySeconds = o.NativeCloseDelaySeconds;
+                if (o.NativeCollapseButtonDelaySeconds.HasValue) merged.NativeCollapseButtonDelaySeconds = o.NativeCollapseButtonDelaySeconds;
                 if (o.Routes != null && o.Routes.Count > 0) merged.Routes = new List<AdRoute>(o.Routes);
                 applied.Add(o.Id);
             }
@@ -729,6 +748,9 @@ namespace FlapGame.GameLib.Ads
                     if (rule.PersistRequestCount.HasValue)  p.PersistRequestCount = rule.PersistRequestCount.Value;
                     if (rule.WaitForFillSeconds.HasValue)   p.WaitForFillSeconds = Mathf.Max(0f, rule.WaitForFillSeconds.Value);
                     if (rule.SuppressedByNoAds.HasValue)    p.SuppressedByNoAds  = rule.SuppressedByNoAds.Value;
+                    if (rule.NativeCloseDelaySeconds.HasValue) p.NativeCloseDelaySeconds = Math.Max(0, rule.NativeCloseDelaySeconds.Value);
+                    if (rule.NativeCollapseButtonDelaySeconds.HasValue)
+                        p.NativeCollapseButtonDelaySeconds = Math.Max(0, rule.NativeCollapseButtonDelaySeconds.Value);
                     if (rule.Routes != null && rule.Routes.Count > 0) p.Routes = OrderRoutes(p, rule.Routes, logPlan);
                 }
             }
@@ -740,12 +762,29 @@ namespace FlapGame.GameLib.Ads
                 if (o.MaxShowsPerSession.HasValue) local.MaxShowsPerSession = Math.Max(0, o.MaxShowsPerSession.Value);
                 if (o.ShowEveryNthRequest.HasValue) local.ShowEveryNthRequest = Math.Max(0, o.ShowEveryNthRequest.Value);
                 if (o.SuppressedByNoAds.HasValue)  local.SuppressedByNoAds  = o.SuppressedByNoAds.Value;
+                if (o.NativeCloseDelaySeconds.HasValue) local.NativeCloseDelaySeconds = Math.Max(0, o.NativeCloseDelaySeconds.Value);
+                if (o.NativeCollapseButtonDelaySeconds.HasValue)
+                    local.NativeCollapseButtonDelaySeconds = Math.Max(0, o.NativeCollapseButtonDelaySeconds.Value);
                 if (o.Routes != null && o.Routes.Count > 0)
                 {
                     List<AdRoute> routes = MergeRoutes(local, o.Routes, logLegacy);
                     if (routes.Count > 0) local.Routes = routes;
                     else if (logLegacy) Debug.LogWarning($"{LogPrefix} Override for '{o.Id}' names no provider the placement is routed to locally - routes kept.");
                 }
+            }
+            PushNativeTimings();
+        }
+
+        // (0.9.0) Overrides live on the composite's clones only; hand the native timings to adapters that show natives.
+        private void PushNativeTimings()
+        {
+            foreach (IAdsProviderAdapter a in adapters)
+            {
+                if (a is not INativeTimingAdapter sink) continue;
+                foreach (AdPlacement p in placements.Values)
+                    if (p.IsNative)
+                        try { sink.SetNativeTiming(p.Id, Math.Max(0, p.NativeCloseDelaySeconds), Math.Max(0, p.NativeCollapseButtonDelaySeconds)); }
+                        catch (Exception e) { Debug.LogException(e); }
             }
         }
 
@@ -1409,6 +1448,7 @@ namespace FlapGame.GameLib.Ads
             if (string.IsNullOrEmpty(placementId)) return;
             wantedBanners.Remove(placementId); // also cancels a show still waiting for its provider
             bannerProvider.Remove(placementId);
+            expandedNatives.Remove(placementId);
             SetBannerExpanded(placementId, false);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.HideBanner(placementId);
             CheckBannerHeight(placementId);
@@ -1420,6 +1460,7 @@ namespace FlapGame.GameLib.Ads
             if (string.IsNullOrEmpty(placementId)) return;
             wantedBanners.Remove(placementId);
             bannerProvider.Remove(placementId);
+            expandedNatives.Remove(placementId);
             SetBannerExpanded(placementId, false);
             foreach (IAdsProviderAdapter adapter in adapters) adapter.DestroyBanner(placementId);
             CheckBannerHeight(placementId);
@@ -1499,6 +1540,23 @@ namespace FlapGame.GameLib.Ads
             SetBannerExpanded(placementId, expanded);
         }
 
+        /// <summary>
+        /// (0.9.0) Called when the player is back in the app: a banner still counted as showing fullscreen content (the
+        /// page a tap opened) is back in its slot - that page was left to come back. Some SDK paths never send the close
+        /// (measured on Android: an MREC click whose "open another app" system prompt was dismissed), and the banner then
+        /// counted as a fullscreen ad for the rest of the session: no app open ad on any later return, and interstitials
+        /// refused with AnotherAdShowing. The return itself was already judged (from the ad) before this runs.
+        /// </summary>
+        public void ReleaseExpandedBannersOnReturn()
+        {
+            if (disposed || expandedBanners.Count == 0) return;
+            foreach (string placementId in new List<string>(expandedBanners))
+            {
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Banner '{placementId}': back in the app with no close from the SDK.");
+                SetBannerExpanded(placementId, false);
+            }
+        }
+
         private void SetBannerExpanded(string placementId, bool expanded)
         {
             bool was = IsShowingFullscreen;
@@ -1516,6 +1574,22 @@ namespace FlapGame.GameLib.Ads
         private void RaiseShowResult(string placementId, string providerId, AdShowResult result)
         {
             try { ShowResult?.Invoke(placementId, AdProviderIds.Normalize(providerId), result); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+
+        // A collapse by the player (collapsed after it was expanded) of a NativeCollapsible with NativeHideOnCollapse:
+        // hidden as if the game called HideBanner (dropped from the wanted set, so no restore brings it back), then the event.
+        private void OnAdapterNativeExpanded(string placementId, bool expanded)
+        {
+            if (disposed || string.IsNullOrEmpty(placementId)) return;
+            bool wasExpanded = expanded ? !expandedNatives.Add(placementId) : expandedNatives.Remove(placementId);
+            if (!expanded && wasExpanded && placements.TryGetValue(placementId, out AdPlacement p)
+                && p.Format == AdFormat.NativeCollapsible && p.NativeHideOnCollapse)
+            {
+                if (AdsLog.Verbose) Debug.Log($"{LogPrefix} Native '{placementId}' collapsed by the player: hidden (NativeHideOnCollapse).");
+                HideBanner(placementId);
+            }
+            try { NativeExpandedChanged?.Invoke(placementId, expanded); }
             catch (Exception e) { Debug.LogException(e); }
         }
 

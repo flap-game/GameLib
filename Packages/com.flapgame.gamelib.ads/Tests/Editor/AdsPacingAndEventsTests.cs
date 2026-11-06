@@ -172,6 +172,18 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void FullscreenPause_AndMute_AreOnByDefault()
+        {
+            var module = ScriptableObject.CreateInstance<AdsModule>();
+            try
+            {
+                Assert.That(module.PauseGameDuringFullscreenAds, Is.True);
+                Assert.That(module.MuteAudioDuringFullscreenAds, Is.True);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(module); }
+        }
+
+        [Test]
         public void FullscreenPause_KeepsAPauseTheGameSetDuringTheAd()
         {
             using var ads = Create();
@@ -367,6 +379,26 @@ namespace FlapGame.GameLib.Ads.Tests
             ads.HideBanner("banner");
             Assert.That(ads.IsShowingFullscreen, Is.False, "a hidden banner shows nothing");
             Assert.That(ads.CanShow("inter", out _), Is.True);
+        }
+
+        [Test]
+        public void ExpandedBanner_WithNoCloseFromTheSdk_IsReleasedOnReturn()
+        {
+            using var ads = Create();
+            ads.InitializeAsync().AsTask().GetAwaiter().GetResult();
+            max.MarkReady("inter");
+            var changes = new List<bool>();
+            ads.FullscreenShowingChanged += changes.Add;
+
+            max.Expand("banner", true); // a tap opened the ad's page; the SDK never sends the close
+            ads.ReleaseExpandedBannersOnReturn();
+            Assert.That(ads.IsShowingFullscreen, Is.False);
+            Assert.That(ads.CanShow("inter", out _), Is.True, "no AnotherAdShowing for the rest of the session");
+
+            max.Expand("banner", false); // a late close changes nothing
+            max.Expand("banner", true);  // the next click's page counts again
+            Assert.That(ads.IsShowingFullscreen, Is.True);
+            Assert.That(changes, Is.EqualTo(new[] { true, false, true }));
         }
 
         [Test]

@@ -82,7 +82,8 @@ namespace FlapGame.GameLib.Editor
         /// them in GameLibSettings. Idempotent: run it until it returns <see cref="GameLibInstallStatus.Done"/>. A run that
         /// edits the manifest returns <see cref="GameLibInstallStatus.RunAgain"/>, because the module types only exist after
         /// Unity resolves and compiles the new packages. <paramref name="optionalSdks"/>: keys of the chain's
-        /// <see cref="GameLibModuleInfo.OptionalSdks"/> to install as well (<c>pangle</c>).
+        /// <see cref="GameLibModuleInfo.OptionalSdks"/> to install as well (<c>pangle</c>, <c>max-unityads</c>), with their
+        /// <see cref="SdkRequirement.Companions"/>.
         /// </summary>
         public static GameLibInstallReport InstallModules(IEnumerable<string> moduleIds, IEnumerable<string> optionalSdks = null)
         {
@@ -111,7 +112,7 @@ namespace FlapGame.GameLib.Editor
             foreach (string key in (optionalSdks ?? Enumerable.Empty<string>()).Select(k => k.Trim()).Where(k => k.Length > 0).Distinct())
             {
                 SdkRequirement sdk = offered.FirstOrDefault(s => GameLibModuleCatalog.OptionalKey(s) == key || s.PackageName == key);
-                if (sdk != null) extras.Add(sdk);
+                if (sdk != null) extras.AddRange(GameLibModuleCatalog.WithCompanions(sdk));
                 else report.Errors.Add($"Unknown optional SDK '{key}' for {string.Join(", ", requested.Select(m => m.Id))}. " +
                                        $"Optional: {(offered.Count > 0 ? string.Join(", ", offered.Select(GameLibModuleCatalog.OptionalKey)) : "none")}.");
             }
@@ -177,7 +178,8 @@ namespace FlapGame.GameLib.Editor
                     state.MissingSdks.AddRange(GameLibModuleCatalog.WithDependencies(module).SelectMany(m => m.Sdks).Distinct()
                                                                    .Where(s => !installed.ContainsKey(s.PackageName))
                                                                    .Select(s => s.PackageName));
-                    state.OptionalSdks.AddRange(module.OptionalSdks.Where(s => installed.ContainsKey(s.PackageName))
+                    state.OptionalSdks.AddRange(module.OptionalSdks.SelectMany(GameLibModuleCatalog.WithCompanions)
+                                                      .Where(s => installed.ContainsKey(s.PackageName))
                                                       .Select(s => $"{s.PackageName}@{installed[s.PackageName].version}"));
                     if (module.ModuleTypeName != null)
                     {

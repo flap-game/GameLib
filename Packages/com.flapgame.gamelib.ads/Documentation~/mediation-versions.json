@@ -1,0 +1,52 @@
+{
+  "_comment": "AdMob + AppLovin MAX mediation in one app: a version set whose native pins agree on Android (Gradle) and iOS (CocoaPods). Generated and checked by Tools/mediation_versions.py; see mediation-versions.md. Do not hand-edit one side without the other.",
+  "checked": "2026-11-06",
+  "core": {
+    "com.google.ads.mobile": "11.6.0",
+    "com.applovin.mediation.ads": "8.6.6"
+  },
+  "native": {
+    "gma_android": "25.5.0",
+    "gma_ios": "13.11.0",
+    "applovin_sdk": "13.6.4",
+    "ios_min": "15.0",
+    "android_min_sdk": 25
+  },
+  "networks": [
+    {"network": "AppLovin",          "admob": {"applovin": "8.7.7"},             "max": null, "sdk": {"android": "13.6.4", "ios": "13.6.4"}, "note": "AdMob's AppLovin adapter pins AppLovinSDK = 13.6.4 on iOS, the SDK MAX 8.6.6 ships. Upgrade MAX core and this adapter together."},
+    {"network": "BidMachine",        "admob": {"bidmachine": "1.5.3"},           "max": {"bidmachine": ["3080001.0.0", "308020000.0.0"]},   "sdk": {"android": "3.8.0", "ios": "3.8.2"}},
+    {"network": "BIGO Ads",          "admob": {"bigo": "3.1.0"},                 "max": {"bigoads": ["6010000.0.0", "6010001.0.0"]},        "sdk": {"android": "6.1.0", "ios": "6.1.0"}, "note": "MAX Android 6020000 (6.2.0) is newer; held at 6.1.0 to match AdMob."},
+    {"network": "Chartboost",        "admob": {"chartboost": "4.15.2"},          "max": {"chartboost": ["9140101.0.0", "9140200.0.0"]},     "sdk": {"android": "9.14.1", "ios": "9.14.2"}},
+    {"network": "DT Exchange",       "admob": {"dtexchange": "3.7.0"},           "max": {"fyber": ["8050000.0.0", "8050100.0.0"]},          "sdk": {"android": "8.5.0", "ios": "8.5.1"}, "note": "MAX Android 8050100 (8.5.1) is newer; held to match AdMob. iOS min 15.0. iOS: DT 8.5.0/8.5.1 crash a few seconds after init when MAX test mode is on (QA devices); none seen with test mode off - see mediation-versions.md, Traps."},
+    {"network": "Google AdMob (as a MAX network)", "admob": null,                "max": {"google": ["25050000.0.0", "13110000.0.0"], "googleadmanager": ["25050000.0.0", "13110000.0.0"]}, "sdk": {"android": "25.5.0", "ios": "13.11.0"}, "note": "MAX's Google adapters pin GMA exactly; they must equal what com.google.ads.mobile resolves (Android 25.5.0, iOS ~> 13.11)."},
+    {"network": "InMobi",            "admob": {"inmobi": "5.4.1"},               "max": {"inmobi": ["11050001.0.0", "11050000.0.0"]},       "sdk": {"android": "11.5.0", "ios": "11.5.0"}, "note": "MAX Android 11050100 (11.5.1) is newer; held to match AdMob."},
+    {"network": "ironSource",        "admob": {"ironsource": "4.9.0"},           "max": {"ironsource": ["907000000.0.0", "907000000.0.0"]}, "sdk": {"android": "9.7.0", "ios": "9.7.0.0"}},
+    {"network": "Liftoff Monetize",  "admob": {"liftoffmonetize": "5.7.10"},     "max": {"vungle": ["7070400.0.0", "7070300.0.0"]},         "sdk": {"android": "7.7.4", "ios": "7.7.3"}, "note": "Google's adapter lags (Vungle 7.7.4 / 7.7.3); MAX held back to it (MAX newest: 7.7.9 / 7.7.8)."},
+    {"network": "LINE (FiveAd)",     "admob": {"line": "2.2.1"},                 "max": {"line": ["300001010.1.0", "3000100.0.0"]},         "sdk": {"android": "3.1.1", "ios": "3.0.1"}, "note": "No MAX Android adapter for FiveAd 3.1.0: Gradle takes 3.1.1 from MAX over AdMob's 3.1.0 (patch level). iOS pinned 3.0.1 on both."},
+    {"network": "Meta Audience Network", "admob": {"metaaudiencenetwork": "3.20.1"}, "max": {"facebook": ["6220001.0.0", "6220004.0.0"]},   "sdk": {"android": "6.22.0", "ios": "6.22.0"}, "note": "MAX iOS 6220100 (6.22.1) is newer; held to match AdMob. iOS min 15.0."},
+    {"network": "Mintegral",         "admob": {"mintegral": "2.2.7"},            "max": {"mintegral": ["17019100.0.0", "801080000.0.0"]},   "sdk": {"android": "17.1.91", "ios": "8.1.8"}, "note": "MAX Android 17022100 (17.2.21) is newer; held to match AdMob."},
+    {"network": "Moloco",            "admob": {"moloco": "3.11.0"},              "max": {"moloco": ["4130001.0.0", "4110101.0.0"]},         "sdk": {"android": "4.13.0", "ios": "4.11.1"}, "note": "MAX newest 4.14.0 / 4.12.0; held to match AdMob."},
+    {"network": "Pangle",            "admob": {"pangle": "7.2.2"},               "max": {"bytedance": ["803000401.0.0", "803000800.0.0"]},  "sdk": {"android": "8.3.0.4", "ios": "8.3.0.8"}, "note": "AdMob 7.3.0 (Pangle 8.4.0.5) has no MAX iOS match yet (MAX iOS newest 8.3.0.9). Do not install the old com.applovin.mediation.adapters.pangle.ios package."},
+    {"network": "PubMatic",          "admob": {"pubmatic": "2.4.1"},             "max": {"pubmatic": ["5040100.0.0", "5040100.0.0"]},       "sdk": {"android": "5.4.1", "ios": "5.4.1"}, "note": "MAX iOS 5050000 (5.5.0) is newer; held to match AdMob."},
+    {"network": "Unity Ads",         "admob": {"unity": "3.22.0"},               "max": {"unityads": ["4210001.0.0", "4210001.0.0"]},       "sdk": {"android": "4.21.0", "ios": "4.21.0"}},
+    {"network": "Verve (HyBid)",     "admob": {"verve": "1.1.3"},                "max": {"verve": ["3090300.0.0", "3090300.0.0"]},          "sdk": {"android": "3.9.3", "ios": "3.9.3"}, "note": "Never AdMob verve 3.38.0: a broken publish (OpenUPM tags it latest) - its Android pulls the myTarget adapter and its iOS pod GoogleMobileAdsMediationVerve 5.43.0.0 does not exist, so pod install fails."},
+
+    {"network": "i-mobile",          "admob": {"imobile": "1.3.16"},             "max": null, "sdk": {"android": "2.3.2", "ios": "2.3.4"}, "note": "AdMob only."},
+    {"network": "maio",              "admob": {"maio": "3.1.11"},                "max": null, "sdk": {"android": "2.0.9", "ios": "2.2.3"}, "note": "AdMob only. MAX's maio adapters stopped at 2.0.4 / 2.1.6 (2025); the only AdMob adapter on those SDKs (3.0.x) needs GMA iOS ~> 12, so no shared version exists. Never install both."},
+    {"network": "myTarget",          "admob": {"mytarget": "3.43.0"},            "max": null, "sdk": {"android": "5.52.5", "ios": "5.47.0"}, "note": "AdMob only: AppLovin dropped myTarget from MAX. Never install com.applovin.mediation.adapters.mytarget.* next to it."},
+
+    {"network": "MobileFuse",        "admob": null, "max": {"mobilefuse": ["1130100.0.0", "1130000.0.0"]},        "sdk": {"android": "1.13.1", "ios": "1.13.0"}, "note": "MAX only. iOS min 15.0."},
+    {"network": "Ogury",             "admob": null, "max": {"ogurypresage": ["6030101.0.0", "5030100.0.0"]},      "sdk": {"android": "6.3.1", "ios": "5.3.1"}, "note": "MAX only. iOS min 15.0."},
+    {"network": "Smaato",            "admob": null, "max": {"smaato": ["23020300.0.0", "23020300.0.0"]},          "sdk": {"android": "23.2.3", "ios": "23.2.3"}, "note": "MAX only."},
+    {"network": "Yandex",            "admob": null, "max": {"yandex": ["8060000.0.0", "8060000.0.0"]},            "sdk": {"android": "8.6.0", "ios": "8.6.0"}, "note": "MAX only. iOS min 15.0."},
+    {"network": "YSO Network",       "admob": null, "max": {"ysonetwork": ["1030900.0.0", "1020100.0.0"]},        "sdk": {"android": "1.3.9", "ios": "1.2.1"}, "note": "MAX only."}
+  ],
+  "excluded": [
+    {"package": "com.applovin.mediation.adapters.hyprmx.*", "why": "MAX 8.6.6 treats HyprMX as obsolete and uninstalls both packages on Editor load ('Uninstalling obsolete network package')."},
+    {"package": "com.applovin.mediation.adapters.csj.ios", "why": "Obsolete in MAX 8.6.6 (AppLovinInitialize.ObsoleteNetworks): uninstalled on Editor load."},
+    {"package": "com.applovin.mediation.adapters.tencentgdt.ios", "why": "Obsolete in MAX 8.6.6: uninstalled on Editor load."},
+    {"package": "com.applovin.mediation.adapters.pangle.ios", "why": "Deprecated (Pangle 4.7); Pangle on MAX is bytedance.*."},
+    {"package": "com.applovin.mediation.adapters.maio.*", "why": "Obsolete in MAX 8.6.6 (uninstalled on Editor load); maio goes through AdMob."},
+    {"package": "com.applovin.mediation.adapters.mytarget.*", "why": "Obsolete in MAX 8.6.6 (uninstalled on Editor load); myTarget goes through AdMob."}
+  ]
+}
