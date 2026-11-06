@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1] - 2026-11-06
+- Agent guide: read the ids from the game's GameHub release config (what each section maps to); MAX adapters come from
+  Install (`max-` keys), not the Integration Manager; native ad formats; register the device as a test device on both
+  SDKs before testing real ad units (how to get each id); symptoms seen in device tests (Ad Inspector "No adapters
+  found", adapter key errors, DT Exchange iOS crash in MAX test mode, pod version conflicts, MAX removing obsolete
+  networks). Docs only, no code change.
+
 ## [0.9.0] - 2026-11-06
 - Setup: Ads - AppLovin MAX offers MAX's mediation adapters (22 networks) as optional SDKs, each network's `.android`
   and `.ios` package installed / removed together (`SdkRequirement.Companions`), pinned with the AdMob + MAX version

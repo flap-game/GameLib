@@ -6,7 +6,7 @@ install it and add `using FlapGame.GameLib.Extensions;`.
 Install from **GameLib > Setup > Extensions**, or add to `Packages/manifest.json`:
 
 ```
-https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.extensions#v0.9.0
+https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.extensions#v0.9.1
 ```
 
 ## What is in it
