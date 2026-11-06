@@ -1,6 +1,10 @@
 # Changelog
 
 ## [0.9.0] - 2026-11-06
+- `PauseGameDuringFullscreenAds` and `MuteAudioDuringFullscreenAds` are on by default (new `AdsModule` assets): the game
+  (`Time.timeScale = 0`) and its audio (`AudioListener.pause`) stop while an interstitial, rewarded, rewarded
+  interstitial, native interstitial or app open ad is up, and come back when it closes. On iOS the ad is presented over
+  a game that keeps running. An existing `AdsModule` asset keeps its saved values: tick both there.
 - `AdsModule.BannerHeightAboveSafeArea` (default on): `GetBannerHeightPixels` / `GetExpectedBannerHeightPixels` report
   only the part of a bar above the safe area. On iOS bottom native banners and bottom standard banners sit on the screen's
   bottom edge (over the home indicator area); their full height would leave an inset-sized gap under a UI laid out in the

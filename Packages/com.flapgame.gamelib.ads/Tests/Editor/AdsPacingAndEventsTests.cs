@@ -172,6 +172,18 @@ namespace FlapGame.GameLib.Ads.Tests
         }
 
         [Test]
+        public void FullscreenPause_AndMute_AreOnByDefault()
+        {
+            var module = ScriptableObject.CreateInstance<AdsModule>();
+            try
+            {
+                Assert.That(module.PauseGameDuringFullscreenAds, Is.True);
+                Assert.That(module.MuteAudioDuringFullscreenAds, Is.True);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(module); }
+        }
+
+        [Test]
         public void FullscreenPause_KeepsAPauseTheGameSetDuringTheAd()
         {
             using var ads = Create();

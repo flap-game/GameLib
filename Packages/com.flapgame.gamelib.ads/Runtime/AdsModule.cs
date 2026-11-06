@@ -80,12 +80,15 @@ namespace FlapGame.GameLib.Ads
         public bool BannerHeightAboveSafeArea = true;
 
         [Header("While A Fullscreen Ad Is Up")]
-        [Tooltip("Time.timeScale = 0 while an interstitial, rewarded or app open ad is on screen; put back when it closes. " +
-                 "Leave off when the game already pauses on FullscreenShowingChanged.")]
-        public bool PauseGameDuringFullscreenAds;
+        [Tooltip("Time.timeScale = 0 while an interstitial, rewarded, rewarded interstitial, native interstitial or app open " +
+                 "ad is on screen (or a banner's tapped page); put back when it closes. On by default (0.9.0): on iOS the ad " +
+                 "is presented over a game that keeps running. Turn off only when the game already pauses on " +
+                 "FullscreenShowingChanged.")]
+        public bool PauseGameDuringFullscreenAds = true;
 
-        [Tooltip("AudioListener.pause while a fullscreen ad is on screen, so game music does not play under the ad's sound.")]
-        public bool MuteAudioDuringFullscreenAds;
+        [Tooltip("AudioListener.pause while a fullscreen ad is on screen, so game music and sounds do not play under the ad. " +
+                 "On by default (0.9.0). An AudioSource with ignoreListenerPause keeps playing.")]
+        public bool MuteAudioDuringFullscreenAds = true;
 
         [Header("Startup")]
         [Tooltip("Run consent + SDK initialization in the background so bootstrap is not blocked by network round-trips.")]
