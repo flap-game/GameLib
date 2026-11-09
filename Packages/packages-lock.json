@@ -45,6 +45,14 @@
         "com.flapgame.gamelib.firebase": "0.9.1"
       }
     },
+    "com.flapgame.gamelib.analytics.local": {
+      "version": "file:com.flapgame.gamelib.analytics.local",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.flapgame.gamelib.core": "0.9.1"
+      }
+    },
     "com.flapgame.gamelib.appicon": {
       "version": "file:com.flapgame.gamelib.appicon",
       "depth": 0,

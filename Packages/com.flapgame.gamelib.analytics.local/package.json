@@ -1,0 +1,21 @@
+{
+  "name": "com.flapgame.gamelib.analytics.local",
+  "version": "0.9.1",
+  "displayName": "GameLib Analytics - Local",
+  "description": "Local tracking for test devices: on the office LAN every event also goes to the internal tracking server, and the online sinks stay off.",
+  "unity": "6000.4",
+  "author": {
+    "name": "Flap Game",
+    "url": "https://github.com/flap-game/GameLib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flap-game/GameLib.git"
+  },
+  "keywords": [
+    "gamelib"
+  ],
+  "dependencies": {
+    "com.flapgame.gamelib.core": "0.9.1"
+  }
+}

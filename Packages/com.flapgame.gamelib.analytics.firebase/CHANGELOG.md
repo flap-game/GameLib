@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.9.2] - Unreleased
+- The sink is not installed (and Firebase Analytics not started) while local tracking is active on this device
+  (`LocalTracking.SuppressesOnline`), so test events do not reach the production property.
+
 ## [0.8.6] - 2026-10-27
 - `ad_format` `rewarded_interstitial`.
 

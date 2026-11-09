@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.2] - Unreleased
+- `ILocalTracking` and `LocalTracking.SuppressesOnline` / `SuppressesAttribution`: the contract the new local tracking
+  module (`analytics.local`) registers when a session runs on a test device, so the online sinks can stay off. Nothing
+  registers it in a normal build and every sink installs as before.
+- Setup lists **Analytics - Local** (`com.flapgame.gamelib.analytics.local`).
+
 ## [0.9.1] - 2026-11-06
 - Agent guide: read the ids from the game's GameHub release config (what each section maps to); MAX adapters come from
   Install (`max-` keys), not the Integration Manager; native ad formats; register the device as a test device on both

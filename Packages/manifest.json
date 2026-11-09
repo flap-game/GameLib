@@ -32,6 +32,7 @@
     "com.flapgame.gamelib.ads",
     "com.flapgame.gamelib.ads.max",
     "com.flapgame.gamelib.analytics.firebase",
+    "com.flapgame.gamelib.analytics.local",
     "com.flapgame.gamelib.appicon",
     "com.flapgame.gamelib.appsflyer",
     "com.flapgame.gamelib.att",

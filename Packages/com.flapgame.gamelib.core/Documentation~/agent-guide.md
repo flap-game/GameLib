@@ -49,7 +49,7 @@ Check these, then ask the human everything missing in **one** message:
 
 | Need | For |
 |---|---|
-| Which modules | `haptics`, `save`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `rate`, `appicon`, `build`. The ids are in `GameLibModuleCatalog`. `build` is always in (see Rules); do not ask about it. |
+| Which modules | `haptics`, `save`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `analytics.local`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `rate`, `appicon`, `build`. The ids are in `GameLibModuleCatalog`. `build` is always in (see Rules); do not ask about it. |
 | Placements | Id, format, and the Android and iOS ad unit id per network. Plus which placement is the app open one. |
 | Interstitial rule | The game's own conditions (see Rules). |
 | MAX SDK key / AdMob app ids | AppLovin Integration Manager / Google Mobile Ads settings. |
@@ -220,6 +220,7 @@ add. Get the services with `await GameLibBootstrap.WhenReadyAsync()`. When a mod
 | Remove ads | IAP product with `Entitlement = Entitlements.NoAds`. Nothing else to do. | IAP |
 | Buy / grant / restore | `PurchaseAsync(id, placement)`, grant in `PurchaseGranted`, `RestoreAsync` (show the button on iOS only), `GetPriceString` after `Ready` | [IAP](../../com.flapgame.gamelib.iap/README.md) |
 | Game events | `IAnalytics.Track("level_complete", ("level", n))`. Names in `snake_case`, ≤ 40 characters. | [Analytics - Firebase](../../com.flapgame.gamelib.analytics.firebase/README.md) |
+| Events from a test device only | Add the `analytics.local` module: on the office LAN the events go to the internal tracking server and the online sinks stay off. Nothing to call - the same `Track`. | [Analytics - Local](../../com.flapgame.gamelib.analytics.local/README.md) |
 | User id | `IAnalytics.SetUserId` early at launch, so the AppsFlyer install carries it | [AppsFlyer](../../com.flapgame.gamelib.appsflyer/README.md) |
 | Privacy settings button | `IConsentService.IsPrivacyOptionsRequired` | Ads |
 | Opening a link / store page | `IAppLifecycle.MarkExternalActivity("link")` first | [Core](../README.md) |

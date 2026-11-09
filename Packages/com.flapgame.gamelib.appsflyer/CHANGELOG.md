@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.9.2] - Unreleased
+- AppsFlyer stays off while local tracking is active **and** its `Suppress Attribution` is on - off by default, so a
+  test install still attributes like a real one.
+
 ## [0.8.12] - 2026-10-28
 - iOS: AppsFlyerLib.framework / PurchaseConnector.framework are taken back out of Embed Frameworks when CocoaPods provides
   them. Plugin 7.0.3 always embeds them for the SPM path (EDM4U 1.2.187+); on the Podfile path the archive failed with

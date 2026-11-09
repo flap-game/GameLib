@@ -39,6 +39,13 @@ namespace FlapGame.GameLib.Analytics.Firebase
 
         public override ValueTask InstallAsync(IServiceRegistry services, CancellationToken cancellationToken = default)
         {
+            if (LocalTracking.SuppressesOnline(services))
+            {
+                // A test device on the office LAN: its events go to the internal tracking server only.
+                Debug.Log($"{LogTag} Local tracking is on for this device - the Firebase Analytics sink stays off.");
+                return default;
+            }
+
             IFirebaseAnalyticsBackend backend = FirebaseAnalyticsBackend.Current;
             if (backend == null)
             {

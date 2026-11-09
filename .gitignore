@@ -67,6 +67,7 @@ ExportedObj/
 sysinfo.txt
 
 # Builds
+/[Bb]uilds/
 /[Aa]ndroid[Bb]uilds/
 /*BackUpThisFolder_ButDontShipItWithYourGame/
 *.apk

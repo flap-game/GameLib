@@ -352,6 +352,19 @@ namespace FlapGame.GameLib.Editor
             },
             new GameLibModuleInfo
             {
+                Id = "analytics.local",
+                DisplayName = "Analytics - Local",
+                Description = "Local tracking for the test devices: on the office LAN every event goes to the internal tracking server and the online sinks stay off.",
+                ModuleTypeName = "FlapGame.GameLib.Analytics.Local.LocalAnalyticsModule",
+                Sdks = new[]
+                {
+                    new SdkRequirement { DisplayName = "Unity Web Request module", PackageName = "com.unity.modules.unitywebrequest", Source = SdkSource.UnityRegistry, Location = "1.0.0" },
+                    // The Android advertising id is read through Play Services over JNI.
+                    new SdkRequirement { DisplayName = "Android JNI module", PackageName = "com.unity.modules.androidjni", Source = SdkSource.UnityRegistry, Location = "1.0.0" },
+                },
+            },
+            new GameLibModuleInfo
+            {
                 Id = "crashlytics",
                 DisplayName = "Crashlytics",
                 Description = "Firebase Crashlytics as ICrashReporter, with analytics breadcrumbs and the shared user id.",
@@ -408,6 +421,7 @@ namespace FlapGame.GameLib.Editor
                 DisplayName = "Cloud Build",
                 Description = "Unity Cloud Build: Unity splash off, App Store upload script for iOS builds.",
                 ModuleTypeName = null,
+            },
             },
         };
 

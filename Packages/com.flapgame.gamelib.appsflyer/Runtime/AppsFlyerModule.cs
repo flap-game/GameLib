@@ -69,6 +69,13 @@ namespace FlapGame.GameLib.AppsFlyer
 
         public override ValueTask InstallAsync(IServiceRegistry services, CancellationToken cancellationToken = default)
         {
+            if (LocalTracking.SuppressesAttribution(services))
+            {
+                // Only when the local tracking module is told to suppress attribution too (it is not by default).
+                Debug.Log($"{LogTag} Local tracking is on for this device and suppresses attribution - AppsFlyer stays off.");
+                return default;
+            }
+
             IAppsFlyerBackend backend = AppsFlyerBackend.Current;
             if (backend == null)
             {

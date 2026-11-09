@@ -21,6 +21,7 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.iap` | Unity IAP 5: consumable / non-consumable / subscription, localized price, restore | 0.3.0 |
 | `com.flapgame.gamelib.firebase` | Shared Firebase start and config checks (comes with the Firebase modules) | 0.3.0 |
 | `com.flapgame.gamelib.analytics.firebase` | Firebase Analytics (`ad_impression`, consent mode, optional `purchase`) | 0.3.0 |
+| `com.flapgame.gamelib.analytics.local` | Local tracking on the test devices (office LAN): events to the internal server, online sinks off | 0.9.2 |
 | `com.flapgame.gamelib.crashlytics` | Firebase Crashlytics with analytics breadcrumbs | 0.3.0 |
 | `com.flapgame.gamelib.remoteconfig.firebase` | `IRemoteConfig` on Firebase Remote Config (Ads reads its plan from it) | 0.3.0 |
 | `com.flapgame.gamelib.att` | iOS App Tracking Transparency prompt: after the consent form (optional delay) or on demand | 0.4.0 |
