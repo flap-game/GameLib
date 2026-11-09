@@ -11,3 +11,5 @@
   An unreachable server costs one warning per Editor session and nothing else: bounded queue, one polled request at a
   time, backoff, give-up after 4 attempts.
 - No dependency on `com.flapgame.gamelib.core`: it drops into any project, including the ones without GameLib.
+- Minimum Unity 2021.3, not 6000.4 like the rest of the set: the old games have to report too, and the package uses
+  no API or C# syntax a newer Editor introduced.

@@ -13,11 +13,15 @@ including the old ones that do not use GameLib.
 In a GameLib project, through **GameLib > Setup > Dev Tracking**, or by hand with the git URL:
 
 ```json
-"com.flapgame.gamelib.devtrack": "https://github.com/flap-game/GameLib.git?path=Packages/com.flapgame.gamelib.devtrack#v0.9.1"
+"com.flapgame.gamelib.devtrack": "https://github.com/flap-game/GameLib.git?path=/Packages/com.flapgame.gamelib.devtrack#<full-sha>"
 ```
 
+UPM needs the **full 40-character sha** after `#`, not a branch name or a short sha. A tag works too, once the
+release is tagged.
+
 In a project without GameLib, the same line in `Packages/manifest.json` is all it needs (plus
-`com.unity.modules.unitywebrequest`, which almost every project already has).
+`com.unity.modules.unitywebrequest`, which almost every project already has). Unity **2021.3 or newer**: the package
+uses nothing that a newer Editor introduced, so it also goes into the old games.
 
 As an embedded package, so that the project carries it: copy the folder to `Packages/com.flapgame.gamelib.devtrack/` in
 the project and commit it. Unity picks it up on the next focus; nothing else to add to the manifest.
