@@ -68,22 +68,14 @@ only `git` sees the dev's global config; without `git` on PATH, `.git/HEAD`, `.g
 | Switch | Effect |
 |---|---|
 | `Application.isBatchMode` | Off. CI and Unity Cloud Build never report. Wins over everything else. |
-| `GAMELIB_DEVTRACK=off` | Off for that Editor (an environment variable, so it also works for a machine-wide setting). `=on` turns it on whatever the menu says. A value that is neither on nor off is ignored. |
-| **GameLib > Dev Tracking > Enabled** | The per-machine toggle (EditorPrefs `GameLib.DevTrack.Enabled`, on by default). Read once when the Editor loads, so a change applies from the next domain reload - entering Play, or a script change. |
+| `GAMELIB_DEVTRACK=off` | Off for that Editor (an environment variable, so it also works for a machine-wide setting). `=on` forces it on. A value that is neither on nor off is ignored. This is the only off switch besides batch mode: the team's kill switch, not a per-dev one. |
+
+There is **no in-Editor menu toggle** on purpose, so the tracking is not something a dev turns off while working. With
+nothing set it is on; batch mode (CI, Cloud Build) and `GAMELIB_DEVTRACK` are the only ways off.
 
 The endpoint is overridable the same way, for pointing a test Editor at a staging server:
 `GAMELIB_DEVTRACK_ENDPOINT=<url>`, else EditorPrefs `GameLib.DevTrack.Endpoint`, else the
 `DevTrackConfig.DefaultEndpoint` const.
-
-## The menu
-
-**GameLib > Dev Tracking**:
-
-- **Enabled** - the toggle above.
-- **Show State** - logs on/off and why, the endpoint, the open session and its seconds, the queue (size, dropped, given
-  up), and the exact `play_start` body this project produces.
-- **Send Test Event** - queues a `play_start` + `play_stop` pair on a throwaway session id, for checking the server end
-  without entering Play.
 
 ## Failures cost nothing
 
@@ -115,7 +107,7 @@ calls them from `EditorApplication` - that split is what makes the lifecycle tes
 | `DevTrackGit` | `git`, with the `.git` files as the fallback |
 | `DevTrackContext` / `DevTrackContextProbe` | The context, collected once on a background thread |
 | `DevTrackSender` | The polled `UnityWebRequest` pump |
-| `DevTrackHook` / `DevTrackMenu` | `EditorApplication` and the menu |
+| `DevTrackHook` | The `[InitializeOnLoad]` adapter that drives the lifecycle from `EditorApplication` |
 
 Tests: `Tests/Editor` (payload, session state machine with a reload in the middle, queue, git parsing from a fake
 `.git` on disk, off-switch precedence).

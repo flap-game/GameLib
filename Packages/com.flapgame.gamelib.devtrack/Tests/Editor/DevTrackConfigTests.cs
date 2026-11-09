@@ -8,37 +8,38 @@ namespace FlapGame.GameLib.Tests
         [Test]
         public void BatchMode_IsOff_WhateverElseSays()
         {
-            Assert.That(DevTrackConfig.Decide(isBatchMode: true, environmentValue: "on", enabledPref: true).On, Is.False);
-            Assert.That(DevTrackConfig.Decide(isBatchMode: true, environmentValue: null, enabledPref: true).Reason,
+            Assert.That(DevTrackConfig.Decide(isBatchMode: true, environmentValue: "on").On, Is.False);
+            Assert.That(DevTrackConfig.Decide(isBatchMode: true, environmentValue: null).Reason,
                         Is.EqualTo("batch mode"), "CI and Unity Cloud Build report nothing");
         }
 
         [Test]
-        public void TheEnvironmentVariable_WinsOverTheMenuToggle()
+        public void TheEnvironmentVariable_CanForceItOnOrOff()
         {
-            Assert.That(DevTrackConfig.Decide(false, "off", enabledPref: true).On, Is.False);
-            Assert.That(DevTrackConfig.Decide(false, "on", enabledPref: false).On, Is.True);
+            Assert.That(DevTrackConfig.Decide(false, "off").On, Is.False);
+            Assert.That(DevTrackConfig.Decide(false, "on").On, Is.True);
         }
 
         [Test]
         public void TheEnvironmentVariable_NamesItselfInTheReason()
         {
-            Assert.That(DevTrackConfig.Decide(false, "off", true).Reason, Is.EqualTo("GAMELIB_DEVTRACK=off"));
+            Assert.That(DevTrackConfig.Decide(false, "off").Reason, Is.EqualTo("GAMELIB_DEVTRACK=off"));
         }
 
         [Test]
-        public void WithoutTheEnvironmentVariable_TheMenuToggleDecides()
+        public void WithoutTheEnvironmentVariable_TrackingIsOn()
         {
-            Assert.That(DevTrackConfig.Decide(false, null, enabledPref: true).On, Is.True);
-            Assert.That(DevTrackConfig.Decide(false, string.Empty, enabledPref: false).On, Is.False);
-            Assert.That(DevTrackConfig.Decide(false, "   ", enabledPref: false).Reason, Does.Contain("Dev Tracking"));
+            Assert.That(DevTrackConfig.Decide(false, null).On, Is.True);
+            Assert.That(DevTrackConfig.Decide(false, string.Empty).On, Is.True);
+            Assert.That(DevTrackConfig.Decide(false, "   ").Reason, Is.EqualTo("on"));
         }
 
         [Test]
         public void AValueThatIsNeitherOnNorOff_IsIgnored_SoATypoCannotTurnTrackingOff()
         {
-            Assert.That(DevTrackConfig.Decide(false, "maybe", enabledPref: true).On, Is.True);
-            Assert.That(DevTrackConfig.Decide(false, "maybe", enabledPref: false).On, Is.False);
+            // A typo leaves tracking on; only an explicit off value turns it off.
+            Assert.That(DevTrackConfig.Decide(false, "maybe").On, Is.True);
+            Assert.That(DevTrackConfig.Decide(false, "disabled").On, Is.True);
         }
 
         [Test]
@@ -77,7 +78,7 @@ namespace FlapGame.GameLib.Tests
         [Test]
         public void TheClientVersion_IsThePackageVersion()
         {
-            Assert.That(DevTrackConfig.ClientVersion, Is.EqualTo("0.9.1"));
+            Assert.That(DevTrackConfig.ClientVersion, Is.EqualTo("0.9.2"));
         }
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "com.flapgame.gamelib.devtrack",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "displayName": "GameLib Dev Tracking",
   "description": "Editor only: reports a dev's Play-mode sessions (project, machine, git repo / branch / user, IP) to the internal tool, so the team sees who works on which project. Nothing of it reaches a build.",
   "unity": "2021.3",

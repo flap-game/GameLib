@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.2] - 2026-11-09
+- Removed the **GameLib > Dev Tracking** Editor menu, including the *Enabled* toggle: tracking is no longer something a
+  dev turns off while working. The only off switches are now batch mode (CI, Cloud Build, always off) and the
+  `GAMELIB_DEVTRACK` environment variable, which is the team's kill switch. With nothing set, tracking is on.
+- `Decide` dropped its `enabledPref` argument accordingly.
+
 ## [0.9.1] - 2026-11-09
 - New package, Editor only: a dev's Play-mode sessions are reported to the internal tool
   (`POST https://tools.puzzleclassic.com/sdk/v1/dev-play`), so the team sees who works on which project, from which

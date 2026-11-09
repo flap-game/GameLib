@@ -153,8 +153,8 @@ nothing the game itself uses.
 - Editor only. It cannot reach a build, and it is off in batch mode, so Unity Cloud Build never reports.
 - It does **not** depend on `core`, so it also drops into a game that has no GameLib: the git URL in
   `Packages/manifest.json`, or the folder copied to `Packages/com.flapgame.gamelib.devtrack/` and committed.
-- Off switches, for a dev who asks: `GAMELIB_DEVTRACK=off`, or **GameLib > Dev Tracking > Enabled**. Do not turn
-  it off in a project without being asked.
+- Off switches: batch mode (CI / Cloud Build, always off) and the `GAMELIB_DEVTRACK=off` environment variable (the
+  team's kill switch). There is no in-Editor menu toggle. Do not turn it off in a project without being asked.
 
 See the [Dev Tracking README](../../com.flapgame.gamelib.devtrack/README.md) for the fields it sends and the menu.
 

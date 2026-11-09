@@ -35,16 +35,16 @@ namespace FlapGame.GameLib.DevTrack
         public const string DefaultEndpoint = "https://tools.puzzleclassic.com/sdk/v1/dev-play";
 
         /// <summary>Sent as <c>clientVersion</c>. Tracks this package's version in package.json; keep the two in step.</summary>
-        public const string ClientVersion = "0.9.1";
+        public const string ClientVersion = "0.9.2";
 
-        /// <summary><c>GAMELIB_DEVTRACK=off</c> turns dev tracking off, <c>=on</c> turns it on whatever the menu says.</summary>
+        /// <summary>
+        /// <c>GAMELIB_DEVTRACK=off</c> turns dev tracking off, <c>=on</c> forces it on. There is no in-Editor toggle:
+        /// this environment variable is the team's own kill switch, not something a dev turns off from a menu.
+        /// </summary>
         public const string OffEnvironmentVariable = "GAMELIB_DEVTRACK";
 
         /// <summary><c>GAMELIB_DEVTRACK_ENDPOINT=&lt;url&gt;</c> replaces <see cref="DefaultEndpoint"/>.</summary>
         public const string EndpointEnvironmentVariable = "GAMELIB_DEVTRACK_ENDPOINT";
-
-        /// <summary>The menu toggle, <c>Tools &gt; GameLib &gt; Dev Tracking &gt; Enabled</c>. Machine-wide, on by default.</summary>
-        public const string EnabledPrefKey = "GameLib.DevTrack.Enabled";
 
         /// <summary>An endpoint set by hand on this machine; empty means <see cref="DefaultEndpoint"/>.</summary>
         public const string EndpointPrefKey = "GameLib.DevTrack.Endpoint";
@@ -55,21 +55,16 @@ namespace FlapGame.GameLib.DevTrack
         /// <summary>The budget the play_stop on <c>EditorApplication.quitting</c> gets, in milliseconds.</summary>
         public const int QuitTimeoutMilliseconds = 1500;
 
-        public static bool EnabledPref
-        {
-            get => EditorPrefs.GetBool(EnabledPrefKey, true);
-            set => EditorPrefs.SetBool(EnabledPrefKey, value);
-        }
-
         public static DevTrackDecision Decide() =>
-            Decide(Application.isBatchMode, Environment.GetEnvironmentVariable(OffEnvironmentVariable), EnabledPref);
+            Decide(Application.isBatchMode, Environment.GetEnvironmentVariable(OffEnvironmentVariable));
 
         /// <summary>
         /// The off switches, strongest first: batch mode (CI, Unity Cloud Build) always wins, then
-        /// <c>GAMELIB_DEVTRACK</c>, then the menu toggle. A value of the environment variable that is neither on nor off
-        /// is ignored, so a typo cannot silently turn tracking off.
+        /// <c>GAMELIB_DEVTRACK</c>. There is no in-Editor toggle, so a dev cannot turn tracking off from a menu; with
+        /// nothing set tracking is on. A value of the environment variable that is neither on nor off is ignored, so a
+        /// typo cannot silently turn tracking off.
         /// </summary>
-        public static DevTrackDecision Decide(bool isBatchMode, string environmentValue, bool enabledPref)
+        public static DevTrackDecision Decide(bool isBatchMode, string environmentValue)
         {
             if (isBatchMode)
                 return new DevTrackDecision(false, "batch mode");
@@ -78,9 +73,7 @@ namespace FlapGame.GameLib.DevTrack
             if (fromEnvironment.HasValue)
                 return new DevTrackDecision(fromEnvironment.Value, OffEnvironmentVariable + "=" + environmentValue.Trim());
 
-            return enabledPref
-                ? new DevTrackDecision(true, "on")
-                : new DevTrackDecision(false, "GameLib > Dev Tracking > Enabled is off");
+            return new DevTrackDecision(true, "on");
         }
 
         public static string Endpoint() =>
