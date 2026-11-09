@@ -422,6 +422,16 @@ namespace FlapGame.GameLib.Editor
                 Description = "Unity Cloud Build: Unity splash off, App Store upload script for iOS builds.",
                 ModuleTypeName = null,
             },
+            new GameLibModuleInfo
+            {
+                Id = "devtrack",
+                DisplayName = "Dev Tracking",
+                Description = "Editor only: a dev's Play sessions go to the internal tool (project, machine, git repo / branch / user, IP). Nothing in the build, nothing to configure.",
+                ModuleTypeName = null,
+                Sdks = new[]
+                {
+                    new SdkRequirement { DisplayName = "Unity Web Request module", PackageName = "com.unity.modules.unitywebrequest", Source = SdkSource.UnityRegistry, Location = "1.0.0" },
+                },
             },
         };
 

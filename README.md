@@ -29,6 +29,7 @@ GameLib is the successor of CoreGame.
 | `com.flapgame.gamelib.build` | Unity Cloud Build: splash off, App Store upload of iOS builds | 0.6.0 |
 | `com.flapgame.gamelib.rate` | Rate-us prompts and the store review sheet (iOS, Google Play) | 0.8.0 |
 | `com.flapgame.gamelib.appicon` | Alternate app icons (iOS) | 0.8.0 |
+| `com.flapgame.gamelib.devtrack` | Editor only: a dev's Play sessions to the internal tool (project, machine, git, IP). No `core` dependency | 0.9.1 |
 | `com.flapgame.gamelib.ui` | UI framework | later |
 
 Modules never reference each other directly; they talk through contracts in `core`

@@ -102,6 +102,12 @@
         "com.flapgame.gamelib.firebase": "0.9.1"
       }
     },
+    "com.flapgame.gamelib.devtrack": {
+      "version": "file:com.flapgame.gamelib.devtrack",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.flapgame.gamelib.extensions": {
       "version": "file:com.flapgame.gamelib.extensions",
       "depth": 0,

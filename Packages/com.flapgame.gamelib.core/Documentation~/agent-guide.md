@@ -49,7 +49,7 @@ Check these, then ask the human everything missing in **one** message:
 
 | Need | For |
 |---|---|
-| Which modules | `haptics`, `save`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `analytics.local`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `rate`, `appicon`, `build`. The ids are in `GameLibModuleCatalog`. `build` is always in (see Rules); do not ask about it. |
+| Which modules | `haptics`, `save`, `ads` + `ads.max` / `ads.admob`, `att`, `iap`, `analytics.firebase`, `analytics.local`, `crashlytics`, `remoteconfig.firebase`, `appsflyer`, `rate`, `appicon`, `build`, `devtrack`. The ids are in `GameLibModuleCatalog`. `build` is always in (see Rules); do not ask about it. |
 | Placements | Id, format, and the Android and iOS ad unit id per network. Plus which placement is the app open one. |
 | Interstitial rule | The game's own conditions (see Rules). |
 | MAX SDK key / AdMob app ids | AppLovin Integration Manager / Google Mobile Ads settings. |
@@ -142,6 +142,21 @@ Firebase comes from the GameWorkstore git mirrors at 13.16.0 (nothing to commit)
 already on Google's tarballs in `Packages/GoogleTgz/` (14.x) keeps them - Install never replaces an existing Firebase
 entry. All `com.google.firebase.*` packages must be on one version: Doctor reports an error otherwise.
 `com.unity.purchasing`, the MAX package and EDM come from registries.
+
+## 2b. Dev tracking
+
+The `devtrack` module reports the dev's own Play-mode sessions to the team's internal tool - which project, machine, git
+repo / branch / user and IP - so the owner sees who works on which project. Add it when the human asks for it; it is
+nothing the game itself uses.
+
+- Nothing to configure, nothing in game code, no asset, no scene object: one `[InitializeOnLoad]` hook.
+- Editor only. It cannot reach a build, and it is off in batch mode, so Unity Cloud Build never reports.
+- It does **not** depend on `core`, so it also drops into a game that has no GameLib: the git URL in
+  `Packages/manifest.json`, or the folder copied to `Packages/com.flapgame.gamelib.devtrack/` and committed.
+- Off switches, for a dev who asks: `GAMELIB_DEVTRACK=off`, or **GameLib > Dev Tracking > Enabled**. Do not turn
+  it off in a project without being asked.
+
+See the [Dev Tracking README](../../com.flapgame.gamelib.devtrack/README.md) for the fields it sends and the menu.
 
 ## 3. Configure
 

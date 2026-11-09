@@ -5,6 +5,8 @@
   module (`analytics.local`) registers when a session runs on a test device, so the online sinks can stay off. Nothing
   registers it in a normal build and every sink installs as before.
 - Setup lists **Analytics - Local** (`com.flapgame.gamelib.analytics.local`).
+- Setup lists **Dev Tracking** (`com.flapgame.gamelib.devtrack`), the Editor-only module that reports a dev's
+  Play sessions to the internal tool.
 
 ## [0.9.1] - 2026-11-06
 - Agent guide: read the ids from the game's GameHub release config (what each section maps to); MAX adapters come from
